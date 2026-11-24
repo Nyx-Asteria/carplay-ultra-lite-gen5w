@@ -31,7 +31,7 @@ Unlike the original multi-vehicle project, this port targets one known vehicle a
 ## Features
 
 - **Ultra interface** — themes, wallpapers and individual climate panels.
-- **Integrated vehicle identification** — the theme-enabling portion of the original modified EV-routing package, incorporated into our own mod without EV routing.
+- **Integrated vehicle identification** — theme assets contributed through the existing wireless CarPlay shared identification API, without EV routing.
 - **Native climate** — temperatures, fan, A/C, AUTO, SYNC, vents, recirculation and supported defrost controls.
 - **Seat controls** — heating, ventilation and steering wheel heat where equipped and verified.
 - **Parked video** — optional AirPlay video with strict Park and session-state safeguards.
@@ -72,7 +72,7 @@ Other vehicles and firmware versions are outside the scope of this port. Matchin
 
 The intended distribution is a single signed HMG-API USB package, published through [Releases](../../releases) once ready. Installation and rollback instructions will accompany the first prerelease.
 
-The existing wireless-carplay-aa package and working Wi-Fi configuration remain separate and unchanged. The modified E-GMP routing package will not be a separate installation requirement once its theme-identification functionality has been integrated.
+The existing wireless-carplay-aa package and working Wi-Fi configuration remain separate and unchanged. The K5 port uses HMG-API and the existing wireless-carplay-aa installation. Shared CarPlay identity must be enabled. The modified E-GMP routing package is not intended to be installed.
 
 ## Development
 
@@ -80,7 +80,9 @@ The existing wireless-carplay-aa package and working Wi-Fi configuration remain 
 
 - [ ] Validate the captured K5 firmware, hook map, native recipes and runtime patch compatibility.
 - [ ] Replace the generic compatibility checker with K5-specific checks.
-- [ ] Obtain the exact theme-enabled routing source and integrate the required identity hooks into the K5 package.
+- [x] Obtain the original and modified routing sources and identify the theme contribution.
+- [x] Confirm public wireless RC7 exposes independent theme registration and the target package includes shared identity support.
+- [ ] Integrate the shared identification service, verify the exact target API and coordinate theme registration with the climate description lifecycle.
 - [ ] Remove EV routing, battery data and unnecessary multi-vehicle paths.
 - [ ] Assign a distinct package ID and display name; update internal paths, settings, build tooling and conflict handling together.
 - [ ] Validate climate methods, listener fingerprints, flags and command mappings.
@@ -112,13 +114,17 @@ The port is based on [feature/climate-and-video](https://github.com/SafariForest
 | Component | Purpose |
 | :--- | :--- |
 | `libCarPlayCore.so` | Vehicle-state protocol and CarPlay interface integration |
-| `libiap2session.so` | Theme identification integration, subject to recipe validation |
+| Wireless shared identification API | Theme contribution; wireless projection owns the iAP2 patch |
 | Automotive framework | Vehicle-specific climate commands and feedback |
 | HMG-API | Hook management, settings, packaging and recovery |
 
 The original compatibility report rejected the combined theme, wallpaper and per-seat panel verdict. The upstream checker requires both an E-GMP model and a matching iAP2 library. The K5 is not an E-GMP vehicle, so support must be established through its actual firmware and capabilities rather than bypassing the verdict.
 
-The original Ultra-Lite setup requires a modified EV-routing package to advertise the theme to the iPhone. This port will incorporate the required identification functionality into its own package, retaining the applicable source and attribution. EV routing and fabricated EV data are not part of the design. Separate packages that patch the same locations must not coexist.
+The original Ultra-Lite setup requires a modified EV-routing package to advertise the theme to the iPhone. This port will contribute theme identity through the existing wireless shared identification API rather than importing the older native identity patch. EV routing and fabricated EV data are not part of the design. Separate packages that patch the same locations must not coexist.
+
+### Shared identity integration
+
+Public [wireless RC7 API source](https://github.com/Open-HMG/hmgapi-wireless-cp-aa/blob/v2.2.0-rc.7/wireless-carplay-aa/src/hmgapi/mods/wireless/api/CarPlayIdentification.java) defines service `carplay-identification`, API version 2, `registerTheme`, `removeTheme` and a `ThemeIdentity(String, long, String)` value. The wireless provider must expose shared identity. The exact compiled API and runtime lifecycle still require validation. The intended theme tuple from SafariForest is `44C9FA31EC:985:19.0`. Register only a theme, never an EV vehicle contribution. If the service is missing or registration fails, leave Ultra advertising disabled and retain normal projection. Coordinate removal with disable/uninstall and session lifecycle. Do not install a second iAP2 recipe.
 
 ### Build from source
 
