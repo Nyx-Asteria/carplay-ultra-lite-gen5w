@@ -120,7 +120,7 @@ public final class CpClimate extends ModEntry {
         m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("climate_test", true));
         if (!targetVerified) return;
         boolean climate = m.settingBoolean("climate_test", true);
-        boolean any = climate || m.settingBoolean("comfort_thresholds", true) || m.settingBoolean("vehicle_page", true) || m.settingBoolean("volume_link", true)
+        boolean any = climate || m.settingBoolean("native_radio", true) || m.settingBoolean("comfort_thresholds", true) || m.settingBoolean("vehicle_page", true) || m.settingBoolean("volume_link", true)
                 || m.settingBoolean("media_controls", true) || m.settingBoolean("parked_video", true) || themePreflight;
         if (!any) { m.log("[runtime] all features off; native patch withheld"); return; }
         mod = m;
@@ -216,7 +216,7 @@ public final class CpClimate extends ModEntry {
             VehicleState.twoRear = "d".equals(layout);
             // /info's copy of the car (the phone builds its car from it): cp-climate's description, not LIVI's
             K5Vehicle vehicle = null;
-            if (app.context != null && (m.settingBoolean("vehicle_page", true) || m.settingBoolean("comfort_thresholds", true))) {
+            if (app.context != null && (m.settingBoolean("vehicle_page", true) || m.settingBoolean("comfort_thresholds", true) || m.settingBoolean("native_radio", true))) {
                 vehicle = new K5Vehicle(app.context, m, state, lanes, log);
                 VehicleState.vehiclePage = vehicle.page;
             } else { VehicleState.vehiclePage = null; m.log("[vehicle] page disabled or context unavailable"); }

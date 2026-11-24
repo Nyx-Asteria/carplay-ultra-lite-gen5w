@@ -72,6 +72,14 @@
       "title": "AirPlay video audio (experimental)",
       "description": "Try local video sound while parked. Fall back to picture-only if audio output fails. Restart required.",
       "apply": "restart"
+    },
+    {
+      "key": "native_radio",
+      "type": "toggle",
+      "default": true,
+      "title": "Native radio integration",
+      "description": "Open the installed Kia radio from the CarPlay Vehicle app. Direct tuner controls require a verified OEM interface. Restart required.",
+      "apply": "restart"
     }
   ]
 }

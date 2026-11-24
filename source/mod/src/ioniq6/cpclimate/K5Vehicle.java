@@ -25,6 +25,7 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
     int odometer = -1, range = -1, unit = -1;
     String last = "";
     final ComfortThresholds comfort;
+    final K5Radio radio;
     final java.util.concurrent.ArrayBlockingQueue<String> adjustments = new java.util.concurrent.ArrayBlockingQueue<String>(16);
 
     K5Vehicle(Context context, ModContext mod, VehicleState[] state, VsChannel[] lanes, VsChannel.Log log) {
@@ -41,6 +42,8 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
         addPackage("nemesis", "NEMESIS Manager", "shippingbox", "com.nemesis.manager");
         addPackage("settings", "Vehicle settings", "gearshape", "com.android.vehiclesettings");
         }
+        radio = new K5Radio(context, mod, log);
+        if (radio.available()) radio.describe(page);
         comfort = new ComfortThresholds(context, mod, log);
         if (comfort.present()) comfort.describe(page);
         page.listener = this;
@@ -56,6 +59,7 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
         } else log.log("[vehicle] shortcut unavailable " + id);
     }
     public void pressed(final String id) {
+        if (id.startsWith("radio.")) { radio.pressed(id); return; }
         if (id.startsWith("comfort.")) {
             if (comfort.enabled() && CpClimate.sessionActive && !adjustments.offer(id + ":" + CpClimate.sessionGeneration))
                 log.log("[comfort] adjustment queue full");
