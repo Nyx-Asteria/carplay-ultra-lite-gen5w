@@ -20,7 +20,7 @@
     {
       "key": "parked_video",
       "type": "toggle",
-      "default": true,
+      "default": false,
       "title": "Parked AirPlay video",
       "description": "Allow video only during an active CarPlay session with fresh Park feedback. Restart required.",
       "apply": "restart"
@@ -68,7 +68,7 @@
     {
       "key": "video_audio",
       "type": "toggle",
-      "default": true,
+      "default": false,
       "title": "AirPlay video audio (experimental)",
       "description": "Try local video sound while parked. Fall back to picture-only if audio output fails. Restart required.",
       "apply": "restart"

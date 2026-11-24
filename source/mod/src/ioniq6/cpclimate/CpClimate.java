@@ -7,7 +7,6 @@ import hmgapi.hook.ModEntry;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -23,17 +22,10 @@ import java.util.Set;
  * them as LIVI does (VehicleState). M4 puts the car's own climate on CarPlay both ways
  * (CarClimate): the car's state mirrored to the phone, the phone's changes sent to the car.
  *
- * Crash guard: each DiPO start that patches is recorded; after GUARD_STARTS starts within
- * GUARD_MS the patch is left out until a CarPlay session has run HEALTHY_MS.
- *
  * Based on LIVI by Lasse Heitgres (https://github.com/f-io/LIVI).
  */
 public final class CpClimate extends ModEntry {
     static final String DIPO = "com.daudio.app.dipo";
-    static final String GUARD_FILE = "cp-climate-guard";
-    static final int GUARD_STARTS = 2;
-    static final long GUARD_MS = 10 * 60 * 1000L;
-    static final long HEALTHY_MS = 60 * 1000L;
     /** the session's stream SETUPs come in after it has started */
     static final long COPY_DELAY_MS = 5000;
     static final int MAX_LINES = 600;
@@ -55,9 +47,7 @@ public final class CpClimate extends ModEntry {
         boolean dipo = fingerprint(m, "DiPO", "/system/app/HKMC_DiPO.odex", "edc6f75f5ccf79b63dc85a0902b63d91");
         targetVerified = model && core && identity && dipo;
         m.log("[preflight] target=" + model + " core=" + core + " identity=" + identity + " dipo=" + dipo + " ready=" + targetVerified);
-        // This guard is readable here in the root zygote. Both child processes inherit the same initial decision.
-        guard = new File("/data/data/" + DIPO + "/files", GUARD_FILE);
-        themePreflight = targetVerified && recentStarts().size() < GUARD_STARTS
+        themePreflight = targetVerified
                 && m.settingBoolean("ultra_theme", true) && theme.available(m);
         m.log("[theme] boot preflight=" + themePreflight);
         if (targetVerified && m.settingBoolean("volume_panel", true) && m.settingBoolean("volume_link", true)) VolumePanel.zygote(m);
@@ -77,7 +67,6 @@ public final class CpClimate extends ModEntry {
     }
 
     static ModContext mod;
-    static File guard;
     static final Set<String> copied = new HashSet<String>();
     static boolean busy;
     static volatile long sessionGeneration;
@@ -122,20 +111,12 @@ public final class CpClimate extends ModEntry {
         if (!targetVerified) return;
         boolean climate = m.settingBoolean("climate_test", true);
         boolean any = climate || m.settingBoolean("native_radio", true) || m.settingBoolean("comfort_thresholds", true) || m.settingBoolean("vehicle_page", true) || m.settingBoolean("volume_link", true)
-                || m.settingBoolean("media_controls", true) || m.settingBoolean("parked_video", true) || themePreflight;
+                || m.settingBoolean("media_controls", true) || m.settingBoolean("parked_video", false) || themePreflight;
         if (!any) { m.log("[runtime] all features off; native patch withheld"); return; }
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
-        guard = new File(dir, GUARD_FILE);
         ClimateMap.loadSetpoints(new File(dir, "cpc-setpoints"));
-        List<Long> starts = recentStarts();
-        if (starts.size() >= GUARD_STARTS) {
-            m.error("crash guard: DiPO started " + starts.size() + " times in " + GUARD_MS / 60000
-                    + " min with the patch on, so it stays off this time (delete " + guard + " to retry)", null);
-            return;
-        } else {
-            starts.add(System.currentTimeMillis());
-            save(starts);
+        {
             // CarPlay Ultra-Lite 1.0: two settings. Everything the development builds made switchable is fixed
             // at what was tested on the Ioniq 6 (CEEV USA 260507, 2026-11-08); the code for the other values stays.
             // Theme registration is not integrated yet. Never advertise unsupported Ultra mode.
@@ -161,12 +142,12 @@ public final class CpClimate extends ModEntry {
             writeFlag(dir, "cpc-xfeat", ultra, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
             // Stage 2 is not validated: do not offer video even if an old setting is saved.
-            int extraBits = m.settingBoolean("parked_video", true) && app.context != null ? 1 : 0;
+            int extraBits = m.settingBoolean("parked_video", false) && app.context != null ? 1 : 0;
             if (extraBits != 0) {
                 ParkedVideo park = new ParkedVideo(m);
                 if (!park.available()) { m.log("[video] Park getter missing; video withheld"); extraBits = 0; }
                 else {
-                    boolean sound = m.settingBoolean("video_audio", true);
+                    boolean sound = m.settingBoolean("video_audio", false);
                     writeNumber(dir, "cpc-video-nosound", sound ? 0 : 1, "video: picture only");
                     m.log("[video-audio] local player audio requested=" + sound + "; stock projection route untouched");
                     writeNumber(dir, "cpc-video-nopicture", 0, "video: picture enabled");
@@ -268,7 +249,7 @@ public final class CpClimate extends ModEntry {
                 VideoMessages.stopEngine("session finalized");
                 sessionGeneration++;
                 m.log("[session] finalized");
-                copyLater(COPY_DELAY_MS, false);
+                copyLater(COPY_DELAY_MS);
             }
         };
         m.hook(app.classLoader, "dipo.carplay.session_started", new MethodHook() {
@@ -280,12 +261,11 @@ public final class CpClimate extends ModEntry {
                 m.log("[session] started generation=" + sessionGeneration);
                 IapBridge.carPlay = p.thisObject;
                 VideoUi.install(p.thisObject, app.classLoader);
-                copyLater(COPY_DELAY_MS, false);
-                copyLater(HEALTHY_MS, true);
+                copyLater(COPY_DELAY_MS);
             }
         });
         m.hook(app.classLoader, "dipo.carplay.session_finalized", copy);
-        m.log("M4 in " + app.processName + " (guard " + guard + ", " + starts.size() + " recent start(s))");
+        m.log("M4 in " + app.processName + "; restart-count guard removed");
     }
 
     @Override public void onEnabled(ModContext m, boolean enabled) {
@@ -493,62 +473,19 @@ public final class CpClimate extends ModEntry {
         }
     }
 
-    static List<Long> recentStarts() {
-        List<Long> out = new ArrayList<Long>();
-        long now = System.currentTimeMillis();
-        try {
-            BufferedReader in = new BufferedReader(new FileReader(guard));
-            try {
-                String l;
-                while ((l = in.readLine()) != null) {
-                    try {
-                        long t = Long.parseLong(l.trim());
-                        if (now - t < GUARD_MS && t <= now) out.add(t);
-                    } catch (NumberFormatException e) {
-                        // a damaged line: skipped
-                    }
-                }
-            } finally {
-                in.close();
-            }
-        } catch (Exception e) {
-            // no file yet
-        }
-        return out;
-    }
-
-    static void save(List<Long> starts) {
-        try {
-            FileWriter w = new FileWriter(guard);
-            try {
-                for (Long t : starts) w.write(t + "\n");
-            } finally {
-                w.close();
-            }
-        } catch (Exception e) {
-            mod.error("crash guard: can't write " + guard, e);
-        }
-    }
-
-    static synchronized void copyLater(final long delay, final boolean healthy) {
-        if (busy && !healthy) return;
-        if (!healthy) busy = true;
-        final long generation = sessionGeneration;
+    static synchronized void copyLater(final long delay) {
+        if (busy) return;
+        busy = true;
         new Thread("cp-climate") {
             @Override
             public void run() {
                 try {
                     Thread.sleep(delay);
                     copy();
-                    if (healthy && sessionActive && generation == sessionGeneration && guard.delete()) mod.log("crash guard: CarPlay ran " + delay / 1000 + " s, starts cleared");
                 } catch (Throwable t) {
                     mod.error("copying the CarPlay lines", t);
                 } finally {
-                    if (!healthy) {
-                        synchronized (CpClimate.class) {
-                            busy = false;
-                        }
-                    }
+                    synchronized (CpClimate.class) { busy = false; }
                 }
             }
         }.start();
