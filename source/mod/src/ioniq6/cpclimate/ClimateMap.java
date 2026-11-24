@@ -432,22 +432,6 @@ final class ClimateMap {
             } else if (iid == PASSENGER_SEAT_LEVEL || iid == PASSENGER_SEAT_ON) {
                 Command c = seat(SET_PASSENGER_SEAT, iid == PASSENGER_SEAT_ON, v, now.get(PASSENGER_SEAT_LEVEL));
                 if (c != null) out.add(c);
-            } else if (extras && (iid == DRIVER_VENT_LEVEL || iid == DRIVER_VENT_ON)) {
-                Command c = ventSeat(SET_DRIVER_SEAT, iid == DRIVER_VENT_ON, v, now.get(DRIVER_VENT_LEVEL), now.get(DRIVER_SEAT_LEVEL));
-                if (c != null) out.add(c);
-            } else if (extras && (iid == PASSENGER_VENT_LEVEL || iid == PASSENGER_VENT_ON)) {
-                Command c = ventSeat(SET_PASSENGER_SEAT, iid == PASSENGER_VENT_ON, v, now.get(PASSENGER_VENT_LEVEL), now.get(PASSENGER_SEAT_LEVEL));
-                if (c != null) out.add(c);
-            } else if (extras && (iid == REAR_LEFT_LEVEL || iid == REAR_LEFT_ON)) {
-                Command c = rearSeat(SET_REAR_LEFT, iid == REAR_LEFT_ON, v, now.get(REAR_LEFT_LEVEL));
-                if (c != null) out.add(c);
-                // layout C: the row's control sets both rear seats
-                if (c != null && rowRear()) out.add(new Command(SEAT, SET_REAR_RIGHT, c.b, 0));
-            } else if (extras && (iid == REAR_RIGHT_LEVEL || iid == REAR_RIGHT_ON)) {
-                Command c = rearSeat(SET_REAR_RIGHT, iid == REAR_RIGHT_ON, v, now.get(REAR_RIGHT_LEVEL));
-                if (c != null) out.add(c);
-            } else if (extras && iid == WHEEL_LEVEL && v instanceof Long) {
-                out.add(new Command(WHEEL, (Long) v > 0 ? 1 : 0, 0, 0));
             }
         }
         if (vents) {
@@ -480,7 +464,7 @@ final class ClimateMap {
             if (!(v instanceof Long)) return null;
             l = (Long) v;
         }
-        l = Math.max(cooling ? -4 : 0, Math.min(3, l));
+        l = Math.max(cooling ? -3 : 0, Math.min(3, l));
         if (l < 0) return new Command(SEAT, code, coolingState(l), 0);
         return new Command(SEAT, code, l == 0 ? 2 : (int) l + 5, 0);
     }

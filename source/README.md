@@ -1,3 +1,5 @@
+> **K5 port:** The following inherited technical notes describe the upstream implementation, not a validated K5 release. Use the top-level README for current scope and settings.
+
 # CarPlay Ultra-Lite: source (climate and video branch)
 
 The source for the **CarPlay Ultra-Lite** HMG-API mod (mod id `cp-climate`), as it is on the branch
@@ -165,9 +167,9 @@ python3 source/tools/build.py <stock libCarPlayCore.so> <HMG-API checkout> <out 
 cp <out dir>/carplay-climate-m1.recipe source/mod/recipes/
 
 # 3. the package: copy the mod into HMG-API's mods folder and run its packager
-rsync -a --delete source/mod/ <HMG-API checkout>/mods/cp-climate/
-cd <HMG-API checkout> && tools/mkmodpkg.sh mods/cp-climate <your author key>
-# -> out/packages/cp-climate-<version>.zip; install it with the HMG-API app or `hmgapid engine install`
+rsync -a --delete source/mod/ <HMG-API checkout>/mods/carplay-ultra-lite-k5/
+cd <HMG-API checkout> && tools/mkmodpkg.sh mods/carplay-ultra-lite-k5 <your author key>
+# -> out/packages/carplay-ultra-lite-k5-<version>.zip; install it with the HMG-API app or `hmgapid engine install`
 ```
 
 `build.sh` (run by `mkmodpkg.sh`) compiles the video engine against HMG-API's build of the mod's classes. R8 then

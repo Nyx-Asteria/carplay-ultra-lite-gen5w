@@ -87,7 +87,8 @@ The existing wireless-carplay-aa package and working Wi-Fi configuration remain 
 - [x] Add a theme-only API v2 consumer adapter.
 - [ ] Wire the adapter to a verified cross-process readiness and recovery lifecycle.
 - [ ] Remove EV routing, battery data and unnecessary multi-vehicle paths.
-- [ ] Assign a distinct package ID and display name; update internal paths, settings, build tooling and conflict handling together.
+- [x] Assign a distinct package ID, development version and conflict with the original package.
+- [ ] Audit remaining internal paths and package tooling.
 - [ ] Validate climate methods, listener fingerprints, flags and command mappings.
 - [ ] Enable supported climate and seat controls with physical-control feedback.
 - [ ] Verify themes, wallpapers, per-seat panels and return to the Kia home screen.
@@ -146,6 +147,8 @@ See [integration design](docs/integration.md) for the theme adapter and optional
 Comfort integration must not block the core K5 port, video, vehicle information or shortcuts. No Comfort dependency is required for those features.
 
 ### Build from source
+
+The K5 manifest uses package ID `carplay-ultra-lite-k5` and version `0.1.0-alpha.1`. The original `cp-climate` package conflicts with this port; do not install both.
 
 The inherited build instructions are in [source/README.md](source/README.md). K5-specific build and packaging instructions will replace them as the implementation develops.
 
