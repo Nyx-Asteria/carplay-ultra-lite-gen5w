@@ -1,6 +1,6 @@
 <div align="center">
 
-# K5 CarPlay Ultra
+# CarPlay Ultra-Lite K5
 
 **Your Kia. Your CarPlay.**
 
@@ -19,7 +19,7 @@ A dedicated CarPlay Ultra-style experience for the Kia K5, powered by HMG-API.
 
 ## Overview
 
-**K5 CarPlay Ultra** is an independent port of [SafariForest's CarPlay Ultra-Lite](https://github.com/SafariForest/carplay-ultra-lite-gen5w), built specifically for the Kia K5.
+**CarPlay Ultra-Lite K5** is an independent port of [SafariForest's CarPlay Ultra-Lite](https://github.com/SafariForest/carplay-ultra-lite-gen5w), built specifically for the Kia K5.
 
 The aim is to bring the Ultra-style interface, native climate controls and additional vehicle functionality into CarPlay without replacing the factory head unit or changing the existing wireless projection setup.
 
