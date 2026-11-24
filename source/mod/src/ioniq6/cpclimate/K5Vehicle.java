@@ -24,11 +24,15 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
     final Handler main = new Handler(Looper.getMainLooper());
     int odometer = -1, range = -1, unit = -1;
     String last = "";
+    final ComfortThresholds comfort;
+    final java.util.concurrent.ArrayBlockingQueue<String> adjustments = new java.util.concurrent.ArrayBlockingQueue<String>(16);
 
     K5Vehicle(Context context, ModContext mod, VehicleState[] state, VsChannel[] lanes, VsChannel.Log log) {
         super("k5-vehicle");
         setDaemon(true);
         this.context = context; this.mod = mod; this.state = state; this.lanes = lanes; this.log = log;
+        VehiclePage.tiles = "dict";
+        if (mod.settingBoolean("vehicle_page", true)) {
         page.sectionName("Vehicle", "Kia K5");
         page.line("Vehicle", "range", "Fuel range", "fuelpump");
         page.line("Vehicle", "odometer", "Odometer", "road.lanes");
@@ -36,6 +40,9 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
         addPackage("hmgapi", "HMG-API", "puzzlepiece.extension", "hmgapi.app");
         addPackage("nemesis", "NEMESIS Manager", "shippingbox", "com.nemesis.manager");
         addPackage("settings", "Vehicle settings", "gearshape", "com.android.vehiclesettings");
+        }
+        comfort = new ComfortThresholds(context, mod, log);
+        if (comfort.present()) comfort.describe(page);
         page.listener = this;
         log.log("[vehicle] K5 page initialized; shortcuts=" + shortcuts.keySet());
     }
@@ -49,6 +56,11 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
         } else log.log("[vehicle] shortcut unavailable " + id);
     }
     public void pressed(final String id) {
+        if (id.startsWith("comfort.")) {
+            if (comfort.enabled() && CpClimate.sessionActive && !adjustments.offer(id + ":" + CpClimate.sessionGeneration))
+                log.log("[comfort] adjustment queue full");
+            return;
+        }
         final Intent i = shortcuts.get(id);
         if (i == null) return;
         main.post(new Runnable() { public void run() {
@@ -86,23 +98,35 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
         lookup();
         while (!isInterrupted()) {
             try {
-                if (enabled() && CpClimate.sessionActive) {
+                if ((enabled() || comfort.enabled()) && CpClimate.sessionActive) {
+                    Map<String,Object> fresh = new LinkedHashMap<String,Object>();
+                    if (enabled()) {
                     double u = read("com.hkmc.micom.usm", CarApi.USM, unit, false, false);
                     double o = read(SERVICE, HSCAN, odometer, true, true);
                     double r = read(SERVICE, HSCAN, range, true, false);
                     // EV6 semantics are candidate mappings only; unknown unit is never guessed.
                     boolean knownUnit = u == 0 || u == 1;
-                    Map<String,Object> fresh = new LinkedHashMap<String,Object>();
                     fresh.put("odometer", knownUnit && o > 0 ? VehiclePage.distance(o, u == 1) : VehiclePage.NONE);
                     fresh.put("range", knownUnit && r >= 0 && r <= 2000 ? VehiclePage.distance(r, u == 1) : VehiclePage.NONE);
                     String status = "odometer=" + !VehiclePage.NONE.equals(fresh.get("odometer")) + " range=" + !VehiclePage.NONE.equals(fresh.get("range")) + " unit=" + knownUnit;
                     if (!status.equals(last)) { log.log("[vehicle] readings " + status); last = status; }
+                    }
+                    if (comfort.present() && comfort.enabled()) {
+                        String command = adjustments.poll();
+                        if (command != null) {
+                            int split = command.lastIndexOf(':');
+                            if (Long.parseLong(command.substring(split + 1)) == CpClimate.sessionGeneration)
+                                comfort.adjust(command.substring(0, split));
+                        }
+                        comfort.refresh(fresh);
+                    }
                     Map<Long,Object> changed = page.update(fresh);
                     VehicleState current;
                     synchronized (state) { current = state[0]; }
                     if (current != null && !changed.isEmpty()) lanes[1].deliver(current.fromCar(changed));
                 }
-                Thread.sleep(5000);
+                if (!CpClimate.sessionActive) adjustments.clear();
+                Thread.sleep(comfort.present() ? 1000 : 5000);
             } catch (InterruptedException done) { return; }
             catch (Throwable t) { log.log("[vehicle] refresh failed: " + t.getClass().getSimpleName()); try { Thread.sleep(5000); } catch (InterruptedException done) { return; } }
         }

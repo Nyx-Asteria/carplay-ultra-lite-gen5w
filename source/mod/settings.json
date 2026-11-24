@@ -48,6 +48,14 @@
       "title": "Ultra theme",
       "description": "Experimental shared CarPlay theme and virtual display profile. Restart required.",
       "apply": "restart"
+    },
+    {
+      "key": "comfort_thresholds",
+      "type": "toggle",
+      "default": true,
+      "title": "Comfort thresholds",
+      "description": "Edit automatic seat heating and ventilation thresholds in CarPlay when compatible Comfort is installed. Restart required.",
+      "apply": "restart"
     }
   ]
 }
