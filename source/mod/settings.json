@@ -24,6 +24,22 @@
       "title": "Parked AirPlay video",
       "description": "Allow video only during an active CarPlay session with fresh Park feedback. Restart required.",
       "apply": "restart"
+    },
+    {
+      "key": "volume_link",
+      "type": "toggle",
+      "default": true,
+      "title": "Volume synchronization",
+      "description": "Synchronize supported CarPlay audio streams with the head unit. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "media_controls",
+      "type": "toggle",
+      "default": true,
+      "title": "Media controls",
+      "description": "Forward explicit play, pause and track commands. Restart required.",
+      "apply": "restart"
     }
   ]
 }

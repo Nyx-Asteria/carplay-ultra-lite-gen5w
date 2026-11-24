@@ -73,6 +73,7 @@ public final class CpClimate extends ModEntry {
     static boolean busy;
     static volatile long sessionGeneration;
     static volatile boolean sessionActive;
+    static CarPlayMedia media;
     public static boolean videoAllowed() { return VideoUi.enabled && sessionActive && ParkedVideo.allowed(); }
 
     /** files/cpc-vspi.bplist: VehicleState.vspi for the native /info hook (removed if it can't be built) */
@@ -204,6 +205,19 @@ public final class CpClimate extends ModEntry {
             for (VsChannel ch : lanes) ch.start();
             car.start();
             if (vehicle != null) vehicle.start();
+            if (m.settingBoolean("volume_link", true)) {
+                CarAudio audio = new CarAudio(state, lanes, log, m);
+                CarAudio.instance = audio;
+                audio.start();
+            } else m.log("[audio] volume link disabled");
+            if (m.settingBoolean("media_controls", true)) {
+                final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+                media = new CarPlayMedia(new CarPlayMedia.Later() {
+                    public void post(Runnable action, long delayMs) { handler.postDelayed(action, delayMs); }
+                }, log, m);
+                VehicleState.mediaControls = media;
+                m.log("[media] manual controls ready; no autoplay");
+            }
             m.log("[climate] reader and both vehicle-state lanes started");
             // the Ultra experiment: the virtual cluster's video goes here and is thrown away
             if (ultra) new ClusterSink(log).start();
@@ -226,6 +240,7 @@ public final class CpClimate extends ModEntry {
             @Override
             protected void afterHookedMethod(Param p) {
                 sessionActive = false;
+                if (media != null) media.ended(p.thisObject);
                 VideoMessages.stopEngine("session finalized");
                 sessionGeneration++;
                 m.log("[session] finalized");
@@ -237,6 +252,7 @@ public final class CpClimate extends ModEntry {
             protected void afterHookedMethod(Param p) {
                 sessionGeneration++;
                 sessionActive = true;
+                if (media != null) media.started(p.thisObject);
                 m.log("[session] started generation=" + sessionGeneration);
                 IapBridge.carPlay = p.thisObject;
                 VideoUi.install(p.thisObject, app.classLoader);

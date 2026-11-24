@@ -74,6 +74,8 @@ final class VehicleState {
     private final Map<Long, String> controls = new HashMap<Long, String>();
     private final OpackCodec.Raw accessories;
     static volatile VehiclePage vehiclePage;
+    interface Controls { void pressed(String name, Object value); }
+    static volatile Controls mediaControls;
 
     /** the vehicle variant the phone resolves a CarPlay theme's assets by (setting vehicle_variant), "" for LIVI's stock description */
     static volatile String variant = "";
@@ -810,6 +812,15 @@ final class VehicleState {
                 if (followed.contains(e.getKey())) changed.put(e.getKey(), e.getValue());
             }
         }
+        CarAudio audio = CarAudio.instance;
+        if (audio != null) {
+            Map<Long,Object> audioWrites = new LinkedHashMap<Long,Object>();
+            for (Map.Entry<Object,Object> e : written.entrySet()) {
+                Long iid = OpackCodec.asLong(e.getKey());
+                if (iid != null && writable.contains(iid)) audioWrites.put(iid, e.getValue());
+            }
+            audio.phoneWrote(audioWrites);
+        }
         Car c = car;
         if (c == null) {
             settle(written, changed);
@@ -845,6 +856,8 @@ final class VehicleState {
             }
             // LIVI's radio controls; the car has no radio hooked up, so they are only logged
             out.log("VS phone pressed " + name + " " + shown(e.getValue()));
+            Controls media = mediaControls;
+            if (media != null) media.pressed(name, e.getValue());
             answered.put(e.getKey(), null);
         }
         Map<Object, Object> answer = dict("command", "controlResponse", "transactionID", transaction);
