@@ -15,6 +15,15 @@ final class ThemeContribution {
     private Object registered;
     private Method remove;
 
+    boolean available(ModContext mod) {
+        try {
+            Object service = mod.use(PROVIDER, SERVICE);
+            if (service == null) { mod.log("[theme] provider not published"); return false; }
+            Class<?> api = Class.forName(API, false, service.getClass().getClassLoader());
+            return api.isInstance(service) && api.getField("API_VERSION").getInt(null) == 2;
+        } catch (Throwable t) { mod.error("[theme] capability probe failed", t); return false; }
+    }
+
     synchronized boolean register(ModContext mod) {
         if (registered != null) return true;
         try {

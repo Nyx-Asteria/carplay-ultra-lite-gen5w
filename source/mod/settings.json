@@ -40,6 +40,14 @@
       "title": "Media controls",
       "description": "Forward explicit play, pause and track commands. Restart required.",
       "apply": "restart"
+    },
+    {
+      "key": "ultra_theme",
+      "type": "toggle",
+      "default": true,
+      "title": "Ultra theme",
+      "description": "Experimental shared CarPlay theme and virtual display profile. Restart required.",
+      "apply": "restart"
     }
   ]
 }

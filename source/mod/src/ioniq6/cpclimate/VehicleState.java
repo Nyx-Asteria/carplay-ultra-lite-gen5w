@@ -74,6 +74,7 @@ final class VehicleState {
     private final Map<Long, String> controls = new HashMap<Long, String>();
     private final OpackCodec.Raw accessories;
     static volatile VehiclePage vehiclePage;
+    static volatile boolean climateEnabled = true;
     interface Controls { void pressed(String name, Object value); }
     static volatile Controls mediaControls;
 
@@ -581,6 +582,29 @@ final class VehicleState {
             byte[] installed = page.install(acc, values, names, writable, shared);
             if (installed != null) { acc = installed; out.log("[vehicle] page schema installed"); }
             else out.log("[vehicle] automaker accessory missing");
+        }
+        if (!climateEnabled) {
+            Object decoded = OpackCodec.decode(acc);
+            if (decoded instanceof List) {
+                java.util.Iterator<?> it = ((List<?>) decoded).iterator();
+                while (it.hasNext()) {
+                    Object obj = it.next();
+                    if (!(obj instanceof Map)) continue;
+                    Long id = OpackCodec.asLong(((Map<?,?>) obj).get("iid"));
+                    if (id == null || (id != 512L && id != 1024L)) continue;
+                    Object services = ((Map<?,?>) obj).get("services");
+                    if (services instanceof List) for (Object svc : (List<?>) services) {
+                        Object chars = ((Map<?,?>) svc).get("characteristics");
+                        if (chars instanceof List) for (Object c : (List<?>) chars) {
+                            Long iid = OpackCodec.asLong(((Map<?,?>) c).get("iid"));
+                            if (iid != null) { values.remove(iid); writable.remove(iid); shared.remove(iid); names.remove(iid); }
+                        }
+                    }
+                    it.remove();
+                }
+                acc = OpackCodec.encode(decoded);
+            }
+            out.log("[climate] disabled; climate and seat accessories omitted");
         }
         byte[] versioned = withVersions(VsData.bytes(VsData.ACCESSORIES), acc);
         if (versioned != null) {

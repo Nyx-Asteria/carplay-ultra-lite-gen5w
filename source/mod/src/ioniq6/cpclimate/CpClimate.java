@@ -42,6 +42,8 @@ public final class CpClimate extends ModEntry {
             "Command '", "Request accessory UI", "ChangeModeBorrow", "ChangeModeUnborrow", "Modes changed" };
 
     private boolean targetVerified;
+    private boolean themePreflight;
+    private final ThemeContribution theme = new ThemeContribution();
 
     @Override
     public void zygoteInit(ModContext m) {
@@ -52,6 +54,11 @@ public final class CpClimate extends ModEntry {
         boolean dipo = fingerprint(m, "DiPO", "/system/app/HKMC_DiPO.odex", "edc6f75f5ccf79b63dc85a0902b63d91");
         targetVerified = model && core && identity && dipo;
         m.log("[preflight] target=" + model + " core=" + core + " identity=" + identity + " dipo=" + dipo + " ready=" + targetVerified);
+        // This guard is readable here in the root zygote. Both child processes inherit the same initial decision.
+        guard = new File("/data/data/" + DIPO + "/files", GUARD_FILE);
+        themePreflight = targetVerified && recentStarts().size() < GUARD_STARTS
+                && m.settingBoolean("ultra_theme", true) && theme.available(m);
+        m.log("[theme] boot preflight=" + themePreflight);
     }
 
     private static String property(String key) {
@@ -102,9 +109,19 @@ public final class CpClimate extends ModEntry {
 
     @Override
     public void appLoaded(ModContext m, LoadedApp app) {
+        if ("com.tcc.iap2server".equals(app.packageName)) {
+            if (themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true)) {
+                theme.register(m);
+            } else m.log("[theme] iAP2 contribution withheld by boot preflight/settings");
+            return;
+        }
         if (!DIPO.equals(app.packageName)) return;
         m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("climate_test", true));
-        if (!targetVerified || !m.settingBoolean("climate_test", true)) return;
+        if (!targetVerified) return;
+        boolean climate = m.settingBoolean("climate_test", true);
+        boolean any = climate || m.settingBoolean("vehicle_page", true) || m.settingBoolean("volume_link", true)
+                || m.settingBoolean("media_controls", true) || m.settingBoolean("parked_video", true) || themePreflight;
+        if (!any) { m.log("[runtime] all features off; native patch withheld"); return; }
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
         guard = new File(dir, GUARD_FILE);
@@ -120,11 +137,12 @@ public final class CpClimate extends ModEntry {
             // CarPlay Ultra-Lite 1.0: two settings. Everything the development builds made switchable is fixed
             // at what was tested on the Ioniq 6 (CEEV USA 260507, 2026-11-08); the code for the other values stays.
             // Theme registration is not integrated yet. Never advertise unsupported Ultra mode.
-            boolean ultra = false;
+            boolean ultra = themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true);
+            m.log("[theme] DiPO display profile enabled=" + ultra + " (shared provider native result not exposed)");
             writeSize(dir, "100");
             writeDock(dir, "1");                                  // the bottom dock with the climate bar
             writeVersion(dir, "950");                             // receiver version 950.7.1 in /info
-            writeFlag(dir, "cpc-extras", true, "LIVI display extras");
+            writeFlag(dir, "cpc-extras", climate, "LIVI display extras");
             writeCluster(dir, "full");                            // the instrument panel with its plugin (climate overlay)
             writeWide(dir, "0");
             writeUltra(dir, ultra ? 2 : 0);                       // virtual cluster + the theme's display names
@@ -137,7 +155,7 @@ public final class CpClimate extends ModEntry {
             m.log("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
             boolean uiSync = ultra;                               // the theme's layouts, palettes and wallpapers
             writeFlag(dir, "cpc-uisync", uiSync, "uiSync (CarPlay theme layouts and palettes)");
-            writeFeatures(dir, ultra ? "livi_all" : "off");
+            writeFeatures(dir, ultra ? "livi_nonaudio" : "off");
             writeFlag(dir, "cpc-xfeat", ultra, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
             // Stage 2 is not validated: do not offer video even if an old setting is saved.
@@ -178,7 +196,8 @@ public final class CpClimate extends ModEntry {
             // that is sent to the car's mood light; see VehicleState.withAmbientTest and CarClimate.writeAmbient
             VehicleState.ambientTest = CarClimate.ambientTest = false;
             // the extra seat and wheel controls (off): rear seat heat, front seat ventilation, steering wheel heater
-            VehicleState.extras = ClimateMap.extras = true;
+            VehicleState.extras = ClimateMap.extras = climate;
+            VehicleState.climateEnabled = climate;
             // A: ventilation as separate SeatFan services; B: as the seats' own cooling levels, plus a rear zone
             // the driver card has room for three buttons: AUTO, vent position, seat (2026-11-10: more were drawn on top
             // of each other). The wheel heater and the per-seat power are off unless turned on.
@@ -200,10 +219,10 @@ public final class CpClimate extends ModEntry {
             } else { VehicleState.vehiclePage = null; m.log("[vehicle] page disabled or context unavailable"); }
             writeVspi(dir, log);
             m.log("[climate] profile=K5 front heat/vent -3..3, rear seats=false, ambient=false");
-            CarClimate car = new CarClimate(state, lanes, log);
+            CarClimate car = climate ? new CarClimate(state, lanes, log) : null;
             VsChannel.car = car;
             for (VsChannel ch : lanes) ch.start();
-            car.start();
+            if (car != null) car.start();
             if (vehicle != null) vehicle.start();
             if (m.settingBoolean("volume_link", true)) {
                 CarAudio audio = new CarAudio(state, lanes, log, m);
@@ -262,6 +281,11 @@ public final class CpClimate extends ModEntry {
         });
         m.hook(app.classLoader, "dipo.carplay.session_finalized", copy);
         m.log("M4 in " + app.processName + " (guard " + guard + ", " + starts.size() + " recent start(s))");
+    }
+
+    @Override public void onEnabled(ModContext m, boolean enabled) {
+        if (!enabled) { theme.unregister(m); sessionActive = false; sessionGeneration++; VideoMessages.stopEngine("mod disabled"); }
+        m.log("[runtime] enabled=" + enabled + "; restart required to change advertised capabilities");
     }
 
     /** the CarPlay size setting, for the native /info hook (files/cpc-size, 50-100 %) */
