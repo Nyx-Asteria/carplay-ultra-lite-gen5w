@@ -34,11 +34,15 @@ public final class CarApi {
 
     /** the transaction code of iface.method if the method exists with exactly this descriptor, else -1 */
     public static int code(String iface, String method, String descriptor) {
+        return code(CarApi.class.getClassLoader(), iface, method, descriptor);
+    }
+
+    public static int code(ClassLoader loader, String iface, String method, String descriptor) {
         try {
-            Class<?> i = Class.forName(iface);
+            Class<?> i = Class.forName(iface, false, loader);
             Method m = only(i, method);
             if (m == null || !descriptor.equals(descriptor(m))) return -1;
-            Field f = Class.forName(iface + "$Stub").getDeclaredField("TRANSACTION_" + method);
+            Field f = Class.forName(iface + "$Stub", false, loader).getDeclaredField("TRANSACTION_" + method);
             f.setAccessible(true);
             return f.getInt(null);
         } catch (Throwable t) {

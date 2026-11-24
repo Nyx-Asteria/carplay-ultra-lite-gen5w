@@ -178,12 +178,18 @@ public final class CpClimate extends ModEntry {
             VehicleState.rowRear = "c".equals(layout);
             VehicleState.twoRear = "d".equals(layout);
             // /info's copy of the car (the phone builds its car from it): cp-climate's description, not LIVI's
+            K5Vehicle vehicle = null;
+            if (app.context != null && m.settingBoolean("vehicle_page", true)) {
+                vehicle = new K5Vehicle(app.context, m, state, lanes, log);
+                VehicleState.vehiclePage = vehicle.page;
+            } else { VehicleState.vehiclePage = null; m.log("[vehicle] page disabled or context unavailable"); }
             writeVspi(dir, log);
             m.log("[climate] profile=K5 front heat/vent -3..3, rear seats=false, ambient=false");
             CarClimate car = new CarClimate(state, lanes, log);
             VsChannel.car = car;
             for (VsChannel ch : lanes) ch.start();
             car.start();
+            if (vehicle != null) vehicle.start();
             m.log("[climate] reader and both vehicle-state lanes started");
             // the Ultra experiment: the virtual cluster's video goes here and is thrown away
             if (ultra) new ClusterSink(log).start();
