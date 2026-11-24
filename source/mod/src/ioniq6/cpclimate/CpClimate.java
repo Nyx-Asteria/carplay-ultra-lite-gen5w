@@ -41,6 +41,17 @@ public final class CpClimate extends ModEntry {
     static final String[] MARKS = { "Setting up session", "cp-climate", "Unsupported stream type",
             "Command '", "Request accessory UI", "ChangeModeBorrow", "ChangeModeUnborrow", "Modes changed" };
 
+    private boolean targetVerified;
+
+    @Override
+    public void zygoteInit(ModContext m) {
+        targetVerified = "wp_daudioplus_dl322_us".equals(android.os.Build.DEVICE)
+                && "d3a47296437df56fb1ffc7ac3dfca4cb".equals(ModContext.md5("/system/lib/libCarPlayCore.so"))
+                && "fc7cb675b46a44bd893a1edc054c5e71".equals(ModContext.md5("/system/lib/libiap2session.so"))
+                && "edc6f75f5ccf79b63dc85a0902b63d91".equals(ModContext.md5("/system/app/HKMC_DiPO.odex"));
+        m.log("DL322 stock firmware preflight: " + (targetVerified ? "matched" : "not matched; hooks withheld"));
+    }
+
     static ModContext mod;
     static File guard;
     static final Set<String> copied = new HashSet<String>();
@@ -72,7 +83,7 @@ public final class CpClimate extends ModEntry {
 
     @Override
     public void appLoaded(ModContext m, LoadedApp app) {
-        if (!DIPO.equals(app.packageName)) return;
+        if (!DIPO.equals(app.packageName) || !targetVerified) return;
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
         guard = new File(dir, GUARD_FILE);
@@ -86,7 +97,8 @@ public final class CpClimate extends ModEntry {
             save(starts);
             // CarPlay Ultra-Lite 1.0: two settings. Everything the development builds made switchable is fixed
             // at what was tested on the Ioniq 6 (CEEV USA 260507, 2026-11-08); the code for the other values stays.
-            boolean ultra = m.settingBoolean("carplay_ultra", true);
+            // Theme registration is not integrated yet. Never advertise unsupported Ultra mode.
+            boolean ultra = false;
             writeSize(dir, "100");
             writeDock(dir, "1");                                  // the bottom dock with the climate bar
             writeVersion(dir, "950");                             // receiver version 950.7.1 in /info
@@ -106,7 +118,8 @@ public final class CpClimate extends ModEntry {
             writeFeatures(dir, ultra ? "livi_all" : "off");
             writeFlag(dir, "cpc-xfeat", ultra, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
-            int extraBits = m.settingBoolean("video_playback", true) ? 1 : 0;
+            // Stage 2 is not validated: do not offer video even if an old setting is saved.
+            int extraBits = 0;
             writeNumber(dir, "cpc-xenable", extraBits, extraBits != 0 ? "SETUP extra features: videoPlayback" : "SETUP extra features off");
             writeNumber(dir, "cpc-hid", 0, "LIVI input devices in /info");   // on, iOS drew a knob-focus box
             m.nativePatch(app, "libCarPlayCore.so");

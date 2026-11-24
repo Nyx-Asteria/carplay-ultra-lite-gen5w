@@ -72,13 +72,14 @@ Other vehicles and firmware versions are outside the scope of this port. Matchin
 
 The intended distribution is a single signed HMG-API USB package, published through [Releases](../../releases) once ready. Installation and rollback instructions will accompany the first prerelease.
 
-The existing wireless-carplay-aa package and working Wi-Fi configuration remain separate and unchanged. The K5 port uses HMG-API and the existing wireless-carplay-aa installation. Shared CarPlay identity must be enabled. The modified E-GMP routing package is not intended to be installed.
+The existing wireless-carplay-aa package and working Wi-Fi configuration remain separate and unchanged. The K5 port uses HMG-API and the existing wireless-carplay-aa installation. Shared CarPlay identity must be enabled. No wireless package version is pinned; shared API compatibility is checked at runtime. The modified E-GMP routing package is not intended to be installed.
 
 ## Development
 
 ### Stage 1 — Ultra interface and climate
 
-- [ ] Validate the captured K5 firmware, hook map, native recipes and runtime patch compatibility.
+- [x] Restrict the manifest to DL322 USA 260507 and add a stock firmware preflight.
+- [ ] Validate hook maps, native recipes and runtime patch compatibility.
 - [ ] Replace the generic compatibility checker with K5-specific checks.
 - [x] Obtain the original and modified routing sources and identify the theme contribution.
 - [x] Confirm public wireless RC7 exposes independent theme registration and the target package includes shared identity support.
@@ -90,6 +91,8 @@ The existing wireless-carplay-aa package and working Wi-Fi configuration remain 
 - [ ] Verify themes, wallpapers, per-seat panels and return to the Kia home screen.
 - [ ] Build a signed prerelease with compatibility guards and reversible installation.
 - [ ] Test wireless CarPlay audio, calls, navigation, reconnects and Android Auto regressions while parked.
+
+The current development code deliberately withholds Ultra theme and AirPlay video advertising until their respective integration and safety checks are complete. This is not an installation-ready build.
 
 ### Stage 2 — AirPlay video
 
