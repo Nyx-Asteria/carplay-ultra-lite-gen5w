@@ -106,7 +106,6 @@ The current development code deliberately withholds Ultra theme and AirPlay vide
 
 ### Stage 3 — K5 experience
 
-- [ ] Add optional [Comfort & Startup](https://github.com/lemoyneiv/hmgapi-comfort) threshold controls using an owner-authorized configuration bridge.
 
 - [ ] Create a K5-specific vehicle page and Kia-inspired visual identity.
 - [ ] Investigate fuel level, range, odometer and other read-only data.
@@ -138,6 +137,13 @@ The original Ultra-Lite setup requires a modified EV-routing package to advertis
 Public [wireless RC7 API source](https://github.com/Open-HMG/hmgapi-wireless-cp-aa/blob/v2.2.0-rc.7/wireless-carplay-aa/src/hmgapi/mods/wireless/api/CarPlayIdentification.java) defines service `carplay-identification`, API version 2, `registerTheme`, `removeTheme` and a `ThemeIdentity(String, long, String)` value. The wireless provider must expose shared identity. The exact compiled API and runtime lifecycle still require validation. The intended theme tuple from SafariForest is `44C9FA31EC:985:19.0`. Register only a theme, never an EV vehicle contribution. If the service is missing or registration fails, leave Ultra advertising disabled and retain normal projection. Coordinate removal with disable/uninstall and session lifecycle. Do not install a second iAP2 recipe.
 
 See [integration design](docs/integration.md) for the theme adapter and optional Comfort configuration contract. The adapter is not yet called by the runtime.
+
+### Stage 4 — Optional Comfort integration
+
+- [ ] Add optional [Comfort & Startup](https://github.com/lemoyneiv/hmgapi-comfort) threshold controls using an owner-authorized configuration bridge.
+- [ ] If necessary, develop a separate Comfort fork with a supported configuration API.
+
+Comfort integration must not block the core K5 port, video, vehicle information or shortcuts. No Comfort dependency is required for those features.
 
 ### Build from source
 
