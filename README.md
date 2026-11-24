@@ -114,6 +114,10 @@ The current development code deliberately withholds Ultra theme and AirPlay vide
 - [ ] Explore volume, vehicle notifications, radio and sound settings.
 - [ ] Evaluate GPU support for future 3D vehicle visuals.
 
+## Diagnostics
+
+HMG-API logs report individual firmware fingerprint results, climate startup and profile, native recipe requests, session generations and finalization, and theme API failures. Native recipe success is reported by HMG-API itself. Raw projection SETUP payloads are not copied into the mod log. The crash guard clears only after the same session remains active for the full health interval. The port does not intercept wireless iAP send traffic.
+
 ## Test settings
 
 One boolean toggle per major feature, enabled by default once implemented. Climate integration enables both vehicle feedback and supported commands together. The K5 target exposes only front driver/passenger seats with three heating and three ventilation levels; no rear seat controls, rear climate zones or ambient lighting. Steering wheel heat and Driver Only are withheld pending equipment validation. Unsupported command groups are rejected before queueing and sending. Restart after changes. Theme and parked video switches will be added with their implementation.

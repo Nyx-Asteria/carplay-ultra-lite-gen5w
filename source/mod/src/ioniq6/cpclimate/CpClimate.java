@@ -45,17 +45,34 @@ public final class CpClimate extends ModEntry {
 
     @Override
     public void zygoteInit(ModContext m) {
-        targetVerified = "wp_daudioplus_dl322_us".equals(android.os.Build.DEVICE)
-                && "d3a47296437df56fb1ffc7ac3dfca4cb".equals(ModContext.md5("/system/lib/libCarPlayCore.so"))
-                && "fc7cb675b46a44bd893a1edc054c5e71".equals(ModContext.md5("/system/lib/libiap2session.so"))
-                && "edc6f75f5ccf79b63dc85a0902b63d91".equals(ModContext.md5("/system/app/HKMC_DiPO.odex"));
-        m.log("DL322 stock firmware preflight: " + (targetVerified ? "matched" : "not matched; hooks withheld"));
+        String product = property("ro.build.product");
+        boolean model = product.startsWith("DL322.USA.") && product.endsWith(".260507");
+        boolean core = fingerprint(m, "CarPlayCore", "/system/lib/libCarPlayCore.so", "d3a47296437df56fb1ffc7ac3dfca4cb");
+        boolean identity = fingerprint(m, "iAP2", "/system/lib/libiap2session.so", "fc7cb675b46a44bd893a1edc054c5e71");
+        boolean dipo = fingerprint(m, "DiPO", "/system/app/HKMC_DiPO.odex", "edc6f75f5ccf79b63dc85a0902b63d91");
+        targetVerified = model && core && identity && dipo;
+        m.log("[preflight] target=" + model + " core=" + core + " identity=" + identity + " dipo=" + dipo + " ready=" + targetVerified);
+    }
+
+    private static String property(String key) {
+        try {
+            return (String) Class.forName("android.os.SystemProperties").getMethod("get", String.class).invoke(null, key);
+        } catch (Exception e) { return ""; }
+    }
+
+    private static boolean fingerprint(ModContext m, String name, String path, String expected) {
+        String actual = ModContext.md5(path);
+        boolean match = expected.equals(actual);
+        m.log("[preflight] " + name + " md5=" + actual + " match=" + match);
+        return match;
     }
 
     static ModContext mod;
     static File guard;
     static final Set<String> copied = new HashSet<String>();
     static boolean busy;
+    static volatile long sessionGeneration;
+    static volatile boolean sessionActive;
 
     /** files/cpc-vspi.bplist: VehicleState.vspi for the native /info hook (removed if it can't be built) */
     static void writeVspi(File dir, VsChannel.Log log) {
@@ -83,7 +100,9 @@ public final class CpClimate extends ModEntry {
 
     @Override
     public void appLoaded(ModContext m, LoadedApp app) {
-        if (!DIPO.equals(app.packageName) || !targetVerified || !m.settingBoolean("climate_test", true)) return;
+        if (!DIPO.equals(app.packageName)) return;
+        m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("climate_test", true));
+        if (!targetVerified || !m.settingBoolean("climate_test", true)) return;
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
         guard = new File(dir, GUARD_FILE);
@@ -92,6 +111,7 @@ public final class CpClimate extends ModEntry {
         if (starts.size() >= GUARD_STARTS) {
             m.error("crash guard: DiPO started " + starts.size() + " times in " + GUARD_MS / 60000
                     + " min with the patch on, so it stays off this time (delete " + guard + " to retry)", null);
+            return;
         } else {
             starts.add(System.currentTimeMillis());
             save(starts);
@@ -122,6 +142,7 @@ public final class CpClimate extends ModEntry {
             int extraBits = 0;
             writeNumber(dir, "cpc-xenable", extraBits, extraBits != 0 ? "SETUP extra features: videoPlayback" : "SETUP extra features off");
             writeNumber(dir, "cpc-hid", 0, "LIVI input devices in /info");   // on, iOS drew a knob-focus box
+            m.log("[native] requesting CarPlayCore recipe; application result is reported by HMG-API");
             m.nativePatch(app, "libCarPlayCore.so");
             // M2: the vehicle state data streams the native SETUP handler sends the phone to;
             // M3: answered from one VehicleState the two lanes share
@@ -134,7 +155,7 @@ public final class CpClimate extends ModEntry {
             VehicleState[] state = new VehicleState[1];
             VsChannel[] lanes = new VsChannel[2];
             for (int lane = 0; lane < 2; lane++) lanes[lane] = new VsChannel(lane, dir, log, state, lanes);
-            for (VsChannel ch : lanes) ch.start();
+
             // M4: the car's climate on CarPlay both ways (CarClimate reads it and sends the phone's changes)
             CarClimate.configureTestSwitches(m);
             CarClimate.rearDefrost = true;
@@ -158,9 +179,12 @@ public final class CpClimate extends ModEntry {
             VehicleState.twoRear = "d".equals(layout);
             // /info's copy of the car (the phone builds its car from it): cp-climate's description, not LIVI's
             writeVspi(dir, log);
+            m.log("[climate] profile=K5 front heat/vent -3..3, rear seats=false, ambient=false");
             CarClimate car = new CarClimate(state, lanes, log);
             VsChannel.car = car;
+            for (VsChannel ch : lanes) ch.start();
             car.start();
+            m.log("[climate] reader and both vehicle-state lanes started");
             // the Ultra experiment: the virtual cluster's video goes here and is thrown away
             if (ultra) new ClusterSink(log).start();
             if ((extraBits & 1) != 0) new ClusterSink(log, 7134, "videoPlayback").start();
@@ -191,12 +215,18 @@ public final class CpClimate extends ModEntry {
         MethodHook copy = new MethodHook() {
             @Override
             protected void afterHookedMethod(Param p) {
+                sessionActive = false;
+                sessionGeneration++;
+                m.log("[session] finalized");
                 copyLater(COPY_DELAY_MS, false);
             }
         };
         m.hook(app.classLoader, "dipo.carplay.session_started", new MethodHook() {
             @Override
             protected void afterHookedMethod(Param p) {
+                sessionGeneration++;
+                sessionActive = true;
+                m.log("[session] started generation=" + sessionGeneration);
                 IapBridge.carPlay = p.thisObject;
                 VideoUi.install(p.thisObject, app.classLoader);
                 copyLater(COPY_DELAY_MS, false);
@@ -204,33 +234,6 @@ public final class CpClimate extends ModEntry {
             }
         });
         m.hook(app.classLoader, "dipo.carplay.session_finalized", copy);
-        // iAP the phone sends as iAPSendMessage commands: the wireless-carplay-aa mod hands those to iap2server
-        // itself (feeding them here too doubled them); only DiPO's CarPlayService is taken from it
-        try {
-            m.hook(app.classLoader, "dipo.carplay.iap_message", new MethodHook() {
-                @Override
-                protected void beforeHookedMethod(Param p) {
-                    IapBridge.carPlay = p.thisObject;
-                }
-            });
-        } catch (Throwable t) {
-            m.log("iAP message hook not installed: " + t);
-        }
-        // while the iAPChannel stream carries the link (LIVI's duplex tunnel), DiPO's iAPSendMessage copies of the
-        // same packets (the wireless-carplay-aa mod's CarPlay channel) are dropped: the phone gets each packet once
-        try {
-            m.hook(app.classLoader, "dipo.carplay.native_iap_send", new MethodHook() {
-                @Override
-                protected void beforeHookedMethod(Param p) {
-                    if (IapBridge.stream != null) {
-                        p.setResult(0);
-                        IapBridge.droppedLegacy((Integer) p.args[1]);
-                    }
-                }
-            });
-        } catch (Throwable t) {
-            m.log("iAP send hook not installed: " + t);
-        }
         m.log("M4 in " + app.processName + " (guard " + guard + ", " + starts.size() + " recent start(s))");
     }
 
@@ -474,13 +477,14 @@ public final class CpClimate extends ModEntry {
     static synchronized void copyLater(final long delay, final boolean healthy) {
         if (busy && !healthy) return;
         if (!healthy) busy = true;
+        final long generation = sessionGeneration;
         new Thread("cp-climate") {
             @Override
             public void run() {
                 try {
                     Thread.sleep(delay);
                     copy();
-                    if (healthy && guard.delete()) mod.log("crash guard: CarPlay ran " + delay / 1000 + " s, starts cleared");
+                    if (healthy && sessionActive && generation == sessionGeneration && guard.delete()) mod.log("crash guard: CarPlay ran " + delay / 1000 + " s, starts cleared");
                 } catch (Throwable t) {
                     mod.error("copying the CarPlay lines", t);
                 } finally {
@@ -517,7 +521,9 @@ public final class CpClimate extends ModEntry {
             for (int j = i; j < lines.size() && sent < MAX_LINES && head.equals(header(lines.get(j))); j++) {
                 String body = lines.get(j).substring(head.length());
                 if (body.contains("\"type\" : 130") || body.contains("stream type: 130")) streams130 = true;
-                mod.log("CP " + body);
+                // Do not copy arbitrary SETUP payloads: they can contain device identifiers or session keys.
+                if (body.contains("Unsupported stream type") || body.contains("Modes changed"))
+                    mod.log("[projection] " + (body.contains("Unsupported stream type") ? "unsupported stream reported" : "mode transition reported"));
                 sent++;
             }
         }
