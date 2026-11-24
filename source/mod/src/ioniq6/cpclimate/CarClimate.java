@@ -189,7 +189,10 @@ final class CarClimate extends Thread implements VehicleState.Car {
             else list.add(new ClimateMap.Command(ClimateMap.AMBIENT, rgb[0], rgb[1], rgb[2]));
         }
         if (list.isEmpty() && ambient == null) out.log("CAR nothing to send for " + written.keySet());
-        commands.addAll(list);
+        for (ClimateMap.Command command : list) {
+            if (allowed(command)) commands.add(command);
+            else out.log("CAR test switch withheld " + command);
+        }
     }
 
     /** sends the queued commands, one at a time */
@@ -216,8 +219,29 @@ final class CarClimate extends Thread implements VehicleState.Car {
         t.start();
     }
 
+    private static volatile hmgapi.hook.ModContext testContext;
+
+    static void configureTestSwitches(hmgapi.hook.ModContext context) {
+        testContext = context;
+    }
+
+    static boolean allowed(ClimateMap.Command c) {
+        hmgapi.hook.ModContext m = testContext;
+        if (m == null || !m.enabled() || !m.settingBoolean("climate_test", true)) return false;
+        if (c.kind == ClimateMap.REAR) return rearDefrost;
+        if (c.kind == ClimateMap.SEAT)
+            return (c.a == ClimateMap.SET_DRIVER_SEAT || c.a == ClimateMap.SET_PASSENGER_SEAT)
+                    && c.b >= 2 && c.b <= 8;
+        if (c.kind == ClimateMap.VR)
+            return c.a == 2 || c.a == 5 || c.a == 6 || c.a == 8 || c.a == 9 || c.a == 10 || c.a == 11 || c.a == 22;
+        if (c.kind == ClimateMap.FRONT)
+            return c.a == ClimateMap.FRONT_DRIVER_C || c.a == ClimateMap.FRONT_PASSENGER_C || c.a == ClimateMap.FRONT_PASSENGER_F;
+        return false;
+    }
+
     /** sends a command; false if nothing needed sending */
     boolean send(ClimateMap.Command c) throws Exception {
+        if (!allowed(c)) { out.log("CAR test switch withheld " + c); return false; }
         if (c.kind == ClimateMap.REAR) return pressRear(c.a);
         if (c.kind == ClimateMap.AMBIENT) return writeAmbient(c.a, c.b, c.c);
         if (c.kind == ClimateMap.WHEEL) return setWheel(c.a == 1);
@@ -369,11 +393,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
         if (usm != null) {
             r.driverSeat = seat(usm, txDriverSeat);
             r.passengerSeat = seat(usm, txPassengerSeat);
-            if (ClimateMap.extras) {
-                r.rearLeftSeat = seat(usm, txRearLeftSeat);
-                r.rearRightSeat = seat(usm, txRearRightSeat);
-                r.wheel = wheelOn(usm);
-            }
+            // K5: only the front seat actuators are supported.
         }
         if (rearDefrost) {
             watchBody();

@@ -120,20 +120,6 @@ final class ClimateMap {
         if (off && blankWhenOff) blankTargets(v);
         seat(v, r.driverSeat, DRIVER_SEAT_LEVEL, DRIVER_SEAT_ON);
         seat(v, r.passengerSeat, PASSENGER_SEAT_LEVEL, PASSENGER_SEAT_ON);
-        if (extras) {
-            if (!VehicleState.coolingLayout) {
-                ventSeat(v, r.driverSeat, DRIVER_VENT_LEVEL, DRIVER_VENT_ON);
-                ventSeat(v, r.passengerSeat, PASSENGER_VENT_LEVEL, PASSENGER_VENT_ON);
-            }
-            if (rowRear()) {
-                // layout C: one control for the row; it shows the warmer of the two seats
-                rearSeat(v, warmer(r.rearLeftSeat, r.rearRightSeat), REAR_LEFT_LEVEL, REAR_LEFT_ON);
-            } else {
-                rearSeat(v, r.rearLeftSeat, REAR_LEFT_LEVEL, REAR_LEFT_ON);
-                rearSeat(v, r.rearRightSeat, REAR_RIGHT_LEVEL, REAR_RIGHT_ON);
-            }
-            if (r.wheel >= 0) v.put(WHEEL_LEVEL, r.wheel > 0 ? 1L : 0L);
-        }
         return v;
     }
 

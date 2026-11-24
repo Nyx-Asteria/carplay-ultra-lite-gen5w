@@ -83,7 +83,7 @@ public final class CpClimate extends ModEntry {
 
     @Override
     public void appLoaded(ModContext m, LoadedApp app) {
-        if (!DIPO.equals(app.packageName) || !targetVerified) return;
+        if (!DIPO.equals(app.packageName) || !targetVerified || !m.settingBoolean("climate_test", true)) return;
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
         guard = new File(dir, GUARD_FILE);
@@ -110,7 +110,7 @@ public final class CpClimate extends ModEntry {
             writeFlag(dir, "cpc-iap", false, "iAPChannel");
             // the theme's vehicle: the Aston Martin DBX unless the vehicle_variant test setting picks another
             // (the Climate app shows a placeholder instead of its car picture with DBX; which model it needs is a test)
-            String model = m.settingString("vehicle_variant", "DBX");
+            String model = "DBX";
             VehicleState.variant = ultra && !"none".equals(model) ? model : "";
             m.log("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
             boolean uiSync = ultra;                               // the theme's layouts, palettes and wallpapers
@@ -136,22 +136,23 @@ public final class CpClimate extends ModEntry {
             for (int lane = 0; lane < 2; lane++) lanes[lane] = new VsChannel(lane, dir, log, state, lanes);
             for (VsChannel ch : lanes) ch.start();
             // M4: the car's climate on CarPlay both ways (CarClimate reads it and sends the phone's changes)
-            CarClimate.rearDefrost = m.settingBoolean("rear_defrost", true);
+            CarClimate.configureTestSwitches(m);
+            CarClimate.rearDefrost = true;
             // the ambient light test (off): one shared, writable setting in CarPlay's car settings whose value is a #RRGGBB
             // that is sent to the car's mood light; see VehicleState.withAmbientTest and CarClimate.writeAmbient
-            VehicleState.ambientTest = CarClimate.ambientTest = m.settingBoolean("ambient_test", false);
+            VehicleState.ambientTest = CarClimate.ambientTest = false;
             // the extra seat and wheel controls (off): rear seat heat, front seat ventilation, steering wheel heater
-            VehicleState.extras = ClimateMap.extras = m.settingBoolean("extra_seats", false);
+            VehicleState.extras = ClimateMap.extras = true;
             // A: ventilation as separate SeatFan services; B: as the seats' own cooling levels, plus a rear zone
             // the driver card has room for three buttons: AUTO, vent position, seat (2026-11-10: more were drawn on top
             // of each other). The wheel heater and the per-seat power are off unless turned on.
-            VehicleState.wheelHeater = m.settingBoolean("wheel_heater", false);
-            VehicleState.zonePower = m.settingBoolean("zone_power", false);
-            VehicleState.rearZone = m.settingBoolean("rear_zone", true);
-            ClimateMap.blankWhenOff = m.settingBoolean("blank_when_off", true);
-            VehicleState.ventCard = "passenger".equals(m.settingString("vent_card", "driver")) ? "passenger" : "driver";
-            VehicleState.coolingMin = "-4".equals(m.settingString("cooling_min", "-4")) ? -4 : -3;
-            String layout = m.settingString("extras_layout", "b");
+            VehicleState.wheelHeater = false;
+            VehicleState.zonePower = false;
+            VehicleState.rearZone = false;
+            ClimateMap.blankWhenOff = true;
+            VehicleState.ventCard = "driver";
+            VehicleState.coolingMin = -3;
+            String layout = "b";
             VehicleState.coolingLayout = "b".equals(layout) || "c".equals(layout) || "d".equals(layout);
             VehicleState.rowRear = "c".equals(layout);
             VehicleState.twoRear = "d".equals(layout);

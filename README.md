@@ -33,7 +33,7 @@ Unlike the original multi-vehicle project, this port targets one known vehicle a
 - **Ultra interface** — themes, wallpapers and individual climate panels.
 - **Integrated vehicle identification** — theme assets contributed through the existing wireless CarPlay shared identification API, without EV routing.
 - **Native climate** — temperatures, fan, A/C, AUTO, SYNC, vents, recirculation and supported defrost controls.
-- **Seat controls** — heating, ventilation and steering wheel heat where equipped and verified.
+- **Seat controls** — three-level heating and ventilation for the driver and front passenger.
 - **Parked video** — optional AirPlay video with strict Park and session-state safeguards.
 - **K5 vehicle page** — vehicle information, native Kia shortcuts and additional supported controls.
 - **HMG-API integration** — one signed K5 package, managed independently of wireless projection.
@@ -109,6 +109,10 @@ The current development code deliberately withholds Ultra theme and AirPlay vide
 - [ ] Add native Kia and installed-mod shortcuts.
 - [ ] Explore volume, vehicle notifications, radio and sound settings.
 - [ ] Evaluate GPU support for future 3D vehicle visuals.
+
+## Test settings
+
+One boolean toggle per major feature, enabled by default once implemented. Climate integration enables both vehicle feedback and supported commands together. The K5 target exposes only front driver/passenger seats with three heating and three ventilation levels; no rear seat controls, rear climate zones or ambient lighting. Steering wheel heat and Driver Only are withheld pending equipment validation. Unsupported command groups are rejected before queueing and sending. Restart after changes. Theme and parked video switches will be added with their implementation.
 
 ## Technical details
 
