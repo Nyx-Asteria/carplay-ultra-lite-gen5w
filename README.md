@@ -81,7 +81,7 @@ The existing wireless-carplay-aa package and working Wi-Fi configuration remain 
 
 - [x] Restrict the manifest to DL322 USA 260507 and add a stock firmware preflight.
 - [ ] Validate hook maps, native recipes and runtime patch compatibility.
-- [ ] Replace the generic compatibility checker with K5-specific checks.
+- [x] Replace the generic compatibility checker with K5-specific target and shared identity prerequisites (compile/runtime validation pending).
 - [x] Obtain the original and modified routing sources and identify the theme contribution.
 - [x] Confirm public wireless RC7 exposes independent theme registration and the target package includes shared identity support.
 - [x] Add a theme-only API v2 consumer adapter.

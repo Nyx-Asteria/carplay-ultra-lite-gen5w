@@ -17,20 +17,10 @@ import java.util.Map;
 
 import ioniq6.cpclimate.CarApi;
 
-/**
- * CarPlay Ultra-Lite's compatibility check (mod id cp-climate): run on a head unit before installing it and the
- * E-GMP CarPlay EV Routing mod (bundle 2026-11-09). It only reads: system properties, checksums of the libraries the two mods patch,
- * the car framework's calls and listeners (by name, as cp-climate itself looks them up), the climate flag
- * numbers, and a few read-only climate values. It writes a report (Markdown and JSON) to the folder given.
- *
- * Run on the car (adb shell, as shell or root):
- *   CLASSPATH=/data/local/tmp/cp-climate-check.jar app_process /system/bin ioniq6.cpclimate.check.Main /data/local/tmp/cp-climate-check
- *
- * Everything is compared with the car it was written and tested on: Ioniq 6 (CEEV) USA firmware 260507.
- */
+/** Read-only K5 target prerequisite checker; not an on-car compatibility certification. */
 public final class Main {
-    static final String VERSION = "1.0 (CarPlay Ultra-Lite 1.0.0, egmp-carplay-ev-routing 0.4.3-ioniq6.15)";
-    static final String REFERENCE = "Ioniq 6 (CEEV) USA 260507";
+    static final String VERSION = "0.1.0-alpha.1";
+    static final String REFERENCE = "Kia K5 DL322 USA 260507";
 
     static final class Check {
         final String area, name, result, found, expected, meaning;
@@ -145,20 +135,10 @@ public final class Main {
         facts.put("uid", String.valueOf(android_uid()));
         String[] p = product.split("\\.");
         String model = p.length > 0 ? p[0] : "", region = p.length > 1 ? p[1] : "", fw = p.length > 0 ? p[p.length - 1] : "";
-        boolean same = "CEEV".equals(model) && "USA".equals(region) && "260507".equals(fw);
-        // E-GMP units HMG-API has data for (its maps and wireless-carplay-aa stock lists): the same CarPlay library
-        // (libCarPlayCore.so d3a47296…) as the Ioniq 6; their car framework (automotive.odex) differs.
-        boolean known = ("CVEV".equals(model) || "NEEV".equals(model) || "NEEV23".equals(model))
-                && (("USA".equals(region) && ("260507".equals(fw) || "260903".equals(fw))) || ("CAN".equals(region) && "260206".equals(fw)));
-        String names = "CVEV".equals(model) ? "Kia EV6" : "NEEV".equals(model) || "NEEV23".equals(model) ? "Hyundai Ioniq 5" : "CEEV".equals(model) ? "Hyundai Ioniq 6" : "unknown model";
-        facts.put("model", names);
-        add("System", "Head unit model, region and firmware", same ? "PASS" : "WARN", product + " (" + names + ")", "CEEV.USA.….260507",
-                same ? "The car these mods were built and tested on."
-                        : known ? "Not tested on this car, but HMG-API's data shows the same CarPlay library as the Ioniq 6's; its car framework differs, so the call, listener and flag checks below decide. cp-climate's mod.json doesn't list it: HMG-API asks before installing ('Install anyway')."
-                        : "Not tested, and unknown to this check. cp-climate and the routing mod don't list it, so HMG-API asks before installing ('Install anyway'); the checks below decide whether it can work.");
-        boolean egmp = "NEEV23".equals(model) || "CVEV".equals(model) || "NEEV".equals(model) || "CEEV".equals(model);
-        add("System", "E-GMP model (routing mod)", egmp ? "PASS" : "WARN", model, "NEEV23, CVEV, NEEV or CEEV",
-                egmp ? "The routing mod (EV routing and the CarPlay theme identification) has a profile for this model." : "The routing mod is for E-GMP EVs; on this model its EV parts don't apply and the theme identification would have to be split out.");
+        boolean same = "DL322".equals(model) && "USA".equals(region) && "260507".equals(fw);
+        facts.put("model", model);
+        add("System", "Head unit model, region and firmware", same ? "PASS" : "FAIL", product, "DL322.USA.….260507",
+                same ? "Target firmware; runtime functionality remains untested." : "Outside the K5 port's supported target.");
         String android = prop("ro.build.version.release");
         add("System", "Android", "4.4.2".equals(android) ? "PASS" : "WARN", android, "4.4.2", null);
         boolean hmgapi = new File("/system/bin/hmgapid").exists() || new File("/data/hmgapi").exists();
@@ -168,12 +148,8 @@ public final class Main {
         File mods = new File("/data/hmgapi/mods");
         String w = wireless.exists() ? "installed" : mods.canRead() ? "not installed" : "unknown (run as root to see)";
         add("System", "wireless-carplay-aa mod (wireless CarPlay)", wireless.exists() ? "PASS" : mods.canRead() ? "FAIL" : "INFO", w, "installed",
-                "cp-climate's climate data comes over the car's Wi-Fi hotspot (wireless CarPlay), and the routing mod requires this mod. "
-                        + "EV6 and Ioniq 5: HMG-API's official wireless-carplay-aa supports them. Ioniq 6: use the bundle's 2.1.0-ioniq6.1 build (the official one has no Ioniq 6 support).");
+                "Retain the existing wireless installation.");
     }
-
-    /** the author key every mod in the bundle is signed with (HMG-API derives a mod's uuid from it) */
-    static final String BUNDLE_UUID = "4bec7579-9d68-8e3c-b667-2804d05a20b9";
 
     static String read(String path) {
         InputStream in = null;
@@ -213,54 +189,24 @@ public final class Main {
         }
     }
 
-    /** the three mods the bundle installs: what is on the unit now, and whether the bundle can update it in place */
+    /** Inspect the installed provider without recommending upgrades or replacements. */
     void mods() {
-        String model = prop("ro.build.product").split("\\.")[0];
-        boolean root = android_uid() == 0;
-        String[][] mods = {
-                { "cp-climate", "CarPlay Ultra-Lite", "1.0.0" },
-                { "egmp-carplay-ev-routing", "EV routing in Apple Maps + the CarPlay theme identification", "0.4.3-ioniq6.15" },
-                { "wireless-carplay-aa", "wireless CarPlay / Android Auto", "2.1.0-ioniq6.1 (Ioniq 6) or HMG-API's official 2.1.0 (EV6, Ioniq 5)" },
-        };
-        for (String[] m : mods) {
-            String dir = "/data/hmgapi/mods/" + m[0];
-            String mj = read(dir + "/mod.json");
-            String version = jsonString(mj, "version");
-            String uuid = root ? jsonString(read(dir + "/META-HMGAPI/manifest.json"), "uuid") : null;
-            boolean listsCar = mj != null && mj.contains("\"" + model + "\"");
-            facts.put("installed " + m[0], mj == null ? "no" : version + (uuid != null ? " (author key " + uuid + ")" : ""));
-            String name = "Installed " + m[0] + " (" + m[1] + ")";
-            if (mj == null) {
-                add("Mods", name, "INFO", "not installed", m[2], "The bundle installs it.");
-                continue;
-            }
-            boolean ours = BUNDLE_UUID.equalsIgnoreCase(uuid);
-            boolean other = uuid != null && !ours;
-            if ("wireless-carplay-aa".equals(m[0])) {
-                add("Mods", name, listsCar ? "PASS" : "FAIL", version + (uuid != null ? ", author key " + uuid : ""), m[2],
-                        listsCar ? "This build supports this car; keep it (on an EV6 or Ioniq 5 the official one is fine)."
-                                : "This build doesn't list this car (" + model + "): remove it and install the bundle's 2.1.0-ioniq6.1.");
-            } else if (other) {
-                add("Mods", name, "WARN", version + ", author key " + uuid, m[2] + ", author key " + BUNDLE_UUID,
-                        "Signed by another author (for example the base " + m[0] + " release): HMG-API won't replace it with the bundle's. Remove it first (hmgapid engine remove " + m[0] + ", then apply); its settings go with it.");
-            } else {
-                add("Mods", name, ours ? "PASS" : "INFO", version + (uuid != null ? ", author key " + uuid : ""), m[2],
-                        ours ? "Same author key as the bundle: installing the bundle updates it in place and keeps its settings."
-                                : "Run the check as root to see who signed it: the bundle can only update it if it's signed with the bundle's key, otherwise remove it first.");
-            }
-        }
-        if (root) {
-            String routing = exec("hmgapid", "setting-get", "egmp-carplay-ev-routing");
-            String engine = jsonString(routing, "carplay_engine"), theme = jsonString(routing, "carplay_theme");
-            facts.put("routing settings", String.valueOf(routing));
-            if (routing != null && routing.startsWith("{")) {
-                add("Mods", "Routing mod engine type (Apple Maps EV routing)", engine == null || "electric".equals(engine) ? "PASS" : "WARN",
-                        String.valueOf(engine), "electric", "electric".equals(engine) || engine == null ? "Apple Maps gets the car as an EV (charging stops, range)."
-                                : "Apple Maps EV routing needs carplay_engine electric.");
-                add("Mods", "Routing mod CarPlay theme", "INFO", String.valueOf(theme), "44C9FA31EC:985:19.0 (the bundle's default)",
-                        "The theme only works together with cp-climate's Ultra settings; with cp-climate missing or not applying, set it off or CarPlay can go black.");
-            }
-        }
+        String base = "/data/hmgapi/mods/";
+        String manifest = read(base + "wireless-carplay-aa/mod.json");
+        String version = jsonString(manifest, "version");
+        add("Mods", "Wireless provider", manifest == null ? "INFO" : "PASS",
+                manifest == null ? "not verified" : "installed", "shared identification API", "Retain working wireless projection; API availability is checked at runtime.");
+        String settings = android_uid() == 0 ? exec("hmgapid", "setting-get", "wireless-carplay-aa") : null;
+        String compact = settings == null ? "" : settings.replaceAll("\\s+", "");
+        boolean disabled = compact.contains("\"shared_identity\":false");
+        boolean enabled = compact.contains("\"shared_identity\":true");
+        add("Mods", "Shared identity setting", disabled ? "FAIL" : enabled ? "PASS" : "INFO",
+                disabled ? "disabled" : enabled ? "enabled" : "not verified", "enabled",
+                "Native activation and theme negotiation remain runtime checks.");
+        File routing = new File(base + "egmp-carplay-ev-routing");
+        add("Mods", "Legacy EV routing absent", routing.exists() ? "FAIL" : new File(base).canRead() ? "PASS" : "INFO",
+                routing.exists() ? "installed" : "not detected", "not installed",
+                "Do not run competing identity contributors.");
     }
 
     static int android_uid() {
@@ -272,17 +218,10 @@ public final class Main {
     }
 
     void files() {
-        file("CarPlay (DiPO)", "/system/lib/libCarPlayCore.so", "d3a47296437df56fb1ffc7ac3dfca4cb", "FAIL",
-                "cp-climate's native patch (the climate data streams, the virtual cluster, the theme's display names) is checked against these exact bytes. With another build it doesn't apply and CarPlay shows no climate: send this file so a recipe can be made for it.");
-        file("CarPlay (DiPO)", "/system/app/HKMC_DiPO.apk", "ae4ca93c8ecc0a371d1481ed7f607d63", "WARN",
-                "cp-climate's Java part hooks DiPO through HMG-API's hook map (dipo.carplay.*); another DiPO build is fine if the map covers it, but untested."
-                        + " Known builds: EV6 USA 260507 01446fb7…, Ioniq 5 USA 260507 1b080aa1….");
-        file("Car framework", "/system/framework/automotive.odex", "173334b2461f4dc5afe1545b9be0f390", "INFO",
-                "Identical: every car call and listener is exactly the tested one. Different (the EV6 USA 260507 has efbfceed…): the call, listener and flag checks below decide.");
-        file("Themes (routing mod)", "/system/lib/libiap2session.so", "fc7cb675b46a44bd893a1edc054c5e71", "FAIL",
-                "The routing mod's native recipe (identification extension, incl. the CarPlay theme parameters) is checked against these bytes. Another build: no theme, and the routing mod's own EV features need the same port. Send this file.");
-        file("Themes (routing mod)", "/system/lib/libiap2client.so", "153a97fd6d2c62dc58286aa47c35feb3", "INFO",
-                "Only the routing mod's carplay_link_ft_v2 experiment (off by default) patches it.");
+        file("CarPlay (DiPO)", "/system/lib/libCarPlayCore.so", "d3a47296437df56fb1ffc7ac3dfca4cb", "FAIL", "Stock native recipe target.");
+        file("CarPlay (DiPO)", "/system/app/HKMC_DiPO.odex", "edc6f75f5ccf79b63dc85a0902b63d91", "FAIL", "Stock runtime guard target.");
+        file("Shared identity", "/system/lib/libiap2session.so", "fc7cb675b46a44bd893a1edc054c5e71", "FAIL", "Wireless provider owns the native patch.");
+        facts.put("md5 /system/framework/automotive.odex", md5("/system/framework/automotive.odex"));
     }
 
     void file(String area, String path, String want, String otherwise, String meaning) {
@@ -377,30 +316,29 @@ public final class Main {
 
     List<String[]> verdicts() {
         List<String[]> v = new ArrayList<String[]>();
-        boolean nativeOk = pass("CarPlay (DiPO)", "/system/lib/libCarPlayCore.so");
+        boolean nativeOk = pass("System", "Head unit model, region and firmware") && pass("CarPlay (DiPO)", "/system/lib/libCarPlayCore.so") && pass("CarPlay (DiPO)", "/system/app/HKMC_DiPO.odex");
         boolean flags = pass("Car framework", "Climate flag numbers (DATCFlag, DATCControl)");
         boolean read = pass("Car framework", "IDATCService.getVRClimateStatus(I)F");
         boolean set = pass("Car framework", "IDATCService.setVRClimateStatus(III)V");
         boolean front = pass("Car framework", "IDATCService.setFrontClimateControl(II)V");
         v.add(verdict("CarPlay climate (dock temperatures, Climate app)", nativeOk && read && set && flags,
                 !nativeOk ? "cp-climate's native patch doesn't fit this CarPlay library" : !flags ? "the climate flag numbers differ" : "climate calls missing"));
-        v.add(verdict("Driver Only (passenger power button) and passenger temperature", nativeOk && front && flags && pass("Car framework", "IDATCService.getDriverOnlyValue()I"), "needs setFrontClimateControl and getDriverOnlyValue"));
+        v.add(verdict("Passenger temperature", nativeOk && front && flags, "needs setFrontClimateControl and matching flags"));
         boolean seat = pass("Car framework", "IUSMService.setFrontSeatHeatDrvStep(I)V") && pass("Car framework", "IUSMService.setFrontSeatHeatAstStep(I)V")
                 && pass("Car framework", "IUSMService.getFrontSeatHeat_DrvState()I") && pass("Car framework", "IUSMService.getFrontSeatHeat_AstState()I");
-        v.add(verdict("Seat heat", nativeOk && seat, "seat heat calls missing or CarPlay climate not possible"));
+        v.add(verdict("Front seat heat and ventilation method prerequisites", nativeOk && seat, "seat heat calls missing or CarPlay climate not possible"));
         v.add(verdict("Front defrost", nativeOk && set && flags, "needs setVRClimateStatus and the FRONT_DEFOG flag"));
         boolean rear = pass("Car framework", "IVRService.set_RrDefogger_Cmd_AVN(I)V");
         boolean rearState = rear && pass("Car framework", "IBCMListener fingerprint") && pass("Car framework", "IBCMService.registerBCMListener(Lcom/hkmc/bcm/IBCMListener;Landroid/os/IBinder;)V");
         v.add(new String[] { "Rear defrost (READY only)", !(nativeOk && rear) ? "NO" : rearState ? "YES" : "PARTLY",
                 !(nativeOk && rear) ? "no rear defrost command on this firmware" : rearState ? "" : "works, but without showing the car's state (listener differs)" });
-        boolean theme = pass("Themes (routing mod)", "/system/lib/libiap2session.so") && pass("System", "E-GMP model (routing mod)");
-        v.add(verdict("CarPlay theme, wallpapers and the per-seat climate panels", nativeOk && theme,
-                !theme ? "the routing mod's identification recipe doesn't fit this unit's iAP2 library (or not an E-GMP model)" : "CarPlay climate not possible"));
+        boolean theme = pass("Shared identity", "/system/lib/libiap2session.so") && pass("Mods", "Wireless provider") && pass("Mods", "Shared identity setting") && pass("Mods", "Legacy EV routing absent");
+        v.add(new String[] { "Ultra theme prerequisites", nativeOk && theme ? "PREREQUISITES MATCH" : "NOT VERIFIED", "Native activation and phone negotiation must be tested separately." });
         return v;
     }
 
     static String[] verdict(String feature, boolean yes, String why) {
-        return new String[] { feature, yes ? "YES" : "NO", yes ? "" : why };
+        return new String[] { feature, yes ? "PREREQUISITES MATCH" : "NOT VERIFIED", yes ? "" : why };
     }
 
     String markdown() {
@@ -432,7 +370,7 @@ public final class Main {
                 .append("recipe (tools/build.py builds it from the stock library and checks its placement with tests/RecipePlaceTest.java; the hook ")
                 .append("sites are documented in native/hooks.c and HANDOFF.md), and its Java part looks the car's binder calls up by name ")
                 .append("(CarApi.java). Listener fingerprints come from tools/listener_fingerprint.py on baksmali output of automotive.odex. The ")
-                .append("theme identification is in the routing mod's src/native/identity.c with recipes/native-fc7.recipe for libiap2session.so. ")
+                .append("theme identification is owned by the existing wireless provider. ")
                 .append("Never register a listener whose fingerprint differs without checking every call that writes a reply.\n");
         return m.toString();
     }
