@@ -73,6 +73,7 @@ public final class CpClimate extends ModEntry {
     static boolean busy;
     static volatile long sessionGeneration;
     static volatile boolean sessionActive;
+    public static boolean videoAllowed() { return VideoUi.enabled && sessionActive && ParkedVideo.allowed(); }
 
     /** files/cpc-vspi.bplist: VehicleState.vspi for the native /info hook (removed if it can't be built) */
     static void writeVspi(File dir, VsChannel.Log log) {
@@ -139,7 +140,20 @@ public final class CpClimate extends ModEntry {
             writeFlag(dir, "cpc-xfeat", ultra, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
             // Stage 2 is not validated: do not offer video even if an old setting is saved.
-            int extraBits = 0;
+            int extraBits = m.settingBoolean("parked_video", true) && app.context != null ? 1 : 0;
+            if (extraBits != 0) {
+                ParkedVideo park = new ParkedVideo(m);
+                if (!park.available()) { m.log("[video] Park getter missing; video withheld"); extraBits = 0; }
+                else {
+                    writeNumber(dir, "cpc-video-nosound", 1, "video: picture only");
+                    writeNumber(dir, "cpc-video-nopicture", 0, "video: picture enabled");
+                    new VideoMessages(new VsChannel.Log() { public void log(String s) { m.log("[video] " + s); } });
+                    if (!VideoMessages.startEngine(app.context)) {
+                        m.log("[video] engine unavailable; feature withheld");
+                        extraBits = 0;
+                    } else { park.start(); m.log("[video] engine initialized; Park confirmation required"); }
+                }
+            }
             writeNumber(dir, "cpc-xenable", extraBits, extraBits != 0 ? "SETUP extra features: videoPlayback" : "SETUP extra features off");
             writeNumber(dir, "cpc-hid", 0, "LIVI input devices in /info");   // on, iOS drew a knob-focus box
             m.log("[native] requesting CarPlayCore recipe; application result is reported by HMG-API");
@@ -194,17 +208,7 @@ public final class CpClimate extends ModEntry {
             // the Ultra experiment: the virtual cluster's video goes here and is thrown away
             if (ultra) new ClusterSink(log).start();
             if ((extraBits & 1) != 0) new ClusterSink(log, 7134, "videoPlayback").start();
-            // video stage 2: the playback messages the native /command hook answers and passes on
-            if ((extraBits & 1) != 0) {
-                // test: the video engine plays sound only (no picture decoder), to tell a decoder crash from the rest
-                writeNumber(dir, "cpc-video-nopicture", m.settingBoolean("video_no_picture", false) ? 1 : 0, "video: sound only (test)");
-                // the head unit doesn't play sound from CarPlay's process yet, and trying makes the picture race
-                writeNumber(dir, "cpc-video-nosound", m.settingBoolean("video_sound", false) ? 0 : 1, "video: picture only");
-                new VideoMessages(log).start();
-                // the video engine (ExoPlayer through the phone's proxy), when this build has it
-                boolean engine = app.context != null && VideoMessages.startEngine(app.context);
-                log.log(engine ? "video: engine loaded" : "video: no engine in this build (answers only)");
-            }
+            if ((extraBits & 1) != 0) VideoMessages.instance.start();
             // video stage 1: requestUI("videoplayback:") kept from DiPO (no jump to the launcher), screen borrowed as LIVI does
             VideoUi.out = log;
             VideoUi.enabled = (extraBits & 1) != 0;
@@ -222,6 +226,7 @@ public final class CpClimate extends ModEntry {
             @Override
             protected void afterHookedMethod(Param p) {
                 sessionActive = false;
+                VideoMessages.stopEngine("session finalized");
                 sessionGeneration++;
                 m.log("[session] finalized");
                 copyLater(COPY_DELAY_MS, false);

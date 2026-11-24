@@ -109,6 +109,14 @@ public final class Video {
         String mode = noPicture ? ", sound only (test)" : noSound ? ", picture only" : "";
         trace("---- engine start (process " + android.os.Process.myPid() + ")" + mode);
         log("video engine ready (ExoPlayer 2.19.1, proxy through the phone)" + mode);
+        main.postDelayed(new Runnable() { public void run() {
+            try {
+                if ((player != null || shown || itemUuid != null) && !parkAllowed()) {
+                    stop("Park feedback stale or session ended");
+                    callCore("ioniq6.cpclimate.VideoUi", "engineClosed", new Class<?>[0]);
+                }
+            } finally { main.postDelayed(this, 250); }
+        }}, 250);
     }
 
     static boolean noPicture, noSound;
@@ -168,6 +176,21 @@ public final class Video {
         }
     }
 
+    static boolean parkAllowed() {
+        return Boolean.TRUE.equals(callCore("ioniq6.cpclimate.CpClimate", "videoAllowed", new Class<?>[0]));
+    }
+
+    public static void onParkLost(final String reason) {
+        if (main == null) return;
+        main.post(new Runnable() { public void run() {
+            if (player != null || shown || itemUuid != null) {
+                log("[video] stopping: " + reason);
+                stop(reason);
+            }
+            callCore("ioniq6.cpclimate.VideoUi", "engineClosed", new Class<?>[0]);
+        }});
+    }
+
     /** a playback message from the phone (insertPlayQueueItem, setRate, seek, playbackInfo, ...) */
     public static void onMessage(final long sid, final Map<?, ?> m) {
         if (main == null) return;
@@ -175,6 +198,7 @@ public final class Video {
             @Override
             public void run() {
                 try {
+                    if (!parkAllowed()) { stop("Park or session unavailable"); return; }
                     handle(sid, m);
                 } catch (Throwable t) {
                     log("video: message " + m.get("type") + " failed: " + t);
@@ -189,6 +213,7 @@ public final class Video {
         main.post(new Runnable() {
             @Override
             public void run() {
+                if (!parkAllowed()) { stop("Park or session unavailable"); return; }
                 show();
             }
         });

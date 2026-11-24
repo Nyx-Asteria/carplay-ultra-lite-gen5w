@@ -16,6 +16,14 @@
       "title": "K5 vehicle information and shortcuts",
       "description": "Vehicle app readings and installed head-unit app shortcuts. Restart required.",
       "apply": "restart"
+    },
+    {
+      "key": "parked_video",
+      "type": "toggle",
+      "default": true,
+      "title": "Parked AirPlay video",
+      "description": "Allow video only during an active CarPlay session with fresh Park feedback. Restart required.",
+      "apply": "restart"
     }
   ]
 }
