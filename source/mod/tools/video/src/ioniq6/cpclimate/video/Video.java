@@ -72,6 +72,7 @@ public final class Video {
         main = new Handler(Looper.getMainLooper());
         noPicture = new File(FILES + "cpc-video-nopicture").exists();
         noSound = new File(FILES + "cpc-video-nosound").exists();
+        audioRequested = !noSound;
         // 2026-11-11: CarPlay's process died 1.7 s into a video with nothing in the log; record any uncaught error first
         final Thread.UncaughtExceptionHandler before = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
@@ -120,6 +121,51 @@ public final class Video {
     }
 
     static boolean noPicture, noSound;
+    static boolean audioRequested, audioFallback, audioClockSeen;
+    static long audioAttempt;
+    static Map<?, ?> lastInsert;
+    static boolean fallbackPending;
+
+    static void audioFallback(final String reason) {
+        if (!audioRequested || noSound || audioFallback || fallbackPending || lastInsert == null || player == null || !parkAllowed()) return;
+        fallbackPending = true;
+        final ExoPlayer failed = player;
+        final long attempt = audioAttempt;
+        main.post(new Runnable() { public void run() {
+            fallbackPending = false;
+            if (failed != player || attempt != audioAttempt || !parkAllowed()) return;
+            long position = Math.max(0, failed.getCurrentPosition());
+            boolean play = failed.getPlayWhenReady();
+            Map<Object,Object> request = new LinkedHashMap<Object,Object>();
+            request.putAll(lastInsert);
+            Object raw = request.get("item");
+            if (!(raw instanceof Map)) return;
+            Map<Object,Object> item = new LinkedHashMap<Object,Object>();
+            item.putAll((Map<?,?>) raw);
+            item.put("Start-Position-Seconds", position / 1000.0);
+            request.put("item", item);
+            audioFallback = true;
+            noSound = true;
+            log("[video-audio] falling back to picture only: " + reason);
+            try {
+                insertInternal(request);
+                if (player != null && parkAllowed()) player.setPlayWhenReady(play);
+            } catch (Throwable t) { log("[video-audio] fallback failed: " + t.getClass().getSimpleName()); stop("audio fallback failed"); }
+        }});
+    }
+
+    static void watchAudioClock(final ExoPlayer watched, final long attempt) {
+        main.postDelayed(new Runnable() { public void run() {
+            if (player != watched || attempt != audioAttempt || !parkAllowed() || noSound) return;
+            if (watched.isPlaying() && !audioClockSeen) {
+                boolean selected = false;
+                for (com.google.android.exoplayer2.Tracks.Group g : watched.getCurrentTracks().getGroups())
+                    if (g.getType() == C.TRACK_TYPE_AUDIO && g.isSelected()) selected = true;
+                if (selected) { audioFallback("selected audio track did not report advancing output clock"); return; }
+            }
+            if (!audioClockSeen) main.postDelayed(this, 8000);
+        }}, 8000);
+    }
 
     /**
      * settings video_no_picture (no picture decoder) and video_sound off (no sound renderer). Without sound the
@@ -239,6 +285,17 @@ public final class Video {
     }
 
     static void insert(Map<?, ?> m) {
+        audioFallback = false;
+        fallbackPending = false;
+        noSound = !audioRequested;
+        lastInsert = m;
+        insertInternal(m);
+    }
+
+    static void insertInternal(Map<?, ?> m) {
+        if (!parkAllowed()) return;
+        audioAttempt++;
+        audioClockSeen = false;
         Object item = m.get("item");
         if (!(item instanceof Map)) return;
         Map<?, ?> it = (Map<?, ?>) item;
@@ -288,11 +345,13 @@ public final class Video {
                 .setLooper(Looper.getMainLooper()).build();
         startCpuTrace();
         player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), false);
+        log("[video-audio] ExoPlayer media attributes; local audio renderer=" + !noSound + "; focus management disabled");
         player.addListener(listener);
         player.addAnalyticsListener(steps);
         player.setMediaSource(source, startMs);
         player.setPlayWhenReady(false);
         player.prepare();
+        if (!noSound) watchAudioClock(player, audioAttempt);
         currentUrl = url;
         if (surface != null) player.setVideoSurfaceView(surface);
         log("video: playing " + host(url) + " (" + (progressive ? "progressive" : "HLS") + ", from " + startMs / 1000 + " s) through the phone");
@@ -323,6 +382,14 @@ public final class Video {
         }
 
         @Override
+        public void onAudioPositionAdvancing(EventTime t, long start) {
+            if (!audioClockSeen && !noSound) {
+                audioClockSeen = true;
+                log("[video-audio] local audio output clock advancing; audible output not yet verified");
+            }
+        }
+
+        @Override
         public void onRenderedFirstFrame(EventTime t, Object output, long renderTimeMs) {
             log("video: first picture shown");
         }
@@ -349,6 +416,7 @@ public final class Video {
         @Override
         public void onAudioSinkError(EventTime t, Exception e) {
             trace("audio sink error: " + e);
+            audioFallback("audio sink " + e.getClass().getSimpleName());
         }
 
         @Override
@@ -452,6 +520,7 @@ public final class Video {
         public void onPlayerError(PlaybackException e) {
             Throwable c = e.getCause();
             log("video: player error " + e.getErrorCodeName() + ": " + e.getMessage() + (c != null ? " / " + c : ""));
+            if (!noSound && e.errorCode >= 5000 && e.errorCode < 6000) { audioFallback("player audio output error " + e.getErrorCodeName()); if (fallbackPending) return; }
             int code = e.errorCode >= 2000 && e.errorCode < 3000 ? ERROR_NETWORK
                     : e.errorCode >= 4000 && e.errorCode < 5000 ? ERROR_DECODER : ERROR_INCOMPATIBLE_ASSET;
             if (e.errorCode >= 6000 && e.errorCode < 7000) code = ERROR_INCOMPATIBLE_ASSET;   // DRM (FairPlay)
@@ -690,6 +759,9 @@ public final class Video {
     }
 
     static void stop(String why) {
+        audioAttempt++;
+        lastInsert = null;
+        fallbackPending = false;
         release();
         if (shown) hide(why);
         itemUuid = null;
