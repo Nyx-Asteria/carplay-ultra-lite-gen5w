@@ -47,8 +47,9 @@ public final class CpClimate extends ModEntry {
 
     @Override
     public void zygoteInit(ModContext m) {
-        String product = property("ro.build.product");
-        boolean model = product.startsWith("DL322.USA.") && product.endsWith(".260507");
+        String product = property("ro.product.device");
+        boolean model = "wp_daudioplus_dl322_us".equals(product);
+        // Exact firmware is enforced by the manifest and stock binary fingerprints below.
         boolean core = fingerprint(m, "CarPlayCore", "/system/lib/libCarPlayCore.so", "d3a47296437df56fb1ffc7ac3dfca4cb");
         boolean identity = fingerprint(m, "iAP2", "/system/lib/libiap2session.so", "fc7cb675b46a44bd893a1edc054c5e71");
         boolean dipo = fingerprint(m, "DiPO", "/system/app/HKMC_DiPO.odex", "edc6f75f5ccf79b63dc85a0902b63d91");

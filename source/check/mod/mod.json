@@ -7,7 +7,7 @@
     "cp-climate contributors"
   ],
   "license": "GPL-3.0-or-later",
-  "description": "Read-only DL322 USA 260507 prerequisite report for the K5 port, including stock library fingerprints, wireless shared identity and climate methods. Does not certify on-car functionality.",
+  "description": "Read-only DL322 USA 260507 prerequisite report for the K5 port, including stock library fingerprints, wireless shared identity and climate methods. Does not certify on-car functionality. Collects fixed allowlisted stock radio and automotive framework binaries to USB for offline interface analysis.",
   "services": [
     {
       "name": "check",
