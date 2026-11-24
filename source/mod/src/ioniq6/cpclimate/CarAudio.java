@@ -55,6 +55,7 @@ final class CarAudio extends Thread {
                 @Override
                 public void onReceive(android.content.Context c, android.content.Intent i) {
                     readNow();
+                    VolumePanel.onStockKey(c, CarAudio.this);
                 }
             }, new android.content.IntentFilter(ACTION_CHANGED));
         } catch (Throwable t) {
@@ -137,6 +138,8 @@ final class CarAudio extends Thread {
         }
         return mine;
     }
+
+    boolean panelReady() { return active() && shown != null && shown == state[0] && observedGeneration == CpClimate.sessionGeneration && hasObserved(VehicleState.VOLUME); }
 
     private synchronized boolean hasObserved(long iid) { return observed.contains(iid); }
 

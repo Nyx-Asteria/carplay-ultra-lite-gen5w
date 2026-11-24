@@ -59,6 +59,7 @@ public final class CpClimate extends ModEntry {
         themePreflight = targetVerified && recentStarts().size() < GUARD_STARTS
                 && m.settingBoolean("ultra_theme", true) && theme.available(m);
         m.log("[theme] boot preflight=" + themePreflight);
+        if (targetVerified && m.settingBoolean("volume_panel", true) && m.settingBoolean("volume_link", true)) VolumePanel.zygote(m);
     }
 
     private static String property(String key) {
@@ -227,6 +228,7 @@ public final class CpClimate extends ModEntry {
             if (m.settingBoolean("volume_link", true)) {
                 CarAudio audio = new CarAudio(state, lanes, log, m);
                 CarAudio.instance = audio;
+                audio.listen(app.context);
                 audio.start();
             } else m.log("[audio] volume link disabled");
             if (m.settingBoolean("media_controls", true)) {

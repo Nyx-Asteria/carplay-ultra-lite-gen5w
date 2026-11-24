@@ -56,6 +56,14 @@
       "title": "Comfort thresholds",
       "description": "Edit automatic seat heating and ventilation thresholds in CarPlay when compatible Comfort is installed. Restart required.",
       "apply": "restart"
+    },
+    {
+      "key": "volume_panel",
+      "type": "toggle",
+      "default": true,
+      "title": "CarPlay volume panel",
+      "description": "Dismiss the native volume popup after stock volume keys while CarPlay is foreground and volume synchronization is ready. Restart required.",
+      "apply": "restart"
     }
   ]
 }
