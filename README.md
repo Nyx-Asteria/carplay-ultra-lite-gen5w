@@ -34,6 +34,7 @@ Unlike the original multi-vehicle project, this port targets one known vehicle a
 - **Integrated vehicle identification** — theme assets contributed through the existing wireless CarPlay shared identification API, without EV routing.
 - **Native climate** — temperatures, fan, A/C, AUTO, SYNC, vents, recirculation and supported defrost controls.
 - **Seat controls** — three-level heating and ventilation for the driver and front passenger.
+- **Comfort integration** — optional visual editing of Comfort & Startup's three heating and three ventilation thresholds, using Comfort as the source of truth.
 - **Parked video** — optional AirPlay video with strict Park and session-state safeguards.
 - **K5 vehicle page** — vehicle information, native Kia shortcuts and additional supported controls.
 - **HMG-API integration** — one signed K5 package, managed independently of wireless projection.
@@ -83,7 +84,8 @@ The existing wireless-carplay-aa package and working Wi-Fi configuration remain 
 - [ ] Replace the generic compatibility checker with K5-specific checks.
 - [x] Obtain the original and modified routing sources and identify the theme contribution.
 - [x] Confirm public wireless RC7 exposes independent theme registration and the target package includes shared identity support.
-- [ ] Integrate the shared identification service, verify the exact target API and coordinate theme registration with the climate description lifecycle.
+- [x] Add a theme-only API v2 consumer adapter.
+- [ ] Wire the adapter to a verified cross-process readiness and recovery lifecycle.
 - [ ] Remove EV routing, battery data and unnecessary multi-vehicle paths.
 - [ ] Assign a distinct package ID and display name; update internal paths, settings, build tooling and conflict handling together.
 - [ ] Validate climate methods, listener fingerprints, flags and command mappings.
@@ -103,6 +105,8 @@ The current development code deliberately withholds Ultra theme and AirPlay vide
 - [ ] Retain TLS certificate validation and redact sensitive logs.
 
 ### Stage 3 — K5 experience
+
+- [ ] Add optional [Comfort & Startup](https://github.com/lemoyneiv/hmgapi-comfort) threshold controls using an owner-authorized configuration bridge.
 
 - [ ] Create a K5-specific vehicle page and Kia-inspired visual identity.
 - [ ] Investigate fuel level, range, odometer and other read-only data.
@@ -132,6 +136,8 @@ The original Ultra-Lite setup requires a modified EV-routing package to advertis
 ### Shared identity integration
 
 Public [wireless RC7 API source](https://github.com/Open-HMG/hmgapi-wireless-cp-aa/blob/v2.2.0-rc.7/wireless-carplay-aa/src/hmgapi/mods/wireless/api/CarPlayIdentification.java) defines service `carplay-identification`, API version 2, `registerTheme`, `removeTheme` and a `ThemeIdentity(String, long, String)` value. The wireless provider must expose shared identity. The exact compiled API and runtime lifecycle still require validation. The intended theme tuple from SafariForest is `44C9FA31EC:985:19.0`. Register only a theme, never an EV vehicle contribution. If the service is missing or registration fails, leave Ultra advertising disabled and retain normal projection. Coordinate removal with disable/uninstall and session lifecycle. Do not install a second iAP2 recipe.
+
+See [integration design](docs/integration.md) for the theme adapter and optional Comfort configuration contract. The adapter is not yet called by the runtime.
 
 ### Build from source
 
