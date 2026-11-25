@@ -66,6 +66,8 @@ public final class Video {
     static long streamId = -1;
     static boolean shown;
     static String currentUrl;
+    static boolean requestedPlaying;
+    static boolean rateReceived;
 
     // ---- entry points (reflection from the core) ----
 
@@ -276,7 +278,9 @@ public final class Video {
             insert(m);
         } else if ("setRate".equals(type)) {
             double rate = number(m.get("rate"), 0);
-            if (player != null) player.setPlayWhenReady(rate > 0);
+            rateReceived = true;
+            requestedPlaying = rate > 0;
+            if (player != null) player.setPlayWhenReady(requestedPlaying);
         } else if ("seek".equals(type)) {
             Long ms = cmMillis(m.get("time"));
             if (player != null && ms != null) player.seekTo(ms);
@@ -351,9 +355,10 @@ public final class Video {
         player.addListener(listener);
         player.addAnalyticsListener(steps);
         player.setMediaSource(source, startMs);
-        player.setPlayWhenReady(false);
+        player.setPlayWhenReady(rateReceived ? requestedPlaying : shown);
         if (surface != null) player.setVideoSurfaceView(surface);
         player.prepare();
+        log("video: prepare requested, playWhenReady=" + player.getPlayWhenReady() + ", surface=" + (surface != null));
         if (!noSound) watchAudioClock(player, audioAttempt);
         currentUrl = url;
         log("video: playing " + host(url) + " (" + (progressive ? "progressive" : "HLS") + ", from " + startMs / 1000 + " s) through the phone");
@@ -711,7 +716,7 @@ public final class Video {
         controls.setVisibility(View.VISIBLE);
         shown = true;
         if (player != null) {
-            player.setPlayWhenReady(true);
+            if (!rateReceived) player.setPlayWhenReady(true);
             VideoSize s = player.getVideoSize();
             if (s.width > 0) layoutSurface(s.width, s.height, s.pixelWidthHeightRatio);
         }
@@ -776,6 +781,8 @@ public final class Video {
         if (shown) hide(why);
         itemUuid = null;
         currentUrl = null;
+        rateReceived = false;
+        requestedPlaying = false;
     }
 
     static void release() {
