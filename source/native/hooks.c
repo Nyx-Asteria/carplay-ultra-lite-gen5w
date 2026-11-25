@@ -6,9 +6,6 @@
  *    bottom edge, as LIVI sends by default: iOS only gives the dock its climate controls (a
  *    temperature at each end) in that layout; without a viewArea it draws the side dock
  *    ("No climate secondary dock frame").
- *    With a CarPlay size below 100 % (cp-climate's setting, in DiPO's files/cpc-size), the
- *    main display's physical size is reported larger by 100/size, so iOS draws everything
- *    smaller and the screen holds more points (pixels unchanged).
  *  - The session SETUP reply gets "enabledFeatures": ["vehicleStateProtocol"] when the
  *    phone offered it: iOS only accepts vehicleStateProtocolInfo in /info for a feature
  *    negotiated there ("entry for vehicleStateProtocolInfo found but not negotiated").
@@ -326,20 +323,9 @@ static void copy_entry(CF key, CF value, void *into) { set((CF)into, key, value)
 
 #define STATUS_BAR_BOTTOM 1   /* LIVI DockPosition::Bottom */
 
-/* d's physical size key scaled by 100/pct */
-static void scale_physical(CF to, CF d, CF key, int pct) {
-    int err = 0;
-    long long mm = FN(T_CFDictionaryGetInt64, long long (*)(CF, CF, int *))(d, key, &err);
-    if (err || mm <= 0 || mm > 10000) return;
-    /* (mm * 100 + pct / 2) / pct, rounded, without a divide (none on this core, no libgcc here) */
-    unsigned rest = (unsigned)mm * 100 + (unsigned)pct / 2, q = 0;
-    while (rest >= (unsigned)pct) { rest -= (unsigned)pct; q++; }
-    set_int(to, key, q);
-}
-
 /* info's displays again, the first with LIVI's viewArea (the whole screen, the dock at the
- * bottom) and, for a CarPlay size pct of 50-99, a physical size larger by 100/pct; the
- * dictionaries are copied, as TCC's may not be mutable. 1 if done */
+ * bottom); retain the incoming physical dimensions. Dictionaries are copied because TCC's
+ * may not be mutable. 1 if done */
 #define DISPLAY_FEATURE_KNOBS 0x02   /* LIVI info.rs */
 #define APPEARANCE_DARK 1
 #define APPEARANCE_AUTOMATIC 0
@@ -368,7 +354,7 @@ static CF make_area(long long x, long long w, long long h, int edge, CF transiti
     return area;
 }
 
-static int add_view_area(CF info, int pct, int edge, int extras, int wide) {
+static int add_view_area(CF info, int edge, int extras, int wide) {
     CF displays = get(info, &K_displays);
     if (!is(displays, T_CFArrayGetTypeID) || count(displays) < 1) return 0;
     CF first = at(displays, 0);
@@ -393,10 +379,6 @@ static int add_view_area(CF info, int pct, int edge, int extras, int wide) {
             return 0;
         }
         FN(T_CFDictionaryApplyFunction, void (*)(CF, void (*)(CF, CF, void *), void *))(d, copy_entry, (void *)copy);
-        if (pct >= 50 && pct < 100) {
-            scale_physical(copy, d, &K_widthPhysical, pct);
-            scale_physical(copy, d, &K_heightPhysical, pct);
-        }
         if (extras) {
             /* the display fields LIVI sends and the stock reply lacks: knobs, and appearance */
             int err = 0;
@@ -690,12 +672,6 @@ static int read_number(const char *path) {
     return digits ? v : -1;
 }
 
-/* the CarPlay size in %; 100 if not set */
-static int size_percent(void) {
-    int pct = read_number(DIR "cpc-size");
-    return pct >= 50 && pct <= 100 ? pct : 100;
-}
-
 /* the receiver version setting: 1 for LIVI's 950.7.1 in /info, else DiPO's own */
 static int newer_version(void) {
     return read_number(DIR "cpc-version") == 1;
@@ -884,11 +860,11 @@ __attribute__((visibility("hidden"))) void cpc_info_hook(CF info) {
         return;
     }
     if (get(info, &K_vspi)) return;
-    int pct = size_percent(), edge = dock_edge(), newer = newer_version(), extras = display_extras();
+    int edge = dock_edge(), newer = newer_version(), extras = display_extras();
     int cluster = cluster_mode(), wide = widescreen_areas();
     if (newer) set(info, &K_sourceVersion, &K_liviVersion);
     /* the displays first, so displayPanels copy the sizes the phone is told */
-    int area = CPC_VIEWAREA ? add_view_area(info, pct, edge, extras, wide) : 0;
+    int area = CPC_VIEWAREA ? add_view_area(info, edge, extras, wide) : 0;
     int mode = ultra_mode();
     int ultra = mode && add_alt_display(info, mode == 2) ? mode : 0;
     if (ultra == 2 && livi_hid_mode()) add_livi_hid(info);
@@ -897,8 +873,8 @@ __attribute__((visibility("hidden"))) void cpc_info_hook(CF info) {
     add_features(info);
     add_video_playback(info);
     save_airplay(info);
-    LOG("cp-climate: /info has vehicleStateProtocolInfo (%d bytes), %d displayPanels, %s, dock edge %d, CarPlay size %d%%, sourceVersion %s, LIVI display extras %s, instrument panel mode %d (0 off, 1 full, 2 no showsInstruments, 3 no plugin, 4 plugin on main, 5 plugin with stream), view areas %d (start %s), Ultra virtual cluster %s\n",
-        (int)VSPI_LEN, (int)panels, area ? "a viewArea" : "no viewArea added", edge, pct, newer ? "950.7.1" : "stock", extras ? "on" : "off", cluster, wide ? 2 : 1, wide == 2 ? "right" : "whole", ultra == 2 ? "1920x720 (type 111, theme display ids)" : ultra ? "800x480 (type 111)" : "off");
+    LOG("cp-climate: /info has vehicleStateProtocolInfo (%d bytes), %d displayPanels, %s, dock edge %d, sourceVersion %s, LIVI display extras %s, instrument panel mode %d (0 off, 1 full, 2 no showsInstruments, 3 no plugin, 4 plugin on main, 5 plugin with stream), view areas %d (start %s), Ultra virtual cluster %s\n",
+        (int)VSPI_LEN, (int)panels, area ? "a viewArea" : "no viewArea added", edge, newer ? "950.7.1" : "stock", extras ? "on" : "off", cluster, wide ? 2 : 1, wide == 2 ? "right" : "whole", ultra == 2 ? "1920x720 (type 111, theme display ids)" : ultra ? "800x480 (type 111)" : "off");
 }
 
 __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) {
