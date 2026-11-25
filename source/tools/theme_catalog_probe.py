@@ -89,8 +89,21 @@ def main():
             raise
         print("Pinned-root TLS failed:", exc.reason, flush=True)
         print("Retrying with current OS CA bundle; hostname and expiry checks remain enabled", flush=True)
-        token=fetch(req,ssl.create_default_context()).decode()
-        print("Catalog TLS: verified system trust", flush=True)
+        try:
+            token=fetch(req,ssl.create_default_context()).decode()
+            print("Catalog TLS: verified system trust", flush=True)
+        except urllib.error.URLError:
+            # Inspect the public chain without trusting it or sending a catalog request.
+            import subprocess
+            chain=subprocess.run(["openssl","s_client","-connect","gdmf.apple.com:443",
+                "-servername","gdmf.apple.com","-showcerts"],input="",text=True,
+                capture_output=True,timeout=30)
+            (OUT/"tls-chain.txt").write_text(chain.stdout+chain.stderr)
+            for cert in re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",chain.stdout,re.S):
+                details=subprocess.run(["openssl","x509","-noout","-subject","-issuer","-dates","-fingerprint","-sha256"],
+                    input=cert,text=True,capture_output=True,check=True)
+                print(details.stdout,flush=True)
+            raise
     part=token.split(".")[1]
     catalog=json.loads(base64.urlsafe_b64decode(part+"="*(-len(part)%4)))
     assets=catalog["Assets"]
