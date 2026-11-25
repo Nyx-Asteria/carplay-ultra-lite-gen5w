@@ -287,7 +287,8 @@ public final class CpClimate extends ModEntry {
             }
             // the uiSync experiment: the theme's layout/palette channel, answered by UiSync
             // Bootstrap the known Modular layout; palette selection is still subject to asset verification.
-            if (uiSync) new UiSyncChannel(dir, log, UiSync.layout("Modular")).start();
+            if (uiSync) new UiSyncChannel(dir, log, UiSync.layout("Modular"),
+                    m.settingBoolean("ultra_legacy_center_layout", false)).start();
         }
         MethodHook copy = new MethodHook() {
             @Override

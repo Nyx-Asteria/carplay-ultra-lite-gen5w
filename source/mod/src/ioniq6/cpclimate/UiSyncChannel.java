@@ -23,12 +23,13 @@ final class UiSyncChannel extends Thread {
     final VsChannel.Log out;
     final UiSync sync;
 
-    UiSyncChannel(File dir, VsChannel.Log out, UiSync.Layout layout) {
+    UiSyncChannel(File dir, VsChannel.Log out, UiSync.Layout layout, boolean legacyCenterLayout) {
         super("cp-climate-uisync");
         this.dir = dir;
         this.out = out;
         sync = new UiSync(new File(dir, "cpc-theme-preferences.properties"), true);
         sync.wanted = layout;
+        sync.legacyCenterLayout = legacyCenterLayout;
         setDaemon(true);
     }
 
@@ -39,7 +40,7 @@ final class UiSyncChannel extends Thread {
             s.setReuseAddress(true);
             s.bind(new InetSocketAddress(PORT));
             out.log("SYNC listening on port " + PORT + " (uiSync experiment, cluster layout "
-                    + (sync.wanted == null ? "not requested" : sync.wanted.name + " " + sync.wanted.palette) + ")");
+                    + (sync.wanted == null ? "not requested" : sync.wanted.name + " " + sync.wanted.palette) + ", RC4 center request=" + sync.legacyCenterLayout + ")");
             while (true) {
                 final Socket sock = s.accept();
                 new Thread("cp-climate-uisync-conn") {

@@ -50,14 +50,6 @@
       "apply": "restart"
     },
     {
-      "key": "ultra_ui_sync",
-      "type": "toggle",
-      "default": false,
-      "title": "UI Synchronization",
-      "description": "Enables theme layout and palette communication. Currently causes connection failures on the K5.",
-      "apply": "restart"
-    },
-    {
       "key": "ultra_features",
       "type": "toggle",
       "default": false,
@@ -119,6 +111,22 @@
       "default": false,
       "title": "Receiver Version Override",
       "description": "Reports receiver version 950.7.1 instead of the stock version. May affect feature negotiation.",
+      "apply": "restart"
+    },
+    {
+      "key": "ultra_legacy_center_layout",
+      "type": "toggle",
+      "default": false,
+      "title": "UI Sync: RC4 center layout",
+      "description": "Diagnostic: request the RC4 blue Wallpaper layout instead of leaving the center display to the phone. Requires UI Synchronization.",
+      "apply": "restart"
+    },
+    {
+      "key": "ultra_ui_sync",
+      "type": "toggle",
+      "default": false,
+      "title": "UI Synchronization",
+      "description": "Enables theme layout and palette communication. Currently causes connection failures on the K5.",
       "apply": "restart"
     }
   ]
