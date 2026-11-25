@@ -448,6 +448,26 @@ final class K5Radio {
                 collect("mode", mode, modeIface, new String[]{"getCurrentMode", "getCurrentReadyMode",
                         "getLastRadioMode", "isAvailableCurrentMode", "isChangeModeScheduled"}, previous);
                 collect("sxm", satellite, sxm, new String[]{"getLastTunedChannelID"}, previous);
+                // Correlate tuner ownership with the channel ID in one sample.
+                // Last tuned channel alone is not evidence that SXM owns audio.
+                if (audio != null && satellite != null) try {
+                    int audioMode = readInt(audio, CarAudio.IFACE, "getAudioMode");
+                    int stream = readInt(audio, CarAudio.IFACE, "getCurStreamType");
+                    int channel = readInt(satellite, sxm, "getLastTunedChannelID");
+                    int current = -1, ready = -1;
+                    if (mode != null) {
+                        try { current = readInt(mode, modeIface, "getCurrentMode"); } catch (Throwable ignored) {}
+                        try { ready = readInt(mode, modeIface, "getCurrentReadyMode"); } catch (Throwable ignored) {}
+                    }
+                    String tuple = "audioMode=" + audioMode + " stream=" + stream
+                            + " currentMode=" + current + " readyMode=" + ready + " sxmChannelID=" + channel;
+                    if (!tuple.equals(previous.put("sourceTuple", tuple)))
+                        log.log("[radio-source] " + tuple);
+                } catch (Throwable t) {
+                    String error = t.getClass().getSimpleName();
+                    if (!error.equals(previous.put("sourceTuple.error", error)))
+                        log.log("[radio-source] sample unavailable: " + error);
+                }
                 long now = android.os.SystemClock.elapsedRealtime();
                 if (now >= nextSxmProbe) {
                     nextSxmProbe = now + 10000L;
