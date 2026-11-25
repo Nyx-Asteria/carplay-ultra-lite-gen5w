@@ -232,6 +232,27 @@ public final class CpClimate extends ModEntry {
                 final K5Radio radio = vehicle == null ? null : vehicle.radio;
                 VehicleState.mediaControls = new VehicleState.Controls() {
                     public void pressed(String name, Object value) {
+                        // LIVI controlRequest parameters: frequency (integer kHz),
+                        // identifier (decimal kHz string), optional sourceIdentifier.
+                        if ("tuneToFrequency".equals(name) || "tuneToIdentifier".equals(name)) {
+                            if (radio == null || !(value instanceof java.util.Map)) return;
+                            java.util.Map<?,?> params = (java.util.Map<?,?>) value;
+                            Object source = params.get("sourceIdentifier");
+                            if (source != null && !"FM".equals(source)) return;
+                            Long khz = null;
+                            if ("tuneToFrequency".equals(name)) khz = OpackCodec.asLong(params.get("frequency"));
+                            else if (params.get("identifier") instanceof String) {
+                                try { khz = Long.valueOf((String)params.get("identifier")); }
+                                catch (NumberFormatException ignored) {}
+                            }
+                            if (khz == null || !radio.tuneFm(khz))
+                                log.log("[radio] tune refused: invalid frequency or inactive FM");
+                            return;
+                        }
+                        if ("changeMediaSource".equals(name)) {
+                            log.log("[radio] source selection not yet implemented");
+                            return;
+                        }
                         if (radio != null && radio.fmSelected()) {
                             if ("nextItem".equals(name)) { radio.seekFm(true); return; }
                             if ("previousItem".equals(name)) { radio.seekFm(false); return; }
