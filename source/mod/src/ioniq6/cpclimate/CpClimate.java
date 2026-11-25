@@ -112,8 +112,8 @@ public final class CpClimate extends ModEntry {
         m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("k5_integration", true));
         if (!targetVerified) return;
         boolean climate = m.settingBoolean("k5_integration", true);
-        boolean any = climate || m.settingBoolean("k5_integration", true) || m.settingBoolean("parked_video", false) || m.settingBoolean("ultra_theme", true);
-        if (!any) { m.log("[runtime] all features off; native patch withheld"); return; }
+        boolean any = climate || m.settingBoolean("parked_video", false) || m.settingBoolean("ultra_theme", true);
+        if (!any) { m.log("[runtime] all CPUL features off; disable CPUL itself to use standalone PPS CarPlay scaling"); return; }
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
         ClimateMap.loadSetpoints(new File(dir, "cpc-setpoints"));
@@ -187,6 +187,8 @@ public final class CpClimate extends ModEntry {
             // the ambient light test (off): one shared, writable setting in CarPlay's car settings whose value is a #RRGGBB
             // that is sent to the car's mood light; see VehicleState.withAmbientTest and CarClimate.writeAmbient
             VehicleState.ambientTest = CarClimate.ambientTest = false;
+            VehicleState.sxmSchemaTest = m.settingBoolean("k5_integration", true)
+                    && m.settingBoolean("sxm_schema_test", false);
             // the extra seat and wheel controls (off): rear seat heat, front seat ventilation, steering wheel heater
             VehicleState.extras = ClimateMap.extras = climate;
             VehicleState.climateEnabled = climate;
@@ -229,7 +231,46 @@ public final class CpClimate extends ModEntry {
                 media = new CarPlayMedia(new CarPlayMedia.Later() {
                     public void post(Runnable action, long delayMs) { handler.postDelayed(action, delayMs); }
                 }, log, m);
-                VehicleState.mediaControls = media;
+                final K5Radio radio = vehicle == null ? null : vehicle.radio;
+                VehicleState.mediaControls = new VehicleState.Controls() {
+                    public void pressed(String name, Object value) {
+                        // LIVI controlRequest parameters: frequency (integer kHz),
+                        // identifier (decimal kHz string), optional sourceIdentifier.
+                        if ("tuneToFrequency".equals(name) || "tuneToIdentifier".equals(name)) {
+                            if (radio == null || !(value instanceof java.util.Map)) return;
+                            java.util.Map<?,?> params = (java.util.Map<?,?>) value;
+                            Object source = params.get("sourceIdentifier");
+                            if (source != null && !"FM".equals(source)) return;
+                            Long khz = null;
+                            if ("tuneToFrequency".equals(name)) khz = OpackCodec.asLong(params.get("frequency"));
+                            else if (params.get("identifier") instanceof String) {
+                                try { khz = Long.valueOf((String)params.get("identifier")); }
+                                catch (NumberFormatException ignored) {}
+                            }
+                            if (khz == null || !("FM".equals(source) ? radio.selectAndTuneFm(khz) : radio.tuneFm(khz)))
+                                log.log("[radio] tune refused: invalid frequency or inactive FM");
+                            return;
+                        }
+                        if ("changeMediaSource".equals(name)) {
+                            if (radio == null || !(value instanceof java.util.Map)) return;
+                            Object source = ((java.util.Map<?,?>) value).get("identifier");
+                            if ("FM".equals(source)) {
+                                if (!radio.selectFm()) log.log("[radio] FM selection refused");
+                            } else {
+                                radio.cancelPendingTune();
+                                log.log("[radio] unsupported source selection");
+                            }
+                            return;
+                        }
+                        if (radio != null && radio.fmSelected()) {
+                            if ("nextItem".equals(name)) { radio.seekFm(true); return; }
+                            if ("previousItem".equals(name)) { radio.seekFm(false); return; }
+                            // FM playback controls must not accidentally control the phone.
+                            return;
+                        }
+                        media.pressed(name, value);
+                    }
+                };
                 m.log("[media] manual controls ready; no autoplay");
             }
             m.log("[climate] reader and both vehicle-state lanes started");

@@ -124,7 +124,9 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
                         }
                         comfort.refresh(fresh);
                     }
+                    if (radio.available()) fresh.put("radio.status", radio.diagnosticStatus());
                     Map<Long,Object> changed = page.update(fresh);
+                    if (enabled() && radio.available()) changed.putAll(radio.refreshFm());
                     VehicleState current;
                     synchronized (state) { current = state[0]; }
                     if (current != null && !changed.isEmpty()) lanes[1].deliver(current.fromCar(changed));

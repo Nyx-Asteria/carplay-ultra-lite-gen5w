@@ -148,6 +148,93 @@ final class VehicleState {
         return changed ? OpackCodec.encode(list) : accessories;
     }
 
+    private byte[] withoutDab(byte[] accessories) {
+        Object decoded = OpackCodec.decode(accessories);
+        if (!(decoded instanceof List)) return accessories;
+        boolean removed = false;
+        for (Object accessory : (List<?>) decoded) {
+            if (!(accessory instanceof Map)) continue;
+            Object services = ((Map<?,?>) accessory).get("services");
+            if (!(services instanceof List)) continue;
+            java.util.Iterator<?> it = ((List<?>) services).iterator();
+            while (it.hasNext()) {
+                Object service = it.next();
+                if (!(service instanceof Map) || !Long.valueOf(4097).equals(
+                        OpackCodec.asLong(((Map<?,?>) service).get("iid")))) continue;
+                Object chars = ((Map<?,?>) service).get("characteristics");
+                if (chars instanceof List) for (Object characteristic : (List<?>) chars) {
+                    if (!(characteristic instanceof Map)) continue;
+                    Long iid = OpackCodec.asLong(((Map<?,?>) characteristic).get("iid"));
+                    if (iid == null) continue;
+                    values.remove(iid); writable.remove(iid); shared.remove(iid);
+                    names.remove(iid); notifiers.remove(iid);
+                    java.util.Iterator<Map.Entry<Long,Long>> links = notifiers.entrySet().iterator();
+                    while (links.hasNext()) if (iid.equals(links.next().getValue())) links.remove();
+                }
+                it.remove();
+                removed = true;
+            }
+        }
+        if (removed) out.log("[radio] European DAB service omitted");
+        return removed ? OpackCodec.encode(decoded) : accessories;
+    }
+
+    // Schema discovery only: 0 is an unverified semantic value, not an Apple
+    // satellite-radio assignment. Never impersonate FM or DAB.
+    static volatile boolean sxmSchemaTest;
+    static final long SXM_BASE = 4128;
+    @SuppressWarnings("unchecked")
+    static byte[] withSxmSchema(byte[] accessories, Map<Long,Object> values) {
+        Object decoded = OpackCodec.decode(accessories);
+        if (!(decoded instanceof List)) return null;
+        List<Object> owner = null;
+        Map<Object,Object> template = null;
+        java.util.Set<Long> used = new java.util.HashSet<Long>();
+        for (Object a : (List<?>) decoded) {
+            if (!(a instanceof Map)) continue;
+            used.add(OpackCodec.asLong(((Map<?,?>)a).get("iid")));
+            Object services = ((Map<?,?>)a).get("services");
+            if (!(services instanceof List)) continue;
+            for (Object svc : (List<?>) services) {
+                if (!(svc instanceof Map)) continue;
+                Map<Object,Object> m = (Map<Object,Object>) svc;
+                Long id = OpackCodec.asLong(m.get("iid"));
+                used.add(id);
+                if (Long.valueOf(4097).equals(id)) { owner = (List<Object>) services; template = m; }
+                Object chars = m.get("characteristics");
+                if (chars instanceof List) for (Object c : (List<?>)chars)
+                    if (c instanceof Map) used.add(OpackCodec.asLong(((Map<?,?>)c).get("iid")));
+            }
+        }
+        if (owner == null || template == null) return null;
+        for (long id = SXM_BASE; id <= SXM_BASE + 9; id++) if (used.contains(id)) return null;
+        Map<Object,Object> copy = (Map<Object,Object>) deepCopy(template);
+        copy.put("iid", SXM_BASE);
+        Object chars = copy.get("characteristics");
+        if (!(chars instanceof List)) return null;
+        Map<Long,Object> additions = new LinkedHashMap<Long,Object>();
+        for (Object c : (List<?>) chars) {
+            if (!(c instanceof Map)) return null;
+            Map<Object,Object> m = (Map<Object,Object>)c;
+            Long old = OpackCodec.asLong(m.get("iid"));
+            if (old == null || old < 4098 || old > 4106) return null;
+            long id = SXM_BASE + old - 4097;
+            m.put("iid", id);
+            Object value = null;
+            if (old == 4098) value = "SXM";
+            else if (old == 4099) value = 0L;
+            else if (old == 4100) value = Boolean.TRUE;
+            else if (old == 4101) value = "SiriusXM";
+            else if (old == 4102) value = "";
+            else if (old == 4105 || old == 4106) value = 0L;
+            m.remove("initialValue");
+            if (value != null) { m.put("initialValue", value); additions.put(id, value); }
+        }
+        owner.add(copy);
+        values.putAll(additions);
+        return OpackCodec.encode(decoded);
+    }
+
     /** the ambient_test setting (CpClimate): one more line in CarPlay's car settings, writable by the phone */
     static volatile boolean ambientTest;
     /** the test line's service and its settingValue; LIVI's version line is service VERSION_LINE (its values 1282-1288), the build date 1289, the section 1297 */
@@ -545,6 +632,14 @@ final class VehicleState {
         byte[] acc = VsData.bytes(VsData.ACCESSORIES);
         // no radio on this car: no current media source, so Ultra doesn't open on LIVI's DAB radio
         acc = withoutCurrentSource(acc);
+        if (sxmSchemaTest) {
+            byte[] sxm = withSxmSchema(acc, values);
+            if (sxm != null) { acc = sxm; out.log("[radio] experimental SXM schema advertised disabled; semantic 0 unverified"); }
+            else out.log("[radio] experimental SXM schema unavailable");
+        }
+        // The North American K5 has no DAB tuner. Remove the European
+        // service after any opt-in SXM template experiment has used it.
+        acc = withoutDab(acc);
         values.put(NOW_PLAYING_SOURCE, "");
         if (ambientTest) {
             // the ambient light test: starts at the car's own colour (white if it can't be read)

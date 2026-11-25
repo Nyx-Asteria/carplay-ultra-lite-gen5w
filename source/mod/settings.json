@@ -56,6 +56,14 @@
       "title": "Ultra themes and UI synchronization",
       "description": "Enable layout, palette and wallpaper synchronization when CarPlay Ultra is enabled. Restart required.",
       "apply": "restart"
+    },
+    {
+      "key": "sxm_schema_test",
+      "type": "toggle",
+      "default": false,
+      "title": "SiriusXM schema discovery (experimental)",
+      "description": "Advertise a disabled experimental satellite source to test Apple schema acceptance. No tuning or entitlement changes. Restart required.",
+      "apply": "restart"
     }
   ]
 }
