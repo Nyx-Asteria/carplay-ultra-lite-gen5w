@@ -82,7 +82,9 @@ final class K5Radio {
     private final java.util.concurrent.ExecutorService fmCommands =
             java.util.concurrent.Executors.newSingleThreadExecutor();
     boolean seekFm(final boolean up) {
-        if (!enabled() || !CpClimate.sessionActive || !fmActive) return false;
+        if (!enabled() || !CpClimate.sessionActive || !fmActive) {
+            log.log("[radio] seek refused: FM not active"); return false;
+        }
         final long generation = CpClimate.sessionGeneration;
         fmCommands.execute(new Runnable() {
             public void run() {
@@ -94,7 +96,9 @@ final class K5Radio {
                     Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
                     if (tuner == null || !probeActive(generation)) return;
                     java.lang.reflect.Method method = Class.forName(RADIO_IFACE).getMethod(up ? "seekUp" : "seekDown");
-                    if (method.getReturnType() != void.class) return;
+                    if (method.getReturnType() != void.class) {
+                        log.log("[radio] seek signature mismatch: " + method.toGenericString()); return;
+                    }
                     method.invoke(tuner);
                     log.log("[radio] FM seek " + (up ? "up" : "down"));
                 } catch (Throwable t) { log.log("[radio] FM seek failed: " + t.getClass().getSimpleName()); }
@@ -250,6 +254,22 @@ final class K5Radio {
             if (!value.equals(previous.put(key, value))) log.log("[radio-probe] " + key + " raw=" + value);
         }
     }
+    // Inventory exact runtime signatures without invoking unknown getters or registering
+    // unverified listeners. This is only run from the explicit radio diagnostic.
+    private void inventory(String name) {
+        try {
+            Class<?> type = Class.forName(name);
+            java.util.TreeSet<String> signatures = new java.util.TreeSet<String>();
+            for (java.lang.reflect.Method method : type.getMethods()) {
+                String n = method.getName().toLowerCase(java.util.Locale.US);
+                if (n.matches(".*(radio|station|preset|channel|listener|artwork|image|text|title|artist|sis|id3|seek|tune|mode|status|frequency|program).*")) {
+                    signatures.add(method.toGenericString());
+                }
+            }
+            for (String signature : signatures) log.log("[radio-api] " + signature);
+        } catch (Throwable t) { log.log("[radio-api] " + name + ": " + t.getClass().getSimpleName()); }
+    }
+
     private void probeTuner(long generation) {
         if (!probeActive(generation)) return;
         try {
@@ -264,6 +284,14 @@ final class K5Radio {
             java.util.Map<String,String> previous = new java.util.HashMap<String,String>();
             long deadline = android.os.SystemClock.elapsedRealtime() + 120000L;
             log.log("[radio-probe] start: 120 seconds, change stock bands/stations manually");
+            for (String type : new String[]{radio, sxm, modeIface,
+                    "com.hkmc.media.MicomRadioManager", "com.hkmc.media.MicomRadioListener",
+                    "com.hkmc.media.MicomRadioStatus", "com.hkmc.media.MicomRadioPresetData",
+                    "com.hkmc.media.RdsStationInfo", "com.hkmc.media.HDRadioManager",
+                    "com.hkmc.media.HDRadioListener", "com.hkmc.media.sxm65h.Manager"}) {
+                if (!probeActive(generation)) return;
+                inventory(type);
+            }
             while (probeActive(generation) && android.os.SystemClock.elapsedRealtime() < deadline) {
                 try { if (tuner == null) tuner = service(serviceName("RADIO_SERVICE"), radio); }
                 catch (Throwable ignored) {}
