@@ -178,8 +178,10 @@ public class UiSyncTest {
         center.handle(OpackCodec.encode(panel));
         panel.put("data", Bplist.encode(map("type", 1L, "ssn", 1L, "psn", 1L, "version", 3L)));
         List<byte[]> legacy = center.handle(OpackCodec.encode(panel));
-        Map<String,Object> legacyData = (Map<String,Object>) commandOf(headerOf(legacy.get(2))).get("data");
-        check("RC4 diagnostic restores center Wallpaper request", legacy.size() == 4
+        Map<Object,Object> legacyFrame = (Map<Object,Object>) OpackCodec.decode(legacy.get(2));
+        Map<String,Object> legacyHeader = (Map<String,Object>) Bplist.decode((byte[]) legacyFrame.get("data"));
+        Map<String,Object> legacyData = (Map<String,Object>) commandOf(legacyHeader).get("data");
+        check("RC4 diagnostic restores center Wallpaper request", legacy.size() == 4 && "Center_Display".equals(legacyFrame.get("displayUUID"))
                 && UiSync.CENTER.id.equals(legacyData.get("layoutID")) && "blue".equals(legacyData.get("paletteID")));
         sync.handle(fromPhone(3, UiSync.START_LAYOUT_TRANSITION, map("layoutID", UiSync.layout("DigiRing").id, "paletteID", "green")));
         sync.reopen(); sync.handle(reset);
