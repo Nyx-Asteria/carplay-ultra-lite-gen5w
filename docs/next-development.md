@@ -27,3 +27,9 @@
 - Those symbol names and transaction field strings exist in the uploaded K5 automotive.odex. Reuse CPUL's existing Binder transport, checked method descriptors and listener fingerprint; do not assume Comfort app's daemon-client authentication works inside the DiPO hook process.
 - Replace USM seat reads with BCM; filter unknown states outside 2..8. Replace wheel toggle with explicit VR 0/1, no guessed optimistic indicator; use existing verified BCM callback and retry registration after failure. Seat setter names unchanged (same as Comfort).
 - No on-car validation yet. Wheel placement and theme selection still outstanding; Midnight remains required initial appearance.
+
+## Remaining development order (owner confirmed)
+- Themes first: native selector, all compatible layouts/palettes and wallpapers, Midnight initial theme and a matching initial wallpaper; preserve subsequent user choices. No physical cluster changes. The six UiSync definitions are cluster layout UUIDs with example palettes, not a complete center-display theme or wallpaper catalog. The original bundled CPUL source references the phone's theme settings and wallpapers following the active layout/palette; it does not include the asset package.json/theme.json or a verified Midnight/wallpaper identifier. Do not fabricate IDs or repeatedly force a default over the user's choice.
+- Volume/media popup suppression next: use captured OEM binaries to locate pre-presentation path; preserve audio controls and stock behavior outside CarPlay.
+- Radio last: investigate OEM tuner integration and source/state feedback.
+- Climate layout minor tweaks deferred; seat and wheel implementation still requires parked hardware validation. Preserve working wireless negotiation and do not trigger a release during development.
