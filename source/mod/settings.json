@@ -6,71 +6,15 @@
       "type": "toggle",
       "default": true,
       "title": "CarPlay Ultra",
-      "description": "Master switch for experimental Ultra features. Standard K5 integration remains available when off.",
+      "description": "Enables the consolidated Ultra capabilities, virtual cluster, DBX variant, extended features, LIVI display metadata and receiver version 950.7.1.",
       "apply": "restart"
     },
     {
-      "key": "ultra_session_start",
+      "key": "ultra_sidebars",
       "type": "toggle",
       "default": true,
-      "title": "CarPlayStartSession",
-      "description": "Requests Ultra startup negotiation through Wireless CarPlay. Requires Theme Identity.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_identity",
-      "type": "toggle",
-      "default": true,
-      "title": "Theme Identity",
-      "description": "Advertises the Apple theme identifier and asset version to the phone.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_cluster",
-      "type": "toggle",
-      "default": false,
-      "title": "Virtual Cluster",
-      "description": "Advertises a secondary virtual display. Does not replace the physical instrument cluster.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_display_ids",
-      "type": "toggle",
-      "default": false,
-      "title": "Themed Display IDs",
-      "description": "Uses the Apple theme's display identifiers. Requires Virtual Cluster.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_variant",
-      "type": "toggle",
-      "default": false,
-      "title": "DBX Vehicle Variant",
-      "description": "Requests Aston Martin DBX styling in supported vehicle interfaces.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_features",
-      "type": "toggle",
-      "default": false,
-      "title": "Extended Features",
-      "description": "Advertises additional non-audio LIVI capabilities; may unlock additional interfaces.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_full_features",
-      "type": "toggle",
-      "default": false,
-      "title": "Original Feature Mask",
-      "description": "Uses the broader LIVI capability mask, including audio-related bits. Requires Extended Features.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_enhanced_ui",
-      "type": "toggle",
-      "default": false,
-      "title": "Enhanced RequestCarUI",
-      "description": "Advertises enhanced vehicle-interface support to the phone.",
+      "title": "Enable Ultra Sidebars",
+      "description": "Enables themed identity and display IDs for native vehicle apps and sidebars. Requires CarPlay Ultra.",
       "apply": "restart"
     },
     {
@@ -82,14 +26,6 @@
       "apply": "restart"
     },
     {
-      "key": "parked_video",
-      "type": "toggle",
-      "default": false,
-      "title": "Parked AirPlay Video & Audio",
-      "description": "Experimental video with sound while safely parked. Stops when Park confirmation is lost.",
-      "apply": "restart"
-    },
-    {
       "key": "sxm_schema_test",
       "type": "toggle",
       "default": false,
@@ -98,27 +34,11 @@
       "apply": "restart"
     },
     {
-      "key": "ultra_display_extras",
+      "key": "parked_video",
       "type": "toggle",
       "default": false,
-      "title": "LIVI Display Extras",
-      "description": "Advertises additional display metadata used by LIVI. May affect available CarPlay interfaces.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_receiver_version",
-      "type": "toggle",
-      "default": false,
-      "title": "Receiver Version Override",
-      "description": "Reports receiver version 950.7.1 instead of the stock version. May affect feature negotiation.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_legacy_center_layout",
-      "type": "toggle",
-      "default": false,
-      "title": "UI Sync: RC4 center layout",
-      "description": "Diagnostic: request the RC4 blue Wallpaper layout instead of leaving the center display to the phone. Requires UI Synchronization.",
+      "title": "Parked AirPlay Video & Audio",
+      "description": "Experimental video with sound while safely parked. Stops when Park confirmation is lost.",
       "apply": "restart"
     },
     {
@@ -126,7 +46,7 @@
       "type": "toggle",
       "default": false,
       "title": "UI Synchronization",
-      "description": "Enables theme layout and palette communication. Currently causes connection failures on the K5.",
+      "description": "Enables Ultra layout and palette synchronization. Requires Ultra Sidebars. Theme selector remains experimental.",
       "apply": "restart"
     }
   ]
