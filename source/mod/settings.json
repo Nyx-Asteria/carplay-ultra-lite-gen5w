@@ -2,6 +2,14 @@
   "version": 1,
   "settings": [
     {
+      "key": "k5_integration",
+      "type": "toggle",
+      "default": true,
+      "title": "K5 Vehicle Integration",
+      "description": "Enables climate, seats, vehicle information, radio, Comfort and CarPlay volume/media popup replacement. Keeps native popups outside CarPlay.",
+      "apply": "restart"
+    },
+    {
       "key": "ultra_theme",
       "type": "toggle",
       "default": true,
@@ -14,15 +22,15 @@
       "type": "toggle",
       "default": true,
       "title": "Enable Ultra Sidebars",
-      "description": "Enables themed identity and display IDs for native vehicle apps and sidebars. Requires CarPlay Ultra.",
+      "description": "Enables theme identity, CarPlayStartSession and themed display IDs for native vehicle apps and Ultra sidebars. Requires CarPlay Ultra.",
       "apply": "restart"
     },
     {
-      "key": "k5_integration",
+      "key": "ultra_ui_sync",
       "type": "toggle",
-      "default": true,
-      "title": "K5 Vehicle Integration",
-      "description": "Enables climate, seats, vehicle information, radio, Comfort and CarPlay volume/media popup replacement. Keeps native popups outside CarPlay.",
+      "default": false,
+      "title": "UI Synchronization",
+      "description": "Enables Ultra layout and palette synchronization. Requires Ultra Sidebars. Theme selector remains experimental.",
       "apply": "restart"
     },
     {
@@ -39,14 +47,6 @@
       "default": false,
       "title": "Parked AirPlay Video & Audio",
       "description": "Experimental video with sound while safely parked. Stops when Park confirmation is lost.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_ui_sync",
-      "type": "toggle",
-      "default": false,
-      "title": "UI Synchronization",
-      "description": "Enables Ultra layout and palette synchronization. Requires Ultra Sidebars. Theme selector remains experimental.",
       "apply": "restart"
     }
   ]
