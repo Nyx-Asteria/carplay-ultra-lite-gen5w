@@ -6,7 +6,7 @@
 
 An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by HMG-API.
 
-[![Development](https://img.shields.io/badge/development-RC5-f59e0b?style=flat-square)](#development)
+[![Development](https://img.shields.io/badge/development-RC7-f59e0b?style=flat-square)](#development)
 [![HMG-API](https://img.shields.io/badge/HMG--API-1.1.0--rc.8%2B-2563eb?style=flat-square)](https://github.com/Open-HMG/HMG-API)
 [![Platform](https://img.shields.io/badge/platform-K5_Gen5W__M-64748b?style=flat-square)](#compatibility)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-22c55e?style=flat-square)](LICENSE)
@@ -19,7 +19,7 @@ An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by 
 
 An independent K5 port of [SafariForest's CarPlay Ultra-Lite](https://github.com/SafariForest/carplay-ultra-lite-gen5w). Native vehicle controls, Ultra-style appearance and parked video are integrated into CarPlay without adding EV routing or changing the physical instrument cluster.
 
-> **Development status:** RC5 is in preparation. Features described below reflect the development branch, not a claim of verified hardware operation or an already published RC5 package.
+> **Development status:** RC7 is in preparation; RC6 is the previous testing release. RC7 changes are host-tested where covered, not yet validated on the vehicle. No RC7 package is published yet.
 
 ## Features
 
@@ -36,14 +36,14 @@ An independent K5 port of [SafariForest's CarPlay Ultra-Lite](https://github.com
 | Comfort thresholds | Optional separate Comfort package |
 | Vehicle information | Odometer and vehicle shortcuts; fuel range remains unresolved |
 
-Driver heating and wheel heating have been reported working; passenger heat and both ventilation controls are revised for RC5 and require vehicle validation.
+Heating and wheel heating were reported working in earlier testing. RC7 changes separate SeatFan feedback to publish BCM-confirmed level and power together; both front ventilation cycles are covered by host tests and require vehicle validation.
 
 ### Ultra appearance & projection
 
 - Consolidated CarPlay Ultra and theme/UI synchronization options.
 - Theme identity and session-start contribution through the companion wireless provider.
 - Metadata-derived layout and palette validation, persisted selection and phone-managed center layout.
-- Midnight virtual-cluster default; native center wallpaper selection remains unresolved.
+- Midnight virtual-cluster default, connection-local UI Sync handshakes and an opt-in center Wallpaper/blue layout request. Black wallpaper and the blank theme selector remain unresolved.
 - Optional [Phone Projection Scaling](https://github.com/Nyx-Asteria/Phone-Projection-Scaling) integration: CPUL hosts CarPlay scaling, PPS independently handles Android Auto scaling. No competing CarPlay native patches.
 - Firmware-gated stock volume popup suppression and optional stock media popup suppression.
 
@@ -54,7 +54,7 @@ Driver heating and wheel heating have been reported working; passenger heat and 
 - Bounded asynchronous source activation and cancellation.
 - Unsupported European DAB service omitted; stock radio shortcut and read-only diagnostic collector retained.
 
-FM requires vehicle validation. RDS, HD metadata and station-list population remain incomplete. SiriusXM is deferred; its experimental schema is disabled by default.
+Manual FM tuning was verified on RC6. RC7 uses permission-checked OEM seek keys and cached FM station lists; those changes require vehicle testing. Bounded diagnostics collect source routing, HD/RDS metadata, SiriusXM favorites and Bose Centerpoint state. SiriusXM discovery remains disabled by default and does not enable tuning. Metadata, favorites and artwork publication remain incomplete.
 
 ### Parked AirPlay video
 
@@ -62,7 +62,7 @@ FM requires vehicle validation. RDS, HD metadata and station-list population rem
 - Corrected redirect/range handling, playback intent retention and first-frame black shutter.
 - Explicit HLS MIME hints, reduced startup buffering, preferred H.264 and 720p adaptive video with fallback.
 - LIVI-compatible playback-status fields and scalar timing support alongside the existing response.
-- Fresh Park feedback and active CarPlay session required; video is disabled by default, local audio separately opt-in.
+- Fresh Park feedback and active CarPlay session required; video is disabled by default. When enabled, audio is attempted with a picture-only fallback; an optional picture-only diagnostic disables audio rendering from startup and prefers a low video bitrate.
 
 Playback remains experimental. Independent AirPlay mirroring and YouTube discovery are future work, not features of this build. See [standalone AirPlay integration](docs/standalone-airplay-integration.md).
 
@@ -90,7 +90,7 @@ The planned development bundle includes:
 | --- | --- |
 | CPUL K5 | Vehicle integration and Ultra |
 | [Wireless CP/AA fork](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa) | Wireless projection and Ultra identity/session-start |
-| [Phone Projection Scaling](https://github.com/Nyx-Asteria/Phone-Projection-Scaling) | Optional relative projection scaling |
+| [Phone Projection Scaling](https://github.com/Nyx-Asteria/Phone-Projection-Scaling) | Stable 1.0.0 relative projection scaling |
 | [Comfort fork](https://github.com/Nyx-Asteria/hmgapi-comfort) | Optional comfort thresholds |
 | Compatibility check | Firmware and environment checks |
 | Firmware collector | Allowlisted diagnostic export |
@@ -103,27 +103,27 @@ Restart after changing settings. Explicit saved selections are retained.
 
 | Setting | Default |
 | --- | --- |
-| K5 vehicle integration | On |
-| Suppress stock volume popup | On |
-| Suppress stock media popup | Off |
+| K5 Vehicle Integration | On |
 | CarPlay Ultra | On |
-| Ultra themes and UI synchronization | On |
-| Parked AirPlay video | Off |
-| AirPlay video audio | Off |
-| SiriusXM schema experiment | Off |
+| Enable Ultra Sidebars | On |
+| UI Synchronization | Off |
+| Force Theme Wallpaper (Experimental) | Off |
+| SiriusXM Discovery | Off |
+| Parked AirPlay Video & Audio | Off |
+| AirPlay Picture Only (Diagnostic) | Off |
 
-Ultra theme synchronization depends on Ultra. PPS owns the scaling preference; CPUL consumes it when active. Disable CPUL itself to use PPS's standalone CarPlay native patch. If all individual CPUL features are disabled while the mod remains enabled, scaling is withheld rather than risking competing patches.
+UI Synchronization requires Ultra Sidebars and CarPlay Ultra. The wallpaper experiment requires UI Synchronization and only requests a center layout if the phone negotiates that panel. Picture-only mode requires parked video. PPS owns scaling preferences; CPUL consumes them when active. Disable CPUL itself to use PPS's standalone CarPlay native patch.
 
 ## Development
 
 | Milestone | Status |
 | --- | --- |
-| RC4 | Previous test release; [testing notes](docs/rc4-testing.md) |
-| RC5 | Climate, FM, themes, AirPlay, PPS and signing integration; pending final build and vehicle validation |
-| RC6 / future | SiriusXM, standalone AirPlay, broader app compatibility |
-| Non-blocking backlog | Wireless CP/AA debloating, center wallpaper default, advanced radio metadata |
+| RC4–RC6 | Earlier vehicle testing releases |
+| RC7 | Consolidated settings, seat feedback, radio diagnostics, theme negotiation, parked video diagnostics, stable PPS |
+| Remaining vehicle validation | Seat cycling, radio controls and metadata, themes, standard CarPlay fallback, first video frame |
+| Future | Complete SiriusXM controls, native metadata and artwork, standalone AirPlay and YouTube discovery |
 
-[Development regression](.github/workflows/development-regression.yml) compiles the main module and video engine and runs climate, Park, volume policy and UI synchronization checks without publishing. [Release bundle](.github/workflows/release-bundle.yml) builds six packages and verifies author signatures before publishing a non-draft prerelease.
+[Development regression](.github/workflows/development-regression.yml) compiles the main module and video engine and runs climate, Park, volume policy and UI synchronization checks without publishing. [Release bundle](.github/workflows/release-bundle.yml) builds six packages and verifies author signatures before publishing a non-draft release marked Latest. The release is a testing build despite its publication status.
 
 Read [development notes](docs/next-development.md), [radio diagnostics](docs/k5-radio.md) and [integration details](docs/integration.md) for technical background. Host tests do not establish vehicle functionality.
 
