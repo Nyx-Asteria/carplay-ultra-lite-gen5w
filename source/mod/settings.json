@@ -34,6 +34,14 @@
       "apply": "restart"
     },
     {
+      "key": "ultra_force_wallpaper",
+      "type": "toggle",
+      "default": false,
+      "title": "Force Theme Wallpaper (Experimental)",
+      "description": "Requests the theme's center Wallpaper layout with its supported blue palette once at UI Sync initialization. Requires UI Synchronization and Ultra Sidebars. Off restores phone-managed layouts.",
+      "apply": "restart"
+    },
+    {
       "key": "sxm_schema_test",
       "type": "toggle",
       "default": false,
