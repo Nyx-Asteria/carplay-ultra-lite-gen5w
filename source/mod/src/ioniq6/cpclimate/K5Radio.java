@@ -238,12 +238,65 @@ final class K5Radio {
             int channel = readInt(sxmTuner, SXM_IFACE, "getLastTunedChannelID");
             sxmAvailable = sxmTuner != null && channel >= 0;
             values.put(4131L, !sxmAvailable);
-            if (!sxmAvailable || !sxmActive) return;
+            if (!sxmAvailable || !sxmActive) { sxmMetadataChannel = -1; return; }
             values.put(4133L, Integer.toString(channel));
             values.put(4354L, "SXM");
             values.put(4355L, "SiriusXM");
             values.put(4359L, 1L);
+            // A channel ID is not necessarily its displayed channel number.
+            // Publish text only when the OEM channel record matches exactly.
+            refreshSxmFavoriteMetadata(values, channel);
         } catch (Throwable t) { sxmTuner = null; }
+    }
+
+    private long sxmMetadataPoll;
+    private int sxmMetadataChannel = -1;
+    private long sxmMetadataGeneration = -1;
+    private String sxmTitle = "", sxmArtist = "", sxmName = "";
+    private void refreshSxmFavoriteMetadata(java.util.Map<Long,Object> values, int channel) {
+        long now = android.os.SystemClock.elapsedRealtime();
+        long generation = CpClimate.sessionGeneration;
+        if (channel != sxmMetadataChannel || generation != sxmMetadataGeneration
+                || now - sxmMetadataPoll >= 10000) {
+            sxmMetadataChannel = channel;
+            sxmMetadataGeneration = generation;
+            sxmMetadataPoll = now;
+            sxmTitle = ""; sxmArtist = ""; sxmName = "";
+            try {
+                int category = readInt(sxmTuner, SXM_IFACE, "getSmartFavoritesCategoryID");
+                if (category >= 0) {
+                    Object records = Class.forName(SXM_IFACE).getMethod("getCategoryChannels", int.class)
+                            .invoke(sxmTuner, category);
+                    Class<?> type = Class.forName("com.hkmc.media.sxm65h.Channel");
+                    if (records != null && records.getClass().isArray()
+                            && records.getClass().getComponentType() == type) {
+                        for (int i = 0; i < Math.min(100, java.lang.reflect.Array.getLength(records)); i++) {
+                            Object entry = java.lang.reflect.Array.get(records, i);
+                            if (entry == null) continue;
+                            java.lang.reflect.Field id = type.getDeclaredField("mChannelID");
+                            id.setAccessible(true);
+                            Object raw = id.get(entry);
+                            if (!(raw instanceof Number) || ((Number)raw).intValue() != channel) continue;
+                            sxmName = channelText(type, entry, "mChannelLongName");
+                            sxmTitle = channelText(type, entry, "mTitle");
+                            sxmArtist = channelText(type, entry, "mArtist");
+                            break;
+                        }
+                    }
+                }
+            } catch (Throwable t) { log.log("[radio-sxm] favorite metadata unavailable: " + t.getClass().getSimpleName()); }
+        }
+        if (!sxmTitle.isEmpty()) values.put(4355L, sxmTitle);
+        else if (!sxmName.isEmpty()) values.put(4355L, sxmName);
+        if (!sxmArtist.isEmpty()) values.put(4356L, sxmArtist);
+    }
+    private static String channelText(Class<?> type, Object entry, String name) throws Exception {
+        java.lang.reflect.Field field = type.getDeclaredField(name);
+        field.setAccessible(true);
+        Object value = field.get(entry);
+        if (!(value instanceof String)) return "";
+        String text = ((String)value).trim();
+        return text.substring(0, Math.min(256, text.length()));
     }
 
     boolean sxmSelected() { return sxmActive; }
