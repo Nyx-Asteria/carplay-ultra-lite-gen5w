@@ -93,18 +93,48 @@ final class K5Radio {
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
-                    Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
-                    if (tuner == null || !probeActive(generation)) return;
-                    java.lang.reflect.Method method = Class.forName(RADIO_IFACE).getMethod(up ? "seekUp" : "seekDown");
-                    if (method.getReturnType() != void.class) {
-                        log.log("[radio] seek signature mismatch: " + method.toGenericString()); return;
-                    }
-                    method.invoke(tuner);
-                    log.log("[radio] FM seek " + (up ? "up" : "down"));
+                    if (!probeActive(generation)) return;
+                    if (!injectSeek(up)) log.log("[radio] OEM key injection unavailable; seek not sent");
                 } catch (Throwable t) { log.log("[radio] FM seek failed: " + t.getClass().getSimpleName()); }
             }
         });
         return true;
+    }
+
+    /** Use the same OEM key names and physical keyboard selection as Button Mapper.
+     * DiPO must have system UID and INJECT_EVENTS; never bypass a denied permission.
+     * No generic media-key fallback. Called only after fresh tuner ownership checks. */
+    private boolean injectSeek(boolean up) throws Exception {
+        if (android.os.Process.myUid() != 1000 ||
+                context.checkCallingOrSelfPermission("android.permission.INJECT_EVENTS")
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            log.log("[radio] OEM key injection permission unavailable");
+            return false;
+        }
+        String name = up ? "SEEK_UP" : "SEEK_DOWN";
+        int code = android.view.KeyEvent.class.getField("KEYCODE_" + name).getInt(null);
+        if (code <= 0) return false;
+        int device = -1;
+        for (int id : android.view.InputDevice.getDeviceIds()) {
+            android.view.InputDevice d = android.view.InputDevice.getDevice(id);
+            if (d == null || d.isVirtual() ||
+                    (d.getSources() & android.view.InputDevice.SOURCE_KEYBOARD)
+                    != android.view.InputDevice.SOURCE_KEYBOARD) continue;
+            if (d.getName() != null && d.getName().toLowerCase(java.util.Locale.US).contains("daudio")) {
+                device = id; break;
+            }
+        }
+        // Unlike Button Mapper, fail closed if the physical OEM device is not found.
+        if (device < 0) { log.log("[radio] daudio key device unavailable"); return false; }
+        Object im = Class.forName("android.hardware.input.InputManager").getMethod("getInstance").invoke(null);
+        java.lang.reflect.Method inject = im.getClass().getMethod("injectInputEvent", android.view.InputEvent.class, int.class);
+        long t = android.os.SystemClock.uptimeMillis();
+        android.view.KeyEvent down = new android.view.KeyEvent(t,t,0,code,0,0,device,0,0,android.view.InputDevice.SOURCE_KEYBOARD);
+        android.view.KeyEvent release = new android.view.KeyEvent(t,t,1,code,0,0,device,0,0,android.view.InputDevice.SOURCE_KEYBOARD);
+        Object first = inject.invoke(im, down, 0);
+        Object second = inject.invoke(im, release, 0);
+        log.log("[radio] OEM " + name + " code=" + code + " device=" + device + " down=" + first + " up=" + second);
+        return Boolean.TRUE.equals(first) && Boolean.TRUE.equals(second);
     }
 
     /** US FM: odd 200 kHz channels, OEM frequency in 10 kHz units.
