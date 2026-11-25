@@ -5,8 +5,23 @@ on:
 permissions:
   contents: read
 jobs:
-  package:
+  gate:
     if: contains(github.event.head_commit.message, 'rc')
+    runs-on: ubuntu-24.04
+    outputs:
+      release: ${{ steps.title.outputs.release }}
+    steps:
+      - id: title
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          title=$(printf '%s\n' "$MESSAGE" | head -n 1)
+          if printf '%s\n' "$title" | grep -qi rc; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+  package:
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -47,6 +62,104 @@ jobs:
           (cd .hmgapi && ./build.sh sdk)
           mkdir -p out/sdk
           unzip -q .hmgapi/out/dist/hmgapi-mod-sdk-*.zip -d out/sdk
+      - name: Read release version
+        run: |
+          VERSION=$(python3 -c 'import json; print(json.load(open("source/mod/mod.json"))["version"])')
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HMGAPI_SDK="$PWD/out/sdk"
+          export OUT="$PWD/out"
+          SDK="$HMGAPI_SDK"
+          AJ=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
+          D8=$(find "$ANDROID_HOME/build-tools" -name d8 -type f | sort -V | tail -1)
+          KEY="$RUNNER_TEMP/rc3-test.key"
+          java -cp "$SDK/lib/hmgapi-engine.jar" hmgapi.engine.Signing keygen "$KEY"
+          trap 'rm -f "$KEY" "$KEY.pub"' EXIT
+          mkdir -p out/staging out/park-tests out/tests out/check-classes out/check-dex
+          javac --release 8 -d out/park-tests source/mod/src/ioniq6/cpclimate/ParkedState.java source/tests/ParkedStateTest.java
+          java -cp out/park-tests ioniq6.cpclimate.ParkedStateTest
+          sh "$SDK/bin/build-mod.sh" source/mod out/core out/work
+          CP="$PWD/out/work/classes:$AJ:$SDK/lib/hmgapi-runtime.jar:$SDK/lib/hmgapi-runtime-stubs.jar"
+          javac --release 8 -cp "$CP" -d out/tests source/tests/ClimateMapTest.java
+          java -cp "out/tests:$CP" ioniq6.cpclimate.ClimateMapTest
+          sh source/mod/tools/video/fetch-libs.sh
+          HMGAPI_MOD_CLASSES="$PWD/out/work/classes" HMGAPI_R8_CLASSPATH_ARGS="--classpath $SDK/lib/hmgapi-runtime.jar --classpath $SDK/lib/hmgapi-runtime-stubs.jar" sh source/mod/build.sh "$PWD/out/core"
+          cp -a source/mod out/staging/cpul
+          rm -f out/staging/cpul/build.sh
+          HMGAPI_MOD_BUILD="$PWD/out/core" sh "$SDK/bin/mkmodpkg.sh" out/staging/cpul "$KEY"
+          cp -a .comfort/hmgapi-comfort out/staging/hmgapi-comfort
+          python3 - <<'PY'
+          import json
+          p='out/staging/hmgapi-comfort/mod.json'
+          d=json.load(open(p)); d['version']='1.1.8-cpul.rc.1'; open(p,'w').write(json.dumps(d,indent=2)+'\n')
+          PY
+          sh "$SDK/bin/build-mod.sh" out/staging/hmgapi-comfort out/hmgapi-comfort out/comfort-work
+          # SDK install_mod uses basename of the built folder as the installed ID.
+          test "$(basename "$PWD/out/hmgapi-comfort")" = hmgapi-comfort
+          HMGAPI_MOD_BUILD="$PWD/out/hmgapi-comfort" sh out/staging/hmgapi-comfort/test.sh
+          HMGAPI_MOD_BUILD="$PWD/out/hmgapi-comfort" sh "$SDK/bin/mkmodpkg.sh" out/staging/hmgapi-comfort "$KEY"
+          cp -a source/check/mod out/staging/check
+          javac --release 8 -cp "$AJ" -d out/check-classes source/mod/src/ioniq6/cpclimate/CarApi.java source/check/src/ioniq6/cpclimate/check/Main.java
+          "$D8" --min-api 19 --lib "$AJ" --output out/check-dex $(find out/check-classes -name '*.class')
+          (cd out/check-dex && zip -q "$OUT/staging/check/cp-climate-check.jar" classes.dex)
+          sh "$SDK/bin/mkmodpkg.sh" out/staging/check "$KEY"
+          cp -a .collector/HMG-IconDump out/staging/collector
+          rm -rf out/staging/collector/src
+          mkdir -p out/collector
+          (cd .collector && HMGAPI_MOD_BUILD="$OUT/collector" sh HMG-IconDump/test.sh)
+          cp out/collector/firmware-dump.jar out/staging/collector/
+          sh "$SDK/bin/mkmodpkg.sh" out/staging/collector "$KEY"
+          # Rebuild the modified provider's native library, never package the upstream prebuilt binary.
+          W="$PWD/.wireless/wireless-carplay-aa"
+          mkdir -p out/wireless-tests
+          javac --release 8 -d out/wireless-tests "$W/src/hmgapi/mods/wireless/api/CarPlayIdentification.java" "$W/src/hmgapi/mods/wireless/IdentityRegistry.java" "$W/src/hmgapi/mods/wireless/StartSessionCodec.java" "$W/native/identity/StartSessionCodecTest.java"
+          java -cp out/wireless-tests hmgapi.mods.wireless.StartSessionCodecTest
+          sh "$W/tools/cpturns/test.sh"
+          sh "$W/tools/aa-text/test.sh"
+          sh "$W/native/identity/build.sh"
+          cp -a "$W" out/staging/wireless-carplay-aa
+          sh "$SDK/bin/build-mod.sh" out/staging/wireless-carplay-aa out/wireless-carplay-aa out/wireless-work
+          HMGAPI_MOD_BUILD="$PWD/out/wireless-carplay-aa" sh "$SDK/bin/mkmodpkg.sh" out/staging/wireless-carplay-aa "$KEY"
+          mkdir -p out/release
+          for f in out/packages/*.zip; do
+            tmp=$(mktemp -d)
+            unzip -q "$f" -d "$tmp"
+            java -cp "$SDK/lib/hmgapi-engine.jar" hmgapi.engine.Signing verify "$tmp"
+            rm -rf "$tmp"
+            cp "$f" out/release/
+          done
+          test "$(find out/release -name '*.zip' | wc -l)" -eq 5
+          cp "docs/rc${VERSION##*.}-testing.md" out/release/TESTING.md
+          (cd out/release && sha256sum *.zip > SHA256SUMS.txt && zip -q CarPlay-Ultra-Lite-K5-$VERSION-testing-bundle.zip *.zip TESTING.md SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-packages
+          path: out/release/
+  publish:
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: rc3-signed-packages
+          path: release
+      - name: Publish verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET: ${{ github.sha }}
+        
+        run: |
+          bundle=$(basename "$(find release -name 'CarPlay-Ultra-Lite-K5-*-testing-bundle.zip' -print -quit)")
+          VERSION=${bundle#CarPlay-Ultra-Lite-K5-}
+          VERSION=${VERSION%-testing-bundle.zip}
+          gh release create "v$VERSION" release/*.zip release/SHA256SUMS.txt --target "$TARGET" --title "CarPlay Ultra-Lite K5 $VERSION" --notes-file release/TESTING.md
+
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: Build and sign five packages
         shell: bash
         run: |
