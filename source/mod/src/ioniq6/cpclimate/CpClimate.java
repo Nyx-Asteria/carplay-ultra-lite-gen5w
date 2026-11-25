@@ -229,7 +229,18 @@ public final class CpClimate extends ModEntry {
                 media = new CarPlayMedia(new CarPlayMedia.Later() {
                     public void post(Runnable action, long delayMs) { handler.postDelayed(action, delayMs); }
                 }, log, m);
-                VehicleState.mediaControls = media;
+                final K5Radio radio = vehicle == null ? null : vehicle.radio;
+                VehicleState.mediaControls = new VehicleState.Controls() {
+                    public void pressed(String name, Object value) {
+                        if (radio != null && radio.fmSelected()) {
+                            if ("nextItem".equals(name)) { radio.seekFm(true); return; }
+                            if ("previousItem".equals(name)) { radio.seekFm(false); return; }
+                            // FM playback controls must not accidentally control the phone.
+                            return;
+                        }
+                        media.pressed(name, value);
+                    }
+                };
                 m.log("[media] manual controls ready; no autoplay");
             }
             m.log("[climate] reader and both vehicle-state lanes started");
