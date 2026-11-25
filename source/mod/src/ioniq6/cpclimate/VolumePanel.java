@@ -42,7 +42,7 @@ final class VolumePanel {
                 final Handler handler = new Handler(thread.getLooper());
                 installPresentationHooks(mod, context, p.getResult(), handler);
                 installRadioTrace(mod, p.getResult());
-                installMetadataTrace(mod, p.getResult());
+                installMetadataTrace(mod, p.getResult(), context, handler);
                 context.registerReceiver(new BroadcastReceiver() {
                     @Override public void onReceive(Context c, Intent i) {
                         long now = android.os.SystemClock.elapsedRealtime();
@@ -83,11 +83,12 @@ final class VolumePanel {
             } catch (Throwable ignored) {}
         }
     }
-    private static void installMetadataTrace(final ModContext m, Object loader) {
+    private static void installMetadataTrace(final ModContext m, Object loader, Context context, Handler handler) {
         if (!verifiedPanel) return;
         try {
             ClassLoader cl = (ClassLoader) Points.get(null, "framework.hkmc_loader.class_loader", loader);
             if (cl == null) return;
+            installLiveMetadata(m, cl, context, handler);
             traceMethod(m, cl, "com.hkmc.micom.RadioService", "onHDRadioID3TagChanged",
                     int.class, int.class, String.class);
             traceMethod(m, cl, "com.hkmc.micom.RadioService", "onHDRadioSISNameReceived",
@@ -103,6 +104,37 @@ final class VolumePanel {
             traceMethod(m, cl, "com.hkmc.micom.MicomAudioService", "isBoseCPAvailable");
         } catch (Throwable t) { m.log("[radio-meta] trace setup unavailable: " + t.getClass().getSimpleName()); }
     }
+    // Capture only bounded, station-associated data. No OEM service call on the callback thread.
+    private static void installLiveMetadata(final ModContext m, ClassLoader cl, final Context context, final Handler handler) {
+        try {
+            final Class<?> radio = Hooks.findClass("com.hkmc.micom.RadioService", cl);
+            final java.lang.reflect.Method frequency = Hooks.findMethodExact(radio, "getLastFMFrequency");
+            if (frequency.getReturnType() != int.class) return;
+            Hooks.findAndHookMethod(radio, "onHDRadioSISNameReceived", int.class, String.class, new MethodHook() {
+                @Override protected void afterHookedMethod(Param p) {
+                    try {
+                        if (!m.enabled() || !m.settingBoolean("k5_integration", true)) return;
+                        final Object service = p.thisObject;
+                        final String name = p.args[1] instanceof String ? (String)p.args[1] : "";
+                        if (name.length() > 256) return;
+                        final long received = android.os.SystemClock.elapsedRealtime();
+                        handler.post(new Runnable() { public void run() {
+                            try {
+                                // Frequency is sampled on the observer thread; discard delayed callbacks.
+                                if (android.os.SystemClock.elapsedRealtime() - received > 500) return;
+                                long khz = K5Radio.fmKhz(((Integer)frequency.invoke(service)).intValue());
+                                if (khz <= 0) return;
+                                context.sendBroadcast(new Intent(K5Radio.METADATA_ACTION).setPackage("com.daudio.app.dipo")
+                                        .putExtra("frequency", khz).putExtra("name", name).putExtra("received", received), PERMISSION);
+                            } catch (Throwable ignored) {}
+                        }});
+                    } catch (Throwable ignored) {}
+                }
+            });
+            m.log("[radio-meta] live SIS station-name hook installed");
+        } catch (Throwable t) { m.log("[radio-meta] live SIS unavailable: " + t.getClass().getSimpleName()); }
+    }
+
     private static void traceMethod(final ModContext m, ClassLoader cl, final String owner,
                                     final String name, Class<?>... types) {
         try {

@@ -25,8 +25,35 @@ final class K5Radio {
                     && context.getPackageManager().resolveActivity(candidate,0)!=null) found=candidate;
         } catch (Exception e) { log.log("[radio] discovery failed: "+e.getClass().getSimpleName()); }
         launch=found;
+        listenMetadata();
         log.log("[radio] stock radio launch available="+(launch!=null)+"; FM tuner subject to runtime service and firmware checks");
     }
+    static final String METADATA_ACTION = "ioniq6.cpclimate.RADIO_METADATA";
+    private volatile StationName stationName;
+    private static final class StationName {
+        final long khz, generation, received;
+        final String name;
+        StationName(long khz, long generation, long received, String name) {
+            this.khz = khz; this.generation = generation; this.received = received; this.name = name;
+        }
+    }
+    private void listenMetadata() {
+        try {
+            context.registerReceiver(new android.content.BroadcastReceiver() {
+                @Override public void onReceive(Context c, Intent i) {
+                    if (!enabled() || !CpClimate.sessionActive) return;
+                    long khz = i.getLongExtra("frequency", -1);
+                    long received = i.getLongExtra("received", -1);
+                    long now = android.os.SystemClock.elapsedRealtime();
+                    String name = i.getStringExtra("name");
+                    if (khz < 87500 || khz > 108000 || received < 0 || now < received
+                            || now - received > 2000 || name == null || name.length() > 256) return;
+                    stationName = new StationName(khz, CpClimate.sessionGeneration, received, name);
+                }
+            }, new android.content.IntentFilter(METADATA_ACTION), "android.permission.DEVICE_POWER", main);
+        } catch (Throwable t) { log.log("[radio-meta] receiver unavailable: " + t.getClass().getSimpleName()); }
+    }
+    private long lastFmFrequency = -1;
     private volatile String probeStatus = "Ready";
     private volatile boolean fmActive;
     private Object fmTuner, fmAudio;
@@ -116,10 +143,20 @@ final class K5Radio {
             int stream = readInt(fmAudio, CarAudio.IFACE, "getCurStreamType");
             // RC4 observed FM mode 2 / stream 38, AM mode 1 / stream 39.
             fmActive = khz > 0 && mode == 2 && stream == 38;
+            if (!fmActive) { stationName = null; lastFmFrequency = -1; }
             if (fmActive) {
+                if (lastFmFrequency != khz) {
+                    StationName previous = stationName;
+                    if (previous != null && previous.khz != khz) stationName = null;
+                    lastFmFrequency = khz;
+                }
                 values.put(4117L, khz);
                 values.put(4354L, "FM");
-                values.put(4355L, String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0));
+                StationName current = stationName;
+                String title = String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0);
+                if (current != null && current.khz == khz && current.generation == CpClimate.sessionGeneration
+                        && !current.name.isEmpty()) title = current.name;
+                values.put(4355L, title);
                 values.put(4359L, 1L);
             }
             // Advertise an available FM source even before it is selected.
