@@ -129,6 +129,44 @@ final class K5Radio {
         return true;
     }
 
+    /** Explicit FM selection via the stock framework wrapper. Never invoked on connect.
+     * DL322 260507 automotive.odex: ModeManager(Context), changeMode(Integer):boolean,
+     * ModeConstants.ModeType FM1=2. Foreground behavior requires parked validation. */
+    boolean selectFm() {
+        if (!enabled() || !CpClimate.sessionActive) return false;
+        final long generation = CpClimate.sessionGeneration;
+        fmCommands.execute(new Runnable() {
+            public void run() {
+                if (!probeActive(generation)) return;
+                try {
+                    if (!"7c99638e39c369c45fab9c485b103cf0".equals(
+                            ModContext.md5("/system/framework/automotive.odex"))) return;
+                    // Construct the framework wrapper on a Looper thread, as its
+                    // implementation can create Handler-backed listener transports.
+                    main.post(new Runnable() {
+                        public void run() {
+                            if (!probeActive(generation)) return;
+                            try {
+                                Class<?> type = Class.forName("com.hkmc.mode.ModeManager");
+                                java.lang.reflect.Method change = type.getMethod("changeMode", Integer.class);
+                                if (change.getReturnType() != boolean.class) return;
+                                Object manager = type.getConstructor(Context.class).newInstance(context);
+                                if (!probeActive(generation)) return;
+                                Object accepted = change.invoke(manager, Integer.valueOf(2));
+                                log.log("[radio] OEM FM1 mode request accepted=" + accepted);
+                            } catch (Throwable t) {
+                                log.log("[radio] FM selection failed: " + t.getClass().getSimpleName());
+                            }
+                        }
+                    });
+                } catch (Throwable t) {
+                    log.log("[radio] FM selection unavailable: " + t.getClass().getSimpleName());
+                }
+            }
+        });
+        return true;
+    }
+
     boolean fmSelected() { return fmActive; }
 
     String diagnosticStatus() { return probeStatus; }
