@@ -192,7 +192,8 @@ final class K5Radio {
             }
             String radio = "com.hkmc.media.IRadioService";
             String sxm = "com.hkmc.media.sxm65h.ISXM65HService";
-            Object tuner = null, audio = null, satellite = null;
+            String modeIface = "com.hkmc.mode.IModeManager";
+            Object tuner = null, audio = null, satellite = null, mode = null;
             java.util.Map<String,String> previous = new java.util.HashMap<String,String>();
             long deadline = android.os.SystemClock.elapsedRealtime() + 120000L;
             log.log("[radio-probe] start: 120 seconds, change stock bands/stations manually");
@@ -203,11 +204,15 @@ final class K5Radio {
                 catch (Throwable ignored) {}
                 try { if (satellite == null) satellite = service(serviceName("SXM65H_SERVICE"), sxm); }
                 catch (Throwable ignored) {}
-                String availability = "radio=" + (tuner != null) + " audio=" + (audio != null) + " sxm=" + (satellite != null);
+                try { if (mode == null) mode = service("com.hkmc.micom.mode", modeIface); }
+                catch (Throwable ignored) {}
+                String availability = "radio=" + (tuner != null) + " audio=" + (audio != null) + " sxm=" + (satellite != null) + " mode=" + (mode != null);
                 if (!availability.equals(previous.put("availability", availability))) log.log("[radio-probe] " + availability);
                 collect("radio", tuner, radio, new String[]{"getLastFMFrequency", "getLastFM2Frequency",
                         "getLastAMFrequency", "getTuningValue", "getLastPresetNumber"}, previous);
                 collect("audio", audio, CarAudio.IFACE, new String[]{"getAudioMode", "getCurStreamType"}, previous);
+                collect("mode", mode, modeIface, new String[]{"getCurrentMode", "getCurrentReadyMode",
+                        "getLastRadioMode", "isAvailableCurrentMode", "isChangeModeScheduled"}, previous);
                 collect("sxm", satellite, sxm, new String[]{"getLastTunedChannelID"}, previous);
                 Thread.sleep(1500);
             }
