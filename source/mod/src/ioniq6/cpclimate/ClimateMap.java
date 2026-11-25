@@ -120,6 +120,7 @@ final class ClimateMap {
         if (off && blankWhenOff) blankTargets(v);
         seat(v, r.driverSeat, DRIVER_SEAT_LEVEL, DRIVER_SEAT_ON);
         seat(v, r.passengerSeat, PASSENGER_SEAT_LEVEL, PASSENGER_SEAT_ON);
+        if (extras && VehicleState.wheelHeater && r.wheel >= 0) v.put(WHEEL_LEVEL, r.wheel > 0 ? 1L : 0L);
         return v;
     }
 
@@ -429,6 +430,9 @@ final class ClimateMap {
             } else if (iid == DRIVER_SEAT_LEVEL || iid == DRIVER_SEAT_ON) {
                 Command c = seat(SET_DRIVER_SEAT, iid == DRIVER_SEAT_ON, v, now.get(DRIVER_SEAT_LEVEL));
                 if (c != null) out.add(c);
+            } else if (extras && VehicleState.wheelHeater && iid == WHEEL_LEVEL && v instanceof Long) {
+                long level = (Long) v;
+                if (level == 0 || level == 1) out.add(new Command(WHEEL, (int)level, 0, 0));
             } else if (iid == PASSENGER_SEAT_LEVEL || iid == PASSENGER_SEAT_ON) {
                 Command c = seat(SET_PASSENGER_SEAT, iid == PASSENGER_SEAT_ON, v, now.get(PASSENGER_SEAT_LEVEL));
                 if (c != null) out.add(c);

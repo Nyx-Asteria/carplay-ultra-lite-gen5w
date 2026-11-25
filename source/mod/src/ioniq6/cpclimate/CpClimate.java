@@ -193,7 +193,8 @@ public final class CpClimate extends ModEntry {
             // A: ventilation as separate SeatFan services; B: as the seats' own cooling levels, plus a rear zone
             // the driver card has room for three buttons: AUTO, vent position, seat (2026-11-10: more were drawn on top
             // of each other). The wheel heater and the per-seat power are off unless turned on.
-            VehicleState.wheelHeater = false;
+            VehicleState.wheelHeater = climate && CarClimate.wheelAvailable();
+            m.log("[wheel] OEM methods available=" + VehicleState.wheelHeater);
             VehicleState.zonePower = false;
             VehicleState.rearZone = false;
             ClimateMap.blankWhenOff = true;

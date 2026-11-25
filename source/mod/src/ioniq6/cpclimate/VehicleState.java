@@ -490,9 +490,11 @@ final class VehicleState {
         Object list = OpackCodec.decode(accessories);
         if (!(list instanceof List)) return null;
         Map<Object, Object> driver = null, passenger = null;
+        List<Object> climateServices = null;
         for (Object a : (List<Object>) list) {
             Object services = a instanceof Map ? ((Map<Object, Object>) a).get("services") : null;
             if (!(services instanceof List)) continue;
+            if (Long.valueOf(512).equals(OpackCodec.asLong(((Map<Object,Object>)a).get("iid")))) climateServices = (List<Object>) services;
             for (Object s : (List<Object>) services) {
                 if (!(s instanceof Map)) continue;
                 Map<Object, Object> service = (Map<Object, Object>) s;
@@ -504,6 +506,7 @@ final class VehicleState {
         if (driver == null || passenger == null) return null;
         withCooling(driver);
         withCooling(passenger);
+        if (wheelHeater && climateServices != null) climateServices.add(wheelService(driver, values));
         return OpackCodec.encode(list);
     }
 
@@ -540,6 +543,10 @@ final class VehicleState {
             byte[] with = withExtras(acc, values);
             if (with != null) {
                 acc = with;
+                if (wheelHeater && values.containsKey(ClimateMap.WHEEL_LEVEL)) {
+                    writable.add(ClimateMap.WHEEL_LEVEL); shared.add(ClimateMap.WHEEL_LEVEL);
+                    names.put(ClimateMap.WHEEL_LEVEL, "steeringWheelHeatingLevel");
+                }
                 out.log("VS K5 front seat heating and ventilation: -3 through +3");
             } else out.log("VS K5 front seat ventilation description unavailable");
         }

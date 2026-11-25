@@ -229,6 +229,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
         hmgapi.hook.ModContext m = testContext;
         if (m == null || !m.enabled() || !m.settingBoolean("k5_integration", true)) return false;
         if (c.kind == ClimateMap.REAR) return rearDefrost;
+        if (c.kind == ClimateMap.WHEEL) return VehicleState.wheelHeater && wheelAvailable() && (c.a == 0 || c.a == 1);
         if (c.kind == ClimateMap.SEAT)
             return (c.a == ClimateMap.SET_DRIVER_SEAT || c.a == ClimateMap.SET_PASSENGER_SEAT)
                     && c.b >= 2 && c.b <= 8;
@@ -393,7 +394,8 @@ final class CarClimate extends Thread implements VehicleState.Car {
         if (usm != null) {
             r.driverSeat = seat(usm, txDriverSeat);
             r.passengerSeat = seat(usm, txPassengerSeat);
-            // K5: only the front seat actuators are supported.
+            if (VehicleState.wheelHeater) r.wheel = wheelOn(usm);
+            // K5: no rear seat actuators.
         }
         if (rearDefrost) {
             watchBody();
@@ -498,9 +500,11 @@ final class CarClimate extends Thread implements VehicleState.Car {
     static final long WHEEL_SETTLE_MS = 8000;
 
     /** the steering wheel heater's state: 1 if either indicator step is lit, 0 if both are dark, -1 if neither could be read */
+    static boolean wheelAvailable() { return txSetWheel >= 0 && txWheelStep1 >= 0 && txWheelStep2 >= 0; }
+
     static int wheelOn(IBinder usm) {
         int s1 = seat(usm, txWheelStep1), s2 = seat(usm, txWheelStep2);
-        if (s1 < 0 && s2 < 0) return -1;
+        if (s1 < 0 || s2 < 0) return -1;
         return s1 > 0 || s2 > 0 ? 1 : 0;
     }
 
