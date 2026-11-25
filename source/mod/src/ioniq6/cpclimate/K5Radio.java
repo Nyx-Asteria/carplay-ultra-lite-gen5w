@@ -365,6 +365,49 @@ final class K5Radio {
         } catch (Throwable t) { log.log("[radio-api] " + name + ": " + t.getClass().getSimpleName()); }
     }
 
+    /** Read-only OEM smart favorites discovery. Channel IDs are not assumed
+     * to be display channel numbers; no subscription or tuning changes. */
+    private void probeSxmFavorites(Object satellite, String iface, java.util.Map<String,String> previous) {
+        if (satellite == null) return;
+        try {
+            int category = readInt(satellite, iface, "getSmartFavoritesCategoryID");
+            if (category < 0) return;
+            Object channels = Class.forName(iface).getMethod("getCategoryChannels", int.class)
+                    .invoke(satellite, category);
+            if (channels == null || !channels.getClass().isArray()) return;
+            Class<?> channel = Class.forName("com.hkmc.media.sxm65h.Channel");
+            if (channels.getClass().getComponentType() != channel) return;
+            String[] names = {"mChannelID", "mChannelLongName", "mCategoryLongName",
+                    "mTitle", "mArtist", "mImageName", "mIsSubscribed", "mIsSkipped"};
+            java.lang.reflect.Field[] fields = new java.lang.reflect.Field[names.length];
+            for (int i=0; i<names.length; i++) {
+                fields[i] = channel.getDeclaredField(names[i]);
+                fields[i].setAccessible(true);
+            }
+            int count = java.lang.reflect.Array.getLength(channels);
+            String summary = "category=" + category + " count=" + count;
+            if (!summary.equals(previous.put("sxm.favorites", summary)))
+                log.log("[radio-sxm] smart favorites " + summary);
+            for (int i=0; i<Math.min(count, 100); i++) {
+                Object entry = java.lang.reflect.Array.get(channels, i);
+                if (entry == null) continue;
+                StringBuilder line = new StringBuilder();
+                for (java.lang.reflect.Field field : fields) {
+                    String value = String.valueOf(field.get(entry)).replace('\n', ' ').replace('\r', ' ');
+                    if (value.length() > 128) value = value.substring(0,128);
+                    line.append(field.getName()).append('=').append(value).append(' ');
+                }
+                String value = line.toString();
+                if (!value.equals(previous.put("sxm.favorite." + i, value)))
+                    log.log("[radio-sxm] " + value);
+            }
+        } catch (Throwable t) {
+            String error = t.getClass().getSimpleName();
+            if (!error.equals(previous.put("sxm.favorites.error", error)))
+                log.log("[radio-sxm] smart favorites unavailable: " + error);
+        }
+    }
+
     private void probeTuner(long generation) {
         if (!probeActive(generation)) return;
         try {
@@ -378,6 +421,7 @@ final class K5Radio {
             Object tuner = null, audio = null, satellite = null, mode = null;
             java.util.Map<String,String> previous = new java.util.HashMap<String,String>();
             long deadline = android.os.SystemClock.elapsedRealtime() + 120000L;
+            long nextSxmProbe = 0;
             log.log("[radio-probe] start: 120 seconds, change stock bands/stations manually");
             for (String type : new String[]{radio, sxm, modeIface,
                     "com.hkmc.media.MicomRadioManager", "com.hkmc.media.MicomRadioListener",
@@ -404,6 +448,11 @@ final class K5Radio {
                 collect("mode", mode, modeIface, new String[]{"getCurrentMode", "getCurrentReadyMode",
                         "getLastRadioMode", "isAvailableCurrentMode", "isChangeModeScheduled"}, previous);
                 collect("sxm", satellite, sxm, new String[]{"getLastTunedChannelID"}, previous);
+                long now = android.os.SystemClock.elapsedRealtime();
+                if (now >= nextSxmProbe) {
+                    nextSxmProbe = now + 10000L;
+                    probeSxmFavorites(satellite, sxm, previous);
+                }
                 Thread.sleep(1500);
             }
         } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
