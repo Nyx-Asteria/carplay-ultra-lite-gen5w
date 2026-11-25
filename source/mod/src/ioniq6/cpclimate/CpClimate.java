@@ -245,12 +245,16 @@ public final class CpClimate extends ModEntry {
                                 try { khz = Long.valueOf((String)params.get("identifier")); }
                                 catch (NumberFormatException ignored) {}
                             }
-                            if (khz == null || !radio.tuneFm(khz))
+                            if (khz == null || !("FM".equals(source) ? radio.selectAndTuneFm(khz) : radio.tuneFm(khz)))
                                 log.log("[radio] tune refused: invalid frequency or inactive FM");
                             return;
                         }
                         if ("changeMediaSource".equals(name)) {
-                            log.log("[radio] source selection not yet implemented");
+                            if (radio == null || !(value instanceof java.util.Map)) return;
+                            Object source = ((java.util.Map<?,?>) value).get("identifier");
+                            if ("FM".equals(source)) {
+                                if (!radio.selectFm()) log.log("[radio] FM selection refused");
+                            } else log.log("[radio] unsupported source selection");
                             return;
                         }
                         if (radio != null && radio.fmSelected()) {
