@@ -27,17 +27,66 @@ final class K5Radio {
         launch=found;
         log.log("[radio] stock radio launch available="+(launch!=null)+"; direct tuner unavailable pending OEM interface evidence");
     }
+    private volatile String probeStatus = "Ready";
+    private volatile boolean fmActive;
+    private Object fmTuner, fmAudio;
+    private static final String RADIO_IFACE = "com.hkmc.media.IRadioService";
+
+    /** North American OEM FM values are in 10 kHz units. Reject unknown/out-of-band readings. */
+    static long fmKhz(int raw) {
+        return raw >= 8750 && raw <= 10800 ? raw * 10L : -1L;
+    }
+
+    private int readInt(Object proxy, String iface, String method) throws Exception {
+        if (proxy == null) return -1;
+        java.lang.reflect.Method m = Class.forName(iface).getMethod(method);
+        if (m.getReturnType() != int.class) return -1;
+        return ((Integer)m.invoke(proxy)).intValue();
+    }
+
+    /** Read-only FM state; never change the OEM source merely because CarPlay connects. */
+    java.util.Map<Long,Object> refreshFm() {
+        java.util.Map<Long,Object> values = new java.util.LinkedHashMap<Long,Object>();
+        fmActive = false;
+        values.put(4115L, true);
+        values.put(4354L, "");
+        values.put(4355L, "");
+        values.put(4359L, 0L);
+        values.put(4117L, ClimateMap.BLANK);
+        if (!enabled() || !CpClimate.sessionActive) return values;
+        try {
+            if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) return values;
+            if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
+            if (fmAudio == null) fmAudio = service(CarAudio.SERVICE, CarAudio.IFACE);
+            long khz = fmKhz(readInt(fmTuner, RADIO_IFACE, "getLastFMFrequency"));
+            int mode = readInt(fmAudio, CarAudio.IFACE, "getAudioMode");
+            int stream = readInt(fmAudio, CarAudio.IFACE, "getCurStreamType");
+            // RC4 observed FM mode 2 / stream 38, AM mode 1 / stream 39.
+            fmActive = khz > 0 && mode == 2 && stream == 38;
+            if (fmActive) {
+                values.put(4117L, khz);
+                values.put(4354L, "FM");
+                values.put(4355L, String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0));
+                values.put(4359L, 1L);
+            }
+            // Source stays disabled until native command handling is available.
+        } catch (Throwable t) { fmTuner = null; fmAudio = null; }
+        return values;
+    }
+
+    String diagnosticStatus() { return probeStatus; }
     private boolean probing;
     /** Explicit, bounded diagnostic run. Poll only known read-only primitive getters.
      * No manager construction, listener registration, tuning or source changes. */
     private synchronized void startProbe() {
         if (probing || !enabled()) return;
         probing = true;
+        probeStatus = "Collecting (2 min)";
         final long generation = CpClimate.sessionGeneration;
         Thread worker = new Thread(new Runnable() {
             public void run() {
                 try { probeTuner(generation); }
-                finally { synchronized (K5Radio.this) { probing = false; } }
+                finally { synchronized (K5Radio.this) { probing = false; probeStatus = "Finished — see log"; } }
             }
         }, "k5-radio-probe");
         worker.setDaemon(true);
@@ -115,6 +164,7 @@ final class K5Radio {
         page.sectionName("radio","Radio");
         page.tile("radio","radio");
         page.button("radio","radio.open","Open Kia radio","radio");
+        page.line("radio","radio.status","Diagnostics status","radio");
         page.button("radio","radio.diagnostics","Collect radio diagnostics (2 min)","radio");
     }
     void pressed(String id) {
