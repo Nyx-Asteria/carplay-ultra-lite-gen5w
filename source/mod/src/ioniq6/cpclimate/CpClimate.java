@@ -122,7 +122,7 @@ public final class CpClimate extends ModEntry {
             // Theme registration is not integrated yet. Never advertise unsupported Ultra mode.
             boolean ultra = themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true);
             m.log("[theme] DiPO display profile enabled=" + ultra + " (shared provider native result not exposed)");
-            writeSize(dir, "100");
+            writeSize(dir, "80");
             writeDock(dir, "1");                                  // the bottom dock with the climate bar
             writeVersion(dir, "950");                             // receiver version 950.7.1 in /info
             writeFlag(dir, "cpc-extras", climate, "LIVI display extras");
