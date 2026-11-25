@@ -85,7 +85,9 @@ final class K5Radio {
     }
     private long lastFmFrequency = -1;
     private volatile String probeStatus = "Ready";
-    private volatile boolean fmActive;
+    private volatile boolean fmActive, sxmActive, sxmAvailable;
+    private Object sxmTuner;
+    private static final String SXM_IFACE = "com.hkmc.media.sxm65h.ISXM65HService";
     private Object fmTuner, fmAudio;
     private static final String RADIO_IFACE = "com.hkmc.media.IRadioService";
 
@@ -161,12 +163,18 @@ final class K5Radio {
         values.put(4118L, java.util.Collections.emptyList());
         values.put(4354L, "");
         values.put(4355L, "");
+        values.put(4356L, "");
+        values.put(4357L, "");
+        if (VehicleState.sxmSchemaTest) {
+            values.put(4131L, true);
+            values.put(4133L, "");
+        }
         values.put(4358L, EMPTY_ARTWORK);
         values.put(4359L, 0L);
         values.put(4117L, ClimateMap.BLANK);
-        if (!enabled() || !CpClimate.sessionActive) { fmActive = false; lastListPoll = 0; fmItems = java.util.Collections.emptyList(); return values; }
+        if (!enabled() || !CpClimate.sessionActive) { fmActive = false; sxmActive = false; sxmAvailable = false; lastListPoll = 0; fmItems = java.util.Collections.emptyList(); return values; }
         try {
-            if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) { fmActive = false; return values; }
+            if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) { fmActive = false; sxmActive = false; sxmAvailable = false; return values; }
             if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
             if (fmAudio == null) fmAudio = service(CarAudio.SERVICE, CarAudio.IFACE);
             long khz = fmKhz(readInt(fmTuner, RADIO_IFACE, "getLastFMFrequency"));
@@ -174,6 +182,8 @@ final class K5Radio {
             int stream = readInt(fmAudio, CarAudio.IFACE, "getCurStreamType");
             // RC4 observed FM mode 2 / stream 38, AM mode 1 / stream 39.
             fmActive = khz > 0 && mode == 2 && stream == 38;
+            sxmActive = mode == 4 && stream == 41;
+            refreshSxm(values);
             if (!fmActive) { stationName = null; stationArtwork = null; lastFmFrequency = -1; }
             if (fmActive) {
                 if (lastFmFrequency != khz) {
@@ -214,8 +224,32 @@ final class K5Radio {
                 }
                 values.put(4118L, fmItems);
             }
-        } catch (Throwable t) { fmActive = false; fmTuner = null; fmAudio = null; }
+        } catch (Throwable t) { fmActive = false; sxmActive = false; sxmAvailable = false; fmTuner = null; fmAudio = null; sxmTuner = null; }
         return values;
+    }
+
+    // Experimental Apple source schema remains explicitly opt-in. Native
+    // ownership is tracked even without it to prevent forwarding radio keys to the phone.
+    private void refreshSxm(java.util.Map<Long,Object> values) {
+        sxmAvailable = false;
+        if (!VehicleState.sxmSchemaTest) return;
+        try {
+            if (sxmTuner == null) sxmTuner = service(serviceName("SXM65H_SERVICE"), SXM_IFACE);
+            int channel = readInt(sxmTuner, SXM_IFACE, "getLastTunedChannelID");
+            sxmAvailable = sxmTuner != null && channel >= 0;
+            values.put(4131L, !sxmAvailable);
+            if (!sxmAvailable || !sxmActive) return;
+            values.put(4133L, Integer.toString(channel));
+            values.put(4354L, "SXM");
+            values.put(4355L, "SiriusXM");
+            values.put(4359L, 1L);
+        } catch (Throwable t) { sxmTuner = null; }
+    }
+
+    boolean sxmSelected() { return sxmActive; }
+    boolean selectSxm() {
+        if (!VehicleState.sxmSchemaTest || !sxmAvailable) return false;
+        return selectRadioMode(tuneRequest.incrementAndGet(), 13);
     }
 
     /** Queue a seek only for the already-active FM tuner; never route a radio seek to the phone.
@@ -309,7 +343,9 @@ final class K5Radio {
 
     boolean selectFm() { return selectFm(tuneRequest.incrementAndGet()); }
 
-    private boolean selectFm(final long request) {
+    private boolean selectFm(final long request) { return selectRadioMode(request, 2); }
+
+    private boolean selectRadioMode(final long request, final int targetMode) {
         if (!enabled() || !CpClimate.sessionActive) return false;
         final long generation = CpClimate.sessionGeneration;
         fmCommands.execute(new Runnable() {
@@ -329,15 +365,15 @@ final class K5Radio {
                                 if (change.getReturnType() != boolean.class) return;
                                 Object manager = type.getConstructor(Context.class).newInstance(context);
                                 if (!probeActive(generation) || request != tuneRequest.get()) return;
-                                Object accepted = change.invoke(manager, Integer.valueOf(2));
-                                log.log("[radio] OEM FM1 mode request accepted=" + accepted);
+                                Object accepted = change.invoke(manager, Integer.valueOf(targetMode));
+                                log.log("[radio] OEM mode " + targetMode + " request accepted=" + accepted);
                             } catch (Throwable t) {
-                                log.log("[radio] FM selection failed: " + t.getClass().getSimpleName());
+                                log.log("[radio] mode selection failed: " + t.getClass().getSimpleName());
                             }
                         }
                     });
                 } catch (Throwable t) {
-                    log.log("[radio] FM selection unavailable: " + t.getClass().getSimpleName());
+                    log.log("[radio] mode selection unavailable: " + t.getClass().getSimpleName());
                 }
             }
         });
