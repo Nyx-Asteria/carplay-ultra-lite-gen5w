@@ -129,7 +129,7 @@ public final class CpClimate extends ModEntry {
             boolean enhanced = ultra;
             m.log("[theme] identity=" + themePreflight + " cluster=" + cluster + " themedIds=" + themedIds + " variant=" + variant + " features=" + features + " enhanced=" + enhanced);
             m.log("[theme] DiPO display profile enabled=" + ultra + " (shared provider native result not exposed)");
-            writeSize(dir, "80");
+            // Scaling is owned by a separate mod; do not write its configuration.
             writeDock(dir, "1");                                  // the bottom dock with the climate bar
             writeVersion(dir, "950");                             // receiver version 950.7.1 in /info
             writeFlag(dir, "cpc-extras", climate, "LIVI display extras");
@@ -305,25 +305,6 @@ public final class CpClimate extends ModEntry {
     @Override public void onEnabled(ModContext m, boolean enabled) {
         if (!enabled) { theme.unregister(m); sessionActive = false; sessionGeneration++; VideoMessages.stopEngine("mod disabled"); }
         m.log("[runtime] enabled=" + enabled + "; restart required to change advertised capabilities");
-    }
-
-    /** the CarPlay size setting, for the native /info hook (files/cpc-size, 50-100 %) */
-    static void writeSize(File dir, String size) {
-        File f = new File(dir, "cpc-size");
-        try {
-            int pct = Integer.parseInt(size.trim());
-            if (pct < 50 || pct > 100) pct = 100;
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(pct + "\n");
-            } finally {
-                w.close();
-            }
-            mod.log("CarPlay size " + pct + " %");
-        } catch (Exception e) {
-            f.delete();
-            mod.log("CarPlay size: real size (" + e + ")");
-        }
     }
 
     /** the dock position setting, for the native /info hook (files/cpc-dock: 0 auto, 1 bottom, 2 side) */
