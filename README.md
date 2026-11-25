@@ -4,79 +4,134 @@
 
 **Your Kia. Your CarPlay.**
 
-A dedicated CarPlay Ultra-style experience for the Kia K5, powered by HMG-API.
+An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by HMG-API.
 
-[![Status](https://img.shields.io/badge/status-RC4_testing-f59e0b?style=flat-square)](#development)
-[![HMG-API](https://img.shields.io/badge/HMG--API-required-2563eb?style=flat-square)](https://github.com/Open-HMG/HMG-API)
+[![Development](https://img.shields.io/badge/development-RC5-f59e0b?style=flat-square)](#development)
+[![HMG-API](https://img.shields.io/badge/HMG--API-1.1.0--rc.8%2B-2563eb?style=flat-square)](https://github.com/Open-HMG/HMG-API)
+[![Platform](https://img.shields.io/badge/platform-K5_Gen5W__M-64748b?style=flat-square)](#compatibility)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-22c55e?style=flat-square)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-K5_Gen5W-64748b?style=flat-square)](#compatibility)
 
-[Features](#features) · [Compatibility](#compatibility) · [Installation](#installation) · [Development](#development) · [Technical details](#technical-details)
+[Features](#features) · [Compatibility](#compatibility) · [Installation](#installation) · [Settings](#settings) · [Development](#development) · [Credits](#credits)
 
 </div>
 
 ---
 
-## Overview
+An independent K5 port of [SafariForest's CarPlay Ultra-Lite](https://github.com/SafariForest/carplay-ultra-lite-gen5w). Native vehicle controls, Ultra-style appearance and parked video are integrated into CarPlay without adding EV routing or changing the physical instrument cluster.
 
-CarPlay Ultra-Lite K5 is an independent port of [SafariForest's CarPlay Ultra-Lite](https://github.com/SafariForest/carplay-ultra-lite-gen5w) for the Kia K5 Gen5W_M. It retains the existing wireless projection installation and does not add EV routing.
+> **Development status:** RC5 is in preparation. Features described below reflect the development branch, not a claim of verified hardware operation or an already published RC5 package.
 
 ## Features
 
-| Feature | Status |
+### Climate & comfort
+
+| Feature | Implementation |
 | --- | --- |
-| Front climate and media | Basic temperature and media controls observed working in RC2; further feedback testing required |
-| Front seats | Separate heating and ventilation controls; revised BCM feedback and OEM USM commands, pending vehicle validation |
-| Heated steering wheel | Explicit OEM on/off commands and BCM feedback; pending vehicle validation |
-| Vehicle | Odometer and app shortcuts; fuel range unresolved |
-| Comfort | Optional winter heating and summer ventilation threshold sections, using separate increase/decrease controls |
-| Volume and media | Exact-firmware pre-presentation volume suppression (default on); DiPO music OSD suppression (opt-in); both experimental |
-| Radio | Stock radio shortcut and opt-in two-minute read-only tuner diagnostics; native tuning deferred |
-| CarPlay scaling | Fixed 80% experiment; visual result unverified |
-| Ultra | Consolidated Ultra and theme synchronization controls; metadata-derived layout and palette validation, persistent selection |
-| AirPlay video/audio | Experimental, disabled by default; codec fix removed the observed decoder query error, but playback remains unresolved. Video requires fresh Park feedback and active session. |
+| Front climate | Temperature, airflow, fan and defrost integration |
+| Heated seats | Independent driver/passenger off, low, medium and high |
+| Ventilated seats | Independent driver/passenger off, low, medium and high; explicit SeatFan schema |
+| Seat command arbitration | Coalesces level and power writes into one OEM command per physical seat |
+| Feedback | BCM state mapping and raw diagnostics; OEM USM commands |
+| Heated steering wheel | Explicit on/off commands with BCM feedback |
+| Comfort thresholds | Optional separate Comfort package |
+| Vehicle information | Odometer and vehicle shortcuts; fuel range remains unresolved |
+
+Driver heating and wheel heating have been reported working; passenger heat and both ventilation controls are revised for RC5 and require vehicle validation.
+
+### Ultra appearance & projection
+
+- Consolidated CarPlay Ultra and theme/UI synchronization options.
+- Theme identity and session-start contribution through the companion wireless provider.
+- Metadata-derived layout and palette validation, persisted selection and phone-managed center layout.
+- Midnight virtual-cluster default; native center wallpaper selection remains unresolved.
+- Optional [Phone Projection Scaling](https://github.com/Nyx-Asteria/Phone-Projection-Scaling) integration: CPUL hosts CarPlay scaling, PPS independently handles Android Auto scaling. No competing CarPlay native patches.
+- Firmware-gated stock volume popup suppression and optional stock media popup suppression.
+
+### Native FM radio
+
+- Native CarPlay FM source selection, frequency tuning, seeking and frequency feedback.
+- North American 200 kHz tuning grid with source ownership checks.
+- Bounded asynchronous source activation and cancellation.
+- Unsupported European DAB service omitted; stock radio shortcut and read-only diagnostic collector retained.
+
+FM requires vehicle validation. RDS, HD metadata and station-list population remain incomplete. SiriusXM is deferred; its experimental schema is disabled by default.
+
+### Parked AirPlay video
+
+- CarPlay-native video using the iPhone proxy and ExoPlayer.
+- Corrected redirect/range handling, playback intent retention and first-frame black shutter.
+- Explicit HLS MIME hints, reduced startup buffering, preferred H.264 and 720p adaptive video with fallback.
+- LIVI-compatible playback-status fields and scalar timing support alongside the existing response.
+- Fresh Park feedback and active CarPlay session required; video is disabled by default, local audio separately opt-in.
+
+Playback remains experimental. Independent AirPlay mirroring and YouTube discovery are future work, not features of this build. See [standalone AirPlay integration](docs/standalone-airplay-integration.md).
 
 ## Compatibility
 
-Target: 2022 Kia K5 US, `DL322.USA.0000.V015.012.260507`, Gen5W_M, Android 4.4.2/API 19, 1920 × 720. Other vehicles and firmware are unsupported. Exact library fingerprints gate activation.
+| Item | Target |
+| --- | --- |
+| Vehicle | 2022 Kia K5 US |
+| Platform | Gen5W_M |
+| Firmware | `DL322.USA.0000.V015.012.260507` |
+| Android | 4.4.2 / API 19 |
+| Display | 1920 × 720 |
+| Framework | HMG-API 1.1.0-rc.8 or later |
+| Phone | iOS 26 or later for Ultra features |
+
+Exact firmware fingerprints gate activation. Other cars and firmware are unsupported.
 
 ## Installation
 
-- [HMG-API](https://github.com/Open-HMG/HMG-API) v1.1.0-rc.8 or later and an existing working Wireless CarPlay installation.
-- iOS 26 or later for Ultra-style features.
-- Install the test-signed CPUL package from [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases). Optional Comfort and diagnostic packages are separate.
-- Preserve a rollback copy of the working Wireless package and Wi-Fi setup. The included fork is optional for basic CPUL and required for the session-start extension. Do not install a competing EV Routing identity patch.
-- Test signing keys change between builds; uninstall previous test packages if signatures conflict. Back up settings first.
+Download a published package from [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases). Preserve a rollback copy of working wireless projection and back up settings first.
+
+The planned development bundle includes:
+
+| Package | Role |
+| --- | --- |
+| CPUL K5 | Vehicle integration and Ultra |
+| [Wireless CP/AA fork](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa) | Wireless projection and Ultra identity/session-start |
+| [Phone Projection Scaling](https://github.com/Nyx-Asteria/Phone-Projection-Scaling) | Optional relative projection scaling |
+| [Comfort fork](https://github.com/Nyx-Asteria/hmgapi-comfort) | Optional comfort thresholds |
+| Compatibility check | Firmware and environment checks |
+| Firmware collector | Allowlisted diagnostic export |
+
+The next bundle is configured to use one permanent author identity. Older test-signed packages may need removal before installing packages signed with the permanent key. Do not install competing identity patches. Test wireless reconnect and rollback while parked.
 
 ## Settings
 
-All settings require restart. Existing explicit saved selections are retained.
+Restart after changing settings. Explicit saved selections are retained.
 
 | Setting | Default |
 | --- | --- |
 | K5 vehicle integration | On |
 | Suppress stock volume popup | On |
-| Suppress stock media popup (experimental) | Off |
+| Suppress stock media popup | Off |
 | CarPlay Ultra | On |
 | Ultra themes and UI synchronization | On |
 | Parked AirPlay video | Off |
-| AirPlay video audio (experimental) | Off |
+| AirPlay video audio | Off |
+| SiriusXM schema experiment | Off |
 
-Ultra theme synchronization depends on CarPlay Ultra. The virtual cluster is for protocol negotiation; no physical cluster customization is included. Midnight is the initial virtual Modular palette; the desired center-screen wallpaper default remains unresolved. No custom K5 model is shipped.
+Ultra theme synchronization depends on Ultra. PPS owns the scaling preference; CPUL consumes it when active. Disable CPUL itself to use PPS's standalone CarPlay native patch. If all individual CPUL features are disabled while the mod remains enabled, scaling is withheld rather than risking competing patches.
 
 ## Development
 
-RC4 adds revised climate feedback and controls, consolidated Ultra/theme synchronization, experimental OEM popup suppression, and radio diagnostics. See [RC4 testing notes](docs/rc4-testing.md) and [radio diagnostics](docs/k5-radio.md). Native radio tuning, additional AirPlay fixes, standalone scaling and wireless debloating are deferred.
+| Milestone | Status |
+| --- | --- |
+| RC4 | Previous test release; [testing notes](docs/rc4-testing.md) |
+| RC5 | Climate, FM, themes, AirPlay, PPS and signing integration; pending final build and vehicle validation |
+| RC6 / future | SiriusXM, standalone AirPlay, broader app compatibility |
+| Non-blocking backlog | Wireless CP/AA debloating, center wallpaper default, advanced radio metadata |
 
-The bundle includes [Wireless 2.2.1-rc.1](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa), a separately test-signed fork retaining upstream navigation changes while restoring direct OEM hotspot startup. Its experimental session-start extension prepares the response before Bluetooth iAP2 component 4 connects. Requires theme identity and receiver metadata; an ordinary session may be needed first. Stock Wireless remains identification-only. Test the Wireless fork separately with Ultra off before enabling the extension; retain a rollback copy of the working package.
+[Development regression](.github/workflows/development-regression.yml) compiles the main module and video engine and runs climate, Park, volume policy and UI synchronization checks without publishing. [Release bundle](.github/workflows/release-bundle.yml) builds six packages and verifies author signatures before publishing a non-draft prerelease.
+
+Read [development notes](docs/next-development.md), [radio diagnostics](docs/k5-radio.md) and [integration details](docs/integration.md) for technical background. Host tests do not establish vehicle functionality.
 
 ## Technical details
 
-CPUL owns the CarPlayCore vehicle-state integration; Wireless owns iAP2 identification. The theme tuple is `44C9FA31EC:985:19.0`. No fabricated EV data or competing iAP2 patch is installed. The optional [Comfort fork](https://github.com/Nyx-Asteria/hmgapi-comfort) owns threshold validation and persistence.
+CPUL owns the CarPlayCore vehicle-state integration; Wireless owns iAP2 identification. Theme tuple: `44C9FA31EC:985:19.0`. Package ID: `carplay-ultra-lite-k5`.
 
-The diagnostic collector exports allowlisted firmware, including SystemUI, Mobis_SystemPopup, HKMC_MediaGate, framework2 and media_cmd, for OEM interface analysis. Keep proprietary firmware private. The collector verifies sizes and defers hashing to the host.
-
-Package ID: `carplay-ultra-lite-k5`; version: `1.0.0-rc.4`. The [RC4 workflow](.github/workflows/release-bundle.yml) builds five test-signed packages and publishes only after build checks and signature verification. Hardware validation remains separate. Test parked, including normal wireless reconnects and rollback.
+The firmware collector exports allowlisted OEM binaries for interface analysis. Keep proprietary firmware private. No physical cluster customization or custom K5 model is shipped.
 
 ## Credits
 
@@ -86,6 +141,7 @@ Package ID: `carplay-ultra-lite-k5`; version: `1.0.0-rc.4`. The [RC4 workflow](.
 - **[isaacwisdom](https://github.com/isaacwisdom/egmp-carplay-ev-routing)** — original E-GMP routing project underlying theme identification.
 - **[Open-HMG](https://github.com/Open-HMG/HMG-API)** — head-unit mod framework and tooling.
 - **[lemoyneiv](https://github.com/lemoyneiv/hmgapi-comfort)** — Comfort & Startup and threshold validation.
+- **[CubbyNINJA / ParkCast](https://github.com/CubbyNINJA/g5w-parkcast)** — standalone AirPlay research reference; no receiver code incorporated yet.
 - **[Nyx-Asteria](https://github.com/Nyx-Asteria)** — K5 port, development and testing.
 
 Released under **[GPL-3.0-or-later](LICENSE)**. Applicable upstream notices and corresponding source must be retained.
