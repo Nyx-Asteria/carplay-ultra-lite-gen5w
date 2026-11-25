@@ -44,7 +44,7 @@ final class UiSyncChannel extends Thread {
             s.setReuseAddress(true);
             s.bind(new InetSocketAddress(PORT));
             out.log("SYNC listening on port " + PORT + " (uiSync experiment, cluster layout "
-                    + (sync.wanted == null ? "not requested" : sync.wanted.name + " " + sync.wanted.palette) + ", RC4 center request=" + sync.legacyCenterLayout + ")");
+                    + (sync.wanted == null ? "not requested" : sync.wanted.name + " " + sync.wanted.palette) + ", force center Wallpaper=" + sync.legacyCenterLayout + ")");
             while (true) {
                 final Socket sock = s.accept();
                 new Thread("cp-climate-uisync-conn") {
@@ -67,6 +67,7 @@ final class UiSyncChannel extends Thread {
         sync.legacyCenterLayout = this.sync.legacyCenterLayout;
         out.log("SYNC connection from " + sock.getRemoteSocketAddress());
         int logged = 0, packages = 0;
+        java.util.Set<String> seenPanels = new java.util.HashSet<String>();
         try {
             byte[] keys = IapChannel.readKeys(dir, KEYS);
             if (keys == null) {
@@ -125,6 +126,17 @@ final class UiSyncChannel extends Thread {
                             picked = new java.util.ArrayList<String>(sync.choices);
                             sync.choices.clear();
                         }
+                        // Report which panels actually negotiate, including their first
+                        // message even if the general packet log budget has been reached.
+                        try {
+                            Object decoded = OpackCodec.decode(body);
+                            if (decoded instanceof java.util.Map) {
+                                Object display = ((java.util.Map<?,?>)decoded).get("displayUUID");
+                                if (("Center_Display".equals(display) || "Cluster_Display".equals(display))
+                                        && seenPanels.add(String.valueOf(display)))
+                                    out.log("[theme-sync] first message for " + display);
+                            }
+                        } catch (RuntimeException ignored) {}
                         if (logged++ < MAX_LOGGED) out.log("SYNC phone: " + UiSync.describe(body));
                         for (byte[] a : answers) {
                             w.send(VsChannel.pack(VsChannel.ASYNC, VsChannel.COMMAND, 0, a));
@@ -141,6 +153,7 @@ final class UiSyncChannel extends Thread {
         } catch (Throwable t) {
             out.log("SYNC connection ended after " + packages + " package(s): " + t);
         } finally {
+            out.log("[theme-sync] negotiated traffic panels=" + seenPanels);
             VsChannel.close(sock);
         }
     }
