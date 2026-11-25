@@ -18,6 +18,14 @@
       "apply": "restart"
     },
     {
+      "key": "suppress_stock_media",
+      "type": "toggle",
+      "default": false,
+      "title": "Suppress stock media popup (experimental)",
+      "description": "Hide DiPO music OSD only during an active foreground CarPlay session. Restart recommended.",
+      "apply": "restart"
+    },
+    {
       "key": "parked_video",
       "type": "toggle",
       "default": false,
