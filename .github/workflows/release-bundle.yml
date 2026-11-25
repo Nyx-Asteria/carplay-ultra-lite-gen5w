@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Nyx-Asteria/hmgapi-wireless-cp-aa
-          ref: adbf1a9f69b287cf31836fb3a4684b12f1fe5d82
+          ref: 055f60559e971bf4b0dbdf86824c065d1b97aaa7
           path: .wireless
           persist-credentials: false
       - uses: actions/setup-java@v4
@@ -69,6 +69,10 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: Build and sign five packages
         shell: bash
+        env:
+          MOD_KEY: ${{ secrets.MOD_KEY }}
+          MOD_KEY_PUB: ${{ secrets.MOD_KEY_PUB }}
+          AUTHOR_UUID: d515981b-afc8-8230-ae0f-62d32de366bc
         run: |
           set -euo pipefail
           export HMGAPI_SDK="$PWD/out/sdk"
@@ -76,9 +80,14 @@ jobs:
           SDK="$HMGAPI_SDK"
           AJ=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
           D8=$(find "$ANDROID_HOME/build-tools" -name d8 -type f | sort -V | tail -1)
-          KEY="$RUNNER_TEMP/release-test.key"
-          java -cp "$SDK/lib/hmgapi-engine.jar" hmgapi.engine.Signing keygen "$KEY"
+          umask 077
+          KEY="$RUNNER_TEMP/release-author.key"
           trap 'rm -f "$KEY" "$KEY.pub"' EXIT
+          test -n "$MOD_KEY" && test -n "$MOD_KEY_PUB"
+          printf '%s' "$MOD_KEY" | base64 -d > "$KEY"
+          printf '%s' "$MOD_KEY_PUB" | base64 -d > "$KEY.pub"
+          test "$(java -cp "$SDK/lib/hmgapi-engine.jar" hmgapi.engine.Signing uuid "$KEY.pub")" = "$AUTHOR_UUID"
+          unset MOD_KEY MOD_KEY_PUB
           mkdir -p out/staging out/park-tests out/tests out/check-classes out/check-dex
           javac --release 8 -d out/park-tests source/mod/src/ioniq6/cpclimate/ParkedState.java source/tests/ParkedStateTest.java
           java -cp out/park-tests ioniq6.cpclimate.ParkedStateTest
@@ -137,7 +146,7 @@ jobs:
           for f in out/packages/*.zip; do
             tmp=$(mktemp -d)
             unzip -q "$f" -d "$tmp"
-            java -cp "$SDK/lib/hmgapi-engine.jar" hmgapi.engine.Signing verify "$tmp"
+            java -cp "$SDK/lib/hmgapi-engine.jar" hmgapi.engine.Signing verify "$tmp" "$AUTHOR_UUID"
             rm -rf "$tmp"
             cp "$f" out/release/
           done
@@ -168,4 +177,4 @@ jobs:
           bundle=$(basename "$(find release -name 'CarPlay-Ultra-Lite-K5-*-testing-bundle.zip' -print -quit)")
           VERSION=${bundle#CarPlay-Ultra-Lite-K5-}
           VERSION=${VERSION%-testing-bundle.zip}
-          gh release create "v$VERSION" release/*.zip release/SHA256SUMS.txt --target "$TARGET" --title "CarPlay Ultra-Lite K5 $VERSION" --notes-file release/TESTING.md
+          gh release create "v$VERSION" release/*.zip release/SHA256SUMS.txt --prerelease --latest=false --target "$TARGET" --title "CarPlay Ultra-Lite K5 $VERSION" --notes-file release/TESTING.md
