@@ -19,7 +19,7 @@ An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by 
 
 An independent K5 port of [SafariForest's CarPlay Ultra-Lite](https://github.com/SafariForest/carplay-ultra-lite-gen5w). Native vehicle controls, Ultra-style appearance and parked video are integrated into CarPlay without adding EV routing or changing the physical instrument cluster.
 
-> **Development status:** RC7 is in preparation; RC6 is the previous testing release. RC7 changes are host-tested where covered, not yet validated on the vehicle. No RC7 package is published yet.
+> **RC7 testing build:** Version 1.0.0-rc.7 targets the K5 DL322 USA 260507. Host regression checks passed before release preparation; vehicle validation is pending. See the [full RC7 changelog and testing guide](docs/rc7-testing.md) and [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases).
 
 ## Features
 
@@ -84,18 +84,18 @@ Exact firmware fingerprints gate activation. Other cars and firmware are unsuppo
 
 Download a published package from [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases). Preserve a rollback copy of working wireless projection and back up settings first.
 
-The planned development bundle includes:
+The RC7 bundle is configured to include:
 
 | Package | Role |
 | --- | --- |
 | CPUL K5 | Vehicle integration and Ultra |
-| [Wireless CP/AA fork](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa) | Wireless projection and Ultra identity/session-start |
+| [Wireless CP/AA fork](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa) | 2.2.1-rc.4 wireless projection and Ultra identity/session-start |
 | [Phone Projection Scaling](https://github.com/Nyx-Asteria/Phone-Projection-Scaling) | Stable 1.0.0 relative projection scaling |
 | [Comfort fork](https://github.com/Nyx-Asteria/hmgapi-comfort) | Optional comfort thresholds |
 | Compatibility check | Firmware and environment checks |
 | Firmware collector | Allowlisted diagnostic export |
 
-The next bundle is configured to use one permanent author identity. Older test-signed packages may need removal before installing packages signed with the permanent key. Do not install competing identity patches. Test wireless reconnect and rollback while parked.
+The RC7 bundle is configured to use one permanent author identity. Older test-signed packages may need removal before installing packages signed with the permanent key. Do not install competing identity patches. Test wireless reconnect and rollback while parked.
 
 ## Settings
 

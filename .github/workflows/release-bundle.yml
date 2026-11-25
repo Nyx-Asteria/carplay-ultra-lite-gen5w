@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Nyx-Asteria/hmgapi-wireless-cp-aa
-          ref: 0fcc2309fc70fbf1da1293b5f7b1376ddd7153b4
+          ref: 3790d63d9fd43bfe47e3b0d1ace65bdc3bcc1fa8
           path: .wireless
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -141,6 +141,7 @@ jobs:
           sh "$SDK/bin/mkmodpkg.sh" out/staging/collector "$KEY"
           # Rebuild the modified provider's native library, never package the upstream prebuilt binary.
           W="$PWD/.wireless/wireless-carplay-aa"
+          test "$(python3 -c 'import json; print(json.load(open(".wireless/wireless-carplay-aa/mod.json"))["version"])')" = "2.2.1-rc.4"
           mkdir -p out/wireless-tests
           javac --release 8 -d out/wireless-tests "$W/src/hmgapi/mods/wireless/api/CarPlayIdentification.java" "$W/src/hmgapi/mods/wireless/IdentityRegistry.java" "$W/src/hmgapi/mods/wireless/StartSessionCodec.java" "$W/native/identity/StartSessionCodecTest.java"
           java -cp out/wireless-tests hmgapi.mods.wireless.StartSessionCodecTest
