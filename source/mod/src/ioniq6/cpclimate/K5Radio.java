@@ -74,6 +74,34 @@ final class K5Radio {
         return values;
     }
 
+    /** Queue a seek only for the already-active FM tuner; never route a radio seek to the phone.
+     * Recheck source ownership on the worker immediately before the OEM command. */
+    private final java.util.concurrent.ExecutorService fmCommands =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
+    boolean seekFm(final boolean up) {
+        if (!enabled() || !CpClimate.sessionActive || !fmActive) return false;
+        final long generation = CpClimate.sessionGeneration;
+        fmCommands.execute(new Runnable() {
+            public void run() {
+                if (!probeActive(generation)) return;
+                try {
+                    Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
+                    if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
+                            || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
+                    Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
+                    if (tuner == null || !probeActive(generation)) return;
+                    java.lang.reflect.Method method = Class.forName(RADIO_IFACE).getMethod(up ? "seekUp" : "seekDown");
+                    if (method.getReturnType() != void.class) return;
+                    method.invoke(tuner);
+                    log.log("[radio] FM seek " + (up ? "up" : "down"));
+                } catch (Throwable t) { log.log("[radio] FM seek failed: " + t.getClass().getSimpleName()); }
+            }
+        });
+        return true;
+    }
+
+    boolean fmSelected() { return fmActive; }
+
     String diagnosticStatus() { return probeStatus; }
     private boolean probing;
     /** Explicit, bounded diagnostic run. Poll only known read-only primitive getters.
