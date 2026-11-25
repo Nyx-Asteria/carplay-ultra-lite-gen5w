@@ -21,3 +21,9 @@
 - Actual K5FirmwareDump.zip DEX method tables confirm IUSMService getFrontSeatHeat_DrvState/AstState ()I and setFrontSeatHeatDrvStep/AstStep (I)V. Service bytecode delegates setters to sendFrontSeatHeat(II)V with driver selector 0 and passenger selector 1. Getter implementations use selector values 0x114 and 0x115. This establishes the interface, not the hardware state/step semantics. BCM has distinct seat status listener interfaces; investigate callback values before substituting feedback.
 - Separate UI is an experiment, not validated on iOS. Hardware feedback returning -1 and single-stage actuation still require investigation. Do not assume matching method signatures prove correct runtime behavior.
 - Order: seats, wheel, then themes; Midnight initial default, retain user selection.
+
+## Hardware control checkpoint — Comfort reference
+- ComfortEngine delegates seat_heat, seat_vent and wheel_heat to HMG-API. HMG-API a1830a83 Hub.java / Commands.java use BCM getDrvSeatHeatState/getAstSeatHeatState, USM setFrontSeatHeatDrvStep/setFrontSeatHeatAstStep, and VR set_StrgWhlHeated_Cmd_AVN(int) with BCM onRemoteTeleHeatingStatusChanged feedback.
+- Those symbol names and transaction field strings exist in the uploaded K5 automotive.odex. Reuse CPUL's existing Binder transport, checked method descriptors and listener fingerprint; do not assume Comfort app's daemon-client authentication works inside the DiPO hook process.
+- Replace USM seat reads with BCM; filter unknown states outside 2..8. Replace wheel toggle with explicit VR 0/1, no guessed optimistic indicator; use existing verified BCM callback and retry registration after failure. Seat setter names unchanged (same as Comfort).
+- No on-car validation yet. Wheel placement and theme selection still outstanding; Midnight remains required initial appearance.
