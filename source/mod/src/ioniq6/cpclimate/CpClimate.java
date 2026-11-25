@@ -129,7 +129,7 @@ public final class CpClimate extends ModEntry {
             boolean enhanced = ultra;
             m.log("[theme] identity=" + themePreflight + " cluster=" + cluster + " themedIds=" + themedIds + " variant=" + variant + " features=" + features + " enhanced=" + enhanced);
             m.log("[theme] DiPO display profile enabled=" + ultra + " (shared provider native result not exposed)");
-            // Scaling is owned by a separate mod; do not write its configuration.
+            writeDelegatedScale(dir, m); // Optional Phone Projection Scaling integration.
             writeDock(dir, "1");                                  // the bottom dock with the climate bar
             writeVersion(dir, "950");                             // receiver version 950.7.1 in /info
             writeFlag(dir, "cpc-extras", climate, "LIVI display extras");
@@ -305,6 +305,48 @@ public final class CpClimate extends ModEntry {
     @Override public void onEnabled(ModContext m, boolean enabled) {
         if (!enabled) { theme.unregister(m); sessionActive = false; sessionGeneration++; VideoMessages.stopEngine("mod disabled"); }
         m.log("[runtime] enabled=" + enabled + "; restart required to change advertised capabilities");
+    }
+
+    /** Only PPS owns scale settings; CPUL is the native execution host when both are on.
+     * Read the public state at process startup, not a stale PPS private file. */
+    static void writeDelegatedScale(File dir, ModContext m) {
+        int percent = 100;
+        try {
+            java.io.FileInputStream in = new java.io.FileInputStream("/data/hmgapi/public/state.json");
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            try {
+                byte[] buffer = new byte[4096]; int n;
+                while ((n = in.read(buffer)) != -1) {
+                    if (out.size() + n > 4 * 1024 * 1024) throw new java.io.IOException("state too large");
+                    out.write(buffer, 0, n);
+                }
+            } finally { in.close(); }
+            org.json.JSONObject mods = new org.json.JSONObject(out.toString("UTF-8")).getJSONObject("mods");
+            org.json.JSONObject pps = mods.optJSONObject("phone-projection-scaling");
+            if (pps != null && pps.optBoolean("enabled", false)) {
+                int candidate = Integer.parseInt(pps.getJSONObject("settings").optString("carplay_scale", "100"));
+                if (candidate >= 50 && candidate <= 100 && candidate % 5 == 0) percent = candidate;
+            }
+        } catch (Exception e) { m.log("[scaling] optional provider unavailable; using stock dimensions"); }
+        File file = new File(dir, "cpc-size");
+        File tmp = new File(dir, "cpc-size.tmp");
+        try {
+            // Remove the RC4 hardcoded value before writing the new startup snapshot.
+            if (file.exists() && !file.delete()) throw new java.io.IOException("cannot reset old scale");
+            FileWriter writer = new FileWriter(tmp);
+            try { writer.write(percent + "\n"); } finally { writer.close(); }
+            if (!tmp.renameTo(file)) throw new java.io.IOException("scale rename failed");
+            m.log("[scaling] hosted scale " + percent + "% (PPS settings only)");
+        } catch (Exception e) {
+            tmp.delete();
+            file.delete();
+            // If deletion failed, truncate the old value to stock if possible.
+            if (file.exists()) try {
+                FileWriter reset = new FileWriter(file);
+                try { reset.write("100\n"); } finally { reset.close(); }
+            } catch (Exception ignored) {}
+            m.error("[scaling] cannot reset/write hosted scale; verify stock dimensions", e);
+        }
     }
 
     /** the dock position setting, for the native /info hook (files/cpc-dock: 0 auto, 1 bottom, 2 side) */
