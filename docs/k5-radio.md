@@ -23,3 +23,6 @@ Vendored LIVI vehicle_state/media.rs defines FM source semantic 2, service 4112,
 4. Add AM/HD/SXM only when both OEM and Apple semantics are established.
 
 Current Vehicle page remains the explicit stock radio shortcut. No native tuner commands are implemented yet. Maintain RC3 version during development.
+
+## Manager delegation and constants checkpoint
+Verified directly against the extracted automotive.odex (MD5 matches above): MicomRadioManager.changeBand delegates to IRadioService.changeBand; getLastFMFrequency delegates to IRadioService.getLastFMFrequency; directTune overloads delegate to IRadioService.directTune(IZII)Z. Static encoded MicomRadioConstants values: MICOM_RADIO_AM1=113, FM1=-127, FM2=-126 (byte patterns 0x71, 0x81, 0x82); these are not yet proven to be the arguments expected by changeBand. Frequency limit and step fields have zero encoded initial values; inspect runtime initialization rather than treating zero as valid. Stock RadioNA ODEX optimized invokes prevent the simple method-index cross-reference scan from reliably recovering call-site arguments. No write operations enabled on this evidence alone.
