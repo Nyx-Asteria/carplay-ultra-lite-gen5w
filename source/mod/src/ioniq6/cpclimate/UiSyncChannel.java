@@ -60,6 +60,11 @@ final class UiSyncChannel extends Thread {
     }
 
     void serve(Socket sock) {
+        // Sequence numbers and reset state belong to this authenticated connection.
+        // A reconnect must not reset an older connection's handshake.
+        final UiSync sync = new UiSync(new File(dir, "cpc-theme-preferences.properties"), true);
+        sync.wanted = this.sync.wanted;
+        sync.legacyCenterLayout = this.sync.legacyCenterLayout;
         out.log("SYNC connection from " + sock.getRemoteSocketAddress());
         int logged = 0, packages = 0;
         try {
