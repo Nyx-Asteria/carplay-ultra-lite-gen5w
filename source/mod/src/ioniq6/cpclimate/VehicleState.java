@@ -255,6 +255,23 @@ final class VehicleState {
         return svc;
     }
 
+    /** SeatFan uses the LIVI FanLevel UInt8 schema, not a signed heating-level clone. */
+    static Map<Object,Object> seatFan(long base, String layoutKey, Map<Long,Object> values) {
+        Map<Object,Object> level = dict("iid", base + 1, "type", 0x31000012L, "format", 1L,
+                "mutable", true, "writable", true, "oemWritable", true, "priority", 1L,
+                "minimumValue", 0L, "maximumValue", 3L, "stepValue", 1L, "initialValue", 0L);
+        Map<Object,Object> on = dict("iid", base + 2, "type", 0x30000002L, "format", 0L,
+                "mutable", true, "writable", true, "oemWritable", true, "priority", 1L, "initialValue", false);
+        Map<Object,Object> key = dict("iid", base + 3, "type", 0x36000065L, "format", 10L,
+                "mutable", false, "writable", false, "oemWritable", true, "priority", 1L,
+                "maximumLength", 65535L, "initialValue", layoutKey);
+        values.put(base + 1, 0L);
+        values.put(base + 2, false);
+        values.put(base + 3, layoutKey);
+        return dict("iid", base, "type", 0x22000002L,
+                "characteristics", java.util.Arrays.asList(level, on, key));
+    }
+
     /** the steering wheel heater: one service (kind 0x1100_0003) on the climate accessory with one level, 0 off and 1 on */
     @SuppressWarnings("unchecked")
     static Map<Object, Object> wheelService(Map<Object, Object> template, Map<Long, Object> values) {
@@ -508,8 +525,8 @@ final class VehicleState {
             withCooling(driver);
             withCooling(passenger);
         } else {
-            driverServices.add(seatCopy(driver, 1041, "seat_front_left", 3, true, values));
-            passengerServices.add(seatCopy(passenger, 1045, "seat_front_right", 3, true, values));
+            driverServices.add(seatFan(1041, "seat_front_left", values));
+            passengerServices.add(seatFan(1045, "seat_front_right", values));
         }
         if (wheelHeater && climateServices != null) climateServices.add(wheelService(driver, values));
         return OpackCodec.encode(list);
