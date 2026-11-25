@@ -69,8 +69,9 @@ final class K5Radio {
                 values.put(4355L, String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0));
                 values.put(4359L, 1L);
             }
-            // Enable tuning and seeking only while OEM FM is confirmed active.
-            values.put(4115L, !fmActive);
+            // Advertise an available FM source even before it is selected.
+            // The command path still checks active source ownership before tuning.
+            values.put(4115L, !(fmTuner != null && fmAudio != null && khz > 0));
             values.put(4116L, fmActive ? Long.toString(khz) : "");
         } catch (Throwable t) { fmActive = false; fmTuner = null; fmAudio = null; }
         return values;
@@ -132,6 +133,31 @@ final class K5Radio {
     /** Explicit FM selection via the stock framework wrapper. Never invoked on connect.
      * DL322 260507 automotive.odex: ModeManager(Context), changeMode(Integer):boolean,
      * ModeConstants.ModeType FM1=2. Foreground behavior requires parked validation. */
+    // A tune with explicit FM source may activate FM first. Only the latest
+    // pending request is retained; it expires and cannot cross sessions.
+    private volatile long tuneRequest;
+    boolean selectAndTuneFm(final long khz) {
+        if (khz < 87900 || khz > 107900 || (khz - 87900) % 200 != 0
+                || !enabled() || !CpClimate.sessionActive) return false;
+        final long generation = CpClimate.sessionGeneration;
+        final long request = ++tuneRequest;
+        if (fmActive) return tuneFm(khz);
+        if (!selectFm()) return false;
+        final long deadline = android.os.SystemClock.elapsedRealtime() + 5000;
+        main.postDelayed(new Runnable() {
+            public void run() {
+                if (!probeActive(generation) || request != tuneRequest) return;
+                if (android.os.SystemClock.elapsedRealtime() >= deadline) {
+                    log.log("[radio] FM activation timed out; pending tune discarded");
+                    return;
+                }
+                if (fmActive) { tuneFm(khz); return; }
+                main.postDelayed(this, 250);
+            }
+        }, 250);
+        return true;
+    }
+
     boolean selectFm() {
         if (!enabled() || !CpClimate.sessionActive) return false;
         final long generation = CpClimate.sessionGeneration;
