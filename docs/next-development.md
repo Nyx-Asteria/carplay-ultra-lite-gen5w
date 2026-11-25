@@ -15,3 +15,9 @@
 - Native volume/media popup suppression and radio integration require firmware dump (SystemUI, Mobis_SystemPopup, HKMC_MediaGate, framework2, media_cmd and OEM USM classes if available).
 - Parked video remains unverified; keep safety interlock.
 - Do not publish until changes reviewed and tested. Keep current release version during development.
+
+## Seat implementation checkpoint
+- Upstream feature/climate-and-video at 70e3ba245987e5b9c7b9f1ae75a024a383e5fe08 provides Layout A: SeatFan service 0x22000002, FanLevel 0x31000012, front service bases 1041/1045. Restore front-only schema and feedback/command mapping, no rear services.
+- Actual K5FirmwareDump.zip DEX method tables confirm IUSMService getFrontSeatHeat_DrvState/AstState ()I and setFrontSeatHeatDrvStep/AstStep (I)V. Service bytecode delegates setters to sendFrontSeatHeat(II)V with driver selector 0 and passenger selector 1. Getter implementations use selector values 0x114 and 0x115. This establishes the interface, not the hardware state/step semantics. BCM has distinct seat status listener interfaces; investigate callback values before substituting feedback.
+- Separate UI is an experiment, not validated on iOS. Hardware feedback returning -1 and single-stage actuation still require investigation. Do not assume matching method signatures prove correct runtime behavior.
+- Order: seats, wheel, then themes; Midnight initial default, retain user selection.

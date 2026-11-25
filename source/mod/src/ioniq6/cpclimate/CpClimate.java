@@ -200,7 +200,7 @@ public final class CpClimate extends ModEntry {
             ClimateMap.blankWhenOff = true;
             VehicleState.ventCard = "driver";
             VehicleState.coolingMin = -3;
-            String layout = "b";
+            String layout = "a"; // upstream separate SeatFan services for front ventilation
             VehicleState.coolingLayout = "b".equals(layout) || "c".equals(layout) || "d".equals(layout);
             VehicleState.rowRear = "c".equals(layout);
             VehicleState.twoRear = "d".equals(layout);

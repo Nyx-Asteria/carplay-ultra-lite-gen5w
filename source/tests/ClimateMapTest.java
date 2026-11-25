@@ -138,6 +138,26 @@ public class ClimateMapTest {
                 ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_LEVEL}) {
             check("K5 unsupported write ignored " + iid, ClimateMap.commands(one(iid, 2L), v, 2).isEmpty());
         }
+        VehicleState.coolingLayout = false;
+        for (int raw = 2; raw <= 8; raw++) {
+            r = new ClimateMap.Reading(); r.driverSeat = raw; r.passengerSeat = raw;
+            v = ClimateMap.toCarPlay(r);
+            long heat = raw >= 6 ? raw - 5 : 0, vent = raw >= 3 && raw <= 5 ? raw - 2 : 0;
+            check("separate seats feedback raw " + raw,
+                    Long.valueOf(heat).equals(v.get(ClimateMap.DRIVER_SEAT_LEVEL))
+                    && Long.valueOf(heat).equals(v.get(ClimateMap.PASSENGER_SEAT_LEVEL))
+                    && Long.valueOf(vent).equals(v.get(ClimateMap.DRIVER_VENT_LEVEL))
+                    && Long.valueOf(vent).equals(v.get(ClimateMap.PASSENGER_VENT_LEVEL)));
+            for (long iid : new long[] {ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_LEVEL}) {
+                if (vent > 0) {
+                    List<ClimateMap.Command> cmds = ClimateMap.commands(one(iid, vent), v, 2);
+                    check("separate ventilation command " + iid + " raw " + raw, cmds.size() == 1 && cmds.get(0).b == raw);
+                }
+                if (heat > 0) check("idle fan does not cancel heat " + iid, ClimateMap.commands(one(iid, 0L), v, 2).isEmpty());
+            }
+            if (vent > 0) check("idle heating does not cancel ventilation", ClimateMap.commands(one(ClimateMap.DRIVER_SEAT_LEVEL, 0L), v, 2).isEmpty());
+        }
+        VehicleState.coolingLayout = true;
         VehicleState.wheelHeater = true;
         r = new ClimateMap.Reading();
         check("K5 wheel unknown feedback omitted", !ClimateMap.toCarPlay(r).containsKey(ClimateMap.WHEEL_LEVEL));

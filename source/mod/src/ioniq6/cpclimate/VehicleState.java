@@ -490,7 +490,7 @@ final class VehicleState {
         Object list = OpackCodec.decode(accessories);
         if (!(list instanceof List)) return null;
         Map<Object, Object> driver = null, passenger = null;
-        List<Object> climateServices = null;
+        List<Object> climateServices = null, driverServices = null, passengerServices = null;
         for (Object a : (List<Object>) list) {
             Object services = a instanceof Map ? ((Map<Object, Object>) a).get("services") : null;
             if (!(services instanceof List)) continue;
@@ -499,13 +499,18 @@ final class VehicleState {
                 if (!(s instanceof Map)) continue;
                 Map<Object, Object> service = (Map<Object, Object>) s;
                 Long iid = OpackCodec.asLong(service.get("iid"));
-                if (Long.valueOf(1025).equals(iid)) driver = service;
-                if (Long.valueOf(1029).equals(iid)) passenger = service;
+                if (Long.valueOf(1025).equals(iid)) { driver = service; driverServices = (List<Object>) services; }
+                if (Long.valueOf(1029).equals(iid)) { passenger = service; passengerServices = (List<Object>) services; }
             }
         }
         if (driver == null || passenger == null) return null;
-        withCooling(driver);
-        withCooling(passenger);
+        if (coolingLayout) {
+            withCooling(driver);
+            withCooling(passenger);
+        } else {
+            driverServices.add(seatCopy(driver, 1041, "seat_front_left", 3, true, values));
+            passengerServices.add(seatCopy(passenger, 1045, "seat_front_right", 3, true, values));
+        }
         if (wheelHeater && climateServices != null) climateServices.add(wheelService(driver, values));
         return OpackCodec.encode(list);
     }
@@ -547,7 +552,15 @@ final class VehicleState {
                     writable.add(ClimateMap.WHEEL_LEVEL); shared.add(ClimateMap.WHEEL_LEVEL);
                     names.put(ClimateMap.WHEEL_LEVEL, "steeringWheelHeatingLevel");
                 }
-                out.log("VS K5 front seat heating and ventilation: -3 through +3");
+                if (!coolingLayout) {
+                    long[] ids = {ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.DRIVER_VENT_ON,
+                            ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON};
+                    String[] labels = {"driverSeatFanLevel", "driverSeatFanOn", "passengerSeatFanLevel", "passengerSeatFanOn"};
+                    for (int i = 0; i < ids.length; i++) {
+                        writable.add(ids[i]); shared.add(ids[i]); names.put(ids[i], labels[i]);
+                    }
+                }
+                out.log(coolingLayout ? "VS K5 combined seat heating/cooling" : "VS K5 separate front seat heating and SeatFan");
             } else out.log("VS K5 front seat ventilation description unavailable");
         }
         String model = variant;
