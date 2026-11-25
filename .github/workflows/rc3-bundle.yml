@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Nyx-Asteria/HMG-IconDump
-          ref: d64d65644f6fad0d204379c8f7f23f9131cc3c87
+          ref: 8a1dfaa12d133e9450f517c71a558420f46ad9c5
           path: .collector
           persist-credentials: false
       - uses: actions/setup-java@v4
