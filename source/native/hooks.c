@@ -934,7 +934,7 @@ __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) 
     if (!features) return;
     append(features, &K_vsp);
     /* LIVI stack/setup.rs: viewAreas always, altScreen with a cluster display */
-    if (ultra) append(features, &K_viewAreas);
+    if (ultra && areas) append(features, &K_viewAreas);
     if (ultra && alt) append(features, &K_altScreen);
     if (iapx && iap) append(features, &K_iapChannel);
     if (syncx && sync) append(features, &K_uiSync);
@@ -946,7 +946,7 @@ __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) 
             (extra & 1) ? (video ? "enabled" : "not offered") : "off", (extra & 2) ? (hevc ? "enabled" : "not offered") : "off");
     put(reply, &K_enabledFeatures, features);
     LOG("cp-climate: SETUP reply has enabledFeatures [vehicleStateProtocol%s%s%s%s%s%s]\n",
-        ultra ? ", viewAreas" : "", ultra && alt ? ", altScreen" : "", iapx && iap ? ", iAPChannel" : "",
+        ultra && areas ? ", viewAreas" : "", ultra && alt ? ", altScreen" : "", iapx && iap ? ", iAPChannel" : "",
         syncx && sync ? ", uiSync" : "", (extra & 1) && video ? ", videoPlayback" : "", (extra & 2) && hevc ? ", hevc" : "");
 }
 
