@@ -48,21 +48,38 @@ final class K5Radio {
     // DL322 automotive.odex: RadioAllBsmFreqInfo.mBsmFreq (int),
     // mIsBsmValidStaton (boolean). Keep the OEM spelling.
     private long lastListPoll;
+    private String lastScanSummary = "";
     private java.util.List<Object> fmItems = java.util.Collections.emptyList();
     private java.util.List<Object> readFmItems(Object tuner) throws Exception {
         Object raw = Class.forName(RADIO_IFACE).getMethod("getRadioAllBsmFreqList").invoke(tuner);
-        if (!(raw instanceof java.util.List)) return java.util.Collections.emptyList();
+        if (!(raw instanceof java.util.List)) {
+            String summary = "unexpected cache type=" + (raw == null ? "null" : raw.getClass().getName());
+            if (!summary.equals(lastScanSummary)) { lastScanSummary = summary; log.log("[radio] FM scan cache " + summary); }
+            return java.util.Collections.emptyList();
+        }
         Class<?> type = Class.forName("com.hkmc.media.RadioAllBsmFreqInfo");
         java.lang.reflect.Field freq = type.getDeclaredField("mBsmFreq");
         java.lang.reflect.Field valid = type.getDeclaredField("mIsBsmValidStaton");
         freq.setAccessible(true); valid.setAccessible(true);
         java.util.TreeSet<Long> frequencies = new java.util.TreeSet<Long>();
-        for (Object entry : (java.util.List<?>)raw) {
+        java.util.List<?> entries = (java.util.List<?>) raw;
+        int invalid = 0, unexpected = 0, offGrid = 0;
+        for (Object entry : entries) {
+            if (!type.isInstance(entry)) { unexpected++; continue; }
+            if (!valid.getBoolean(entry)) { invalid++; continue; }
+            long candidate = fmKhz(freq.getInt(entry));
+            if (candidate < 87900 || candidate > 107900 || (candidate - 87900) % 200 != 0) offGrid++;
             if (type.isInstance(entry) && valid.getBoolean(entry)) {
                 long khz = fmKhz(freq.getInt(entry));
                 if (khz >= 87900 && khz <= 107900 && (khz - 87900) % 200 == 0)
                     frequencies.add(khz);
             }
+        }
+        String scanSummary = "raw=" + entries.size() + " invalid=" + invalid
+                + " unexpected=" + unexpected + " offGrid=" + offGrid + " unique=" + frequencies.size();
+        if (!scanSummary.equals(lastScanSummary)) {
+            lastScanSummary = scanSummary;
+            log.log("[radio] FM scan cache " + scanSummary);
         }
         java.util.List<Object> items = new java.util.ArrayList<Object>();
         for (Long khz : frequencies) {
