@@ -60,10 +60,14 @@ public final class Video {
     static SurfaceView surface;
     static TextView status;
     static FrameLayout controls;
+    static View videoShutter;
+    static boolean firstFrame;
     static Object itemUuid;
     static long streamId = -1;
     static boolean shown;
     static String currentUrl;
+    static boolean requestedPlaying;
+    static boolean rateReceived;
 
     // ---- entry points (reflection from the core) ----
 
@@ -273,8 +277,12 @@ public final class Video {
         if ("insertPlayQueueItem".equals(type)) {
             insert(m);
         } else if ("setRate".equals(type)) {
-            double rate = number(m.get("rate"), 0);
-            if (player != null) player.setPlayWhenReady(rate > 0);
+            Object rawRate = m.get("rate");
+            Long rateMillis = rawRate instanceof Map ? cmMillis(rawRate) : null;
+            double rate = rateMillis != null ? rateMillis / 1000.0 : number(rawRate, 0);
+            rateReceived = true;
+            requestedPlaying = rate > 0;
+            if (player != null) player.setPlayWhenReady(requestedPlaying);
         } else if ("seek".equals(type)) {
             Long ms = cmMillis(m.get("time"));
             if (player != null && ms != null) player.seekTo(ms);
@@ -328,19 +336,40 @@ public final class Video {
         String lower = url.toLowerCase(java.util.Locale.US);
         String path = Uri.parse(url).getPath() == null ? "" : Uri.parse(url).getPath().toLowerCase(java.util.Locale.US);
         boolean progressive = !(path.endsWith(".m3u8") || path.endsWith(".m3u") || lower.contains(".m3u8?") || lower.contains("format=m3u8"));
-        MediaItem media = MediaItem.fromUri(url);
+        // The sender may describe an HLS asset whose URL has no playlist extension.
+        // Only use explicit MIME hints; do not infer HLS from the sending application.
+        for (String key : new String[] {"Content-Type", "contentType", "mimeType"}) {
+            Object hint = it.get(key);
+            if (!(hint instanceof String)) continue;
+            String mime = ((String) hint).split(";", 2)[0].trim().toLowerCase(java.util.Locale.US);
+            if ("application/vnd.apple.mpegurl".equals(mime) || "application/x-mpegurl".equals(mime)
+                    || "audio/mpegurl".equals(mime) || "audio/x-mpegurl".equals(mime)) {
+                progressive = false;
+                break;
+            }
+        }
+        MediaItem media = new MediaItem.Builder().setUri(url)
+                .setMimeType(progressive ? null : com.google.android.exoplayer2.util.MimeTypes.APPLICATION_M3U8).build();
         MediaSource source = progressive ? new ProgressiveMediaSource.Factory(data).createMediaSource(media)
                 : new HlsMediaSource.Factory(data).setAllowChunklessPreparation(true).createMediaSource(media);
         release();
         com.google.android.exoplayer2.DefaultRenderersFactory renderers = new Renderers(context);
-        // start after 4 s of video (quick start), but after a pause wait for 10 s so pauses come less often;
-        // keep loading up to 90 s ahead (2026-11-11: the default 2.5 s after a pause gave a pause every few seconds)
+        // Limit memory pressure on the K5; allow an initial frame sooner while retaining a longer rebuffer threshold.
         com.google.android.exoplayer2.DefaultLoadControl load = new com.google.android.exoplayer2.DefaultLoadControl.Builder()
-                .setBufferDurationsMs(30000, 90000, 4000, 10000)
-                .setTargetBufferBytes(64 * 1024 * 1024)
-                .setPrioritizeTimeOverSizeThresholds(true)
+                .setBufferDurationsMs(15000, 45000, 1500, 5000)
+                .setTargetBufferBytes(24 * 1024 * 1024)
+                .setPrioritizeTimeOverSizeThresholds(false)
                 .build();
+        // Prefer the K5's known hardware AVC path and modest adaptive variants.
+        // These are preferences, not a blanket ban on other playable codecs.
+        com.google.android.exoplayer2.trackselection.DefaultTrackSelector selector =
+                new com.google.android.exoplayer2.trackselection.DefaultTrackSelector(context);
+        selector.setParameters(selector.buildUponParameters()
+                .setPreferredVideoMimeType(com.google.android.exoplayer2.util.MimeTypes.VIDEO_H264)
+                .setMaxVideoSize(1280, 720)
+                .setExceedVideoConstraintsIfNecessary(true));
         player = new ExoPlayer.Builder(context, renderers.setEnableDecoderFallback(true))
+                .setTrackSelector(selector)
                 .setLoadControl(load)
                 .setLooper(Looper.getMainLooper()).build();
         startCpuTrace();
@@ -349,11 +378,12 @@ public final class Video {
         player.addListener(listener);
         player.addAnalyticsListener(steps);
         player.setMediaSource(source, startMs);
-        player.setPlayWhenReady(false);
+        player.setPlayWhenReady(rateReceived ? requestedPlaying : shown);
+        if (surface != null) player.setVideoSurfaceView(surface);
         player.prepare();
+        log("video: prepare requested, playWhenReady=" + player.getPlayWhenReady() + ", surface=" + (surface != null));
         if (!noSound) watchAudioClock(player, audioAttempt);
         currentUrl = url;
-        if (surface != null) player.setVideoSurfaceView(surface);
         log("video: playing " + host(url) + " (" + (progressive ? "progressive" : "HLS") + ", from " + startMs / 1000 + " s) through the phone");
     }
 
@@ -391,6 +421,8 @@ public final class Video {
 
         @Override
         public void onRenderedFirstFrame(EventTime t, Object output, long renderTimeMs) {
+            firstFrame = true;
+            if (videoShutter != null) videoShutter.setVisibility(View.GONE);
             log("video: first picture shown");
         }
 
@@ -512,7 +544,9 @@ public final class Video {
         @Override
         public void onPlaybackStateChanged(int state) {
             log("video: player " + (state == Player.STATE_BUFFERING ? "buffering" : state == Player.STATE_READY ? "ready"
-                    : state == Player.STATE_ENDED ? "ended" : "idle"));
+                    : state == Player.STATE_ENDED ? "ended" : "idle")
+                    + (player == null ? "" : " position=" + player.getCurrentPosition() + " buffered=" + player.getBufferedPosition()
+                    + " playWhenReady=" + player.getPlayWhenReady() + " firstFrame=" + firstFrame));
             updateStatus();
         }
 
@@ -536,6 +570,8 @@ public final class Video {
                 for (int i = 0; i < g.length; i++) {
                     com.google.android.exoplayer2.Format f = g.getTrackFormat(i);
                     b.append(' ').append(f.sampleMimeType).append(f.width > 0 ? " " + f.width + "x" + f.height : "")
+                            .append(f.codecs != null ? " codec=" + f.codecs : "")
+                            .append(f.bitrate > 0 ? " " + f.bitrate / 1000 + " kbps" : "")
                             .append(f.channelCount > 0 ? " " + f.channelCount + "ch" : "")
                             .append(g.isTrackSupported(i) ? "" : " (can't decode)").append(g.isTrackSelected(i) ? " [playing]" : "").append(';');
                 }
@@ -556,6 +592,9 @@ public final class Video {
         Map<String, Object> r = new LinkedHashMap<String, Object>();
         if ("playbackInfo".equals(type)) {
             r.put("info", info());
+            // LIVI's playbackInfo response uses value with seconds, rather than info with CMTime.
+            // Retain the existing DiPlay-shaped response during compatibility testing.
+            r.put("value", liviPlaybackInfo());
             r.put("kind", "response");
             r.put("type", "playbackInfo");
         } else if ("seek".equals(type)) {
@@ -604,6 +643,28 @@ public final class Video {
         return info;
     }
 
+    static Map<String, Object> liviPlaybackInfo() {
+        Map<String, Object> out = new LinkedHashMap<String, Object>();
+        boolean valid = player != null && player.getPlayerError() == null;
+        boolean ready = valid && (player.getPlaybackState() == Player.STATE_READY || player.getPlaybackState() == Player.STATE_ENDED);
+        long pos = valid ? Math.max(0, player.getCurrentPosition()) : 0;
+        long duration = valid ? durationMs() : 0;
+        long buffered = valid ? Math.max(pos, player.getBufferedPosition()) : pos;
+        out.put("duration", duration / 1000.0);
+        out.put("position", pos / 1000.0);
+        out.put("rate", valid && player.isPlaying() ? 1.0 : 0.0);
+        out.put("readyToPlay", ready);
+        out.put("playbackBufferEmpty", buffered <= pos && !ready);
+        out.put("playbackBufferFull", duration > 0 && buffered >= duration);
+        out.put("playbackLikelyToKeepUp", ready);
+        out.put("loadedTimeRanges", Collections.singletonList(dict("start", 0.0, "duration", buffered / 1000.0)));
+        out.put("seekableTimeRanges", valid && player.isCurrentMediaItemSeekable() && duration > 0
+                ? Collections.singletonList(dict("start", 0.0, "duration", duration / 1000.0))
+                : Collections.emptyList());
+        if (itemUuid != null) out.put("uuid", itemUuid);
+        return out;
+    }
+
     static long durationMs() {
         long d = player == null ? C.TIME_UNSET : player.getDuration();
         return d == C.TIME_UNSET ? 0 : d;
@@ -637,6 +698,10 @@ public final class Video {
     }
 
     static Long cmMillis(Object t) {
+        if (t instanceof Number) {
+            double seconds = ((Number) t).doubleValue();
+            return Double.isNaN(seconds) || Double.isInfinite(seconds) ? null : (long) (seconds * 1000);
+        }
         if (!(t instanceof Map)) return null;
         Map<?, ?> m = (Map<?, ?>) t;
         double value = number(m.get("value"), Double.NaN), scale = number(m.get("timescale"), 0);
@@ -680,6 +745,11 @@ public final class Video {
             status.setTextSize(20);
             status.setPadding(24, 24, 24, 24);
             controls.addView(status, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.RIGHT));
+            // SurfaceView punches a hole in the overlay window on KitKat.
+            // Cover that hole until the decoder actually renders a frame.
+            videoShutter = new View(context);
+            videoShutter.setBackgroundColor(Color.BLACK);
+            window.addView(videoShutter, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
             window.addView(controls, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
             window.setOnTouchListener(new View.OnTouchListener() {
                 @Override
@@ -698,10 +768,11 @@ public final class Video {
             if (player != null) player.setVideoSurfaceView(surface);
         }
         window.setVisibility(View.VISIBLE);
+        if (videoShutter != null) videoShutter.setVisibility(firstFrame ? View.GONE : View.VISIBLE);
         controls.setVisibility(View.VISIBLE);
         shown = true;
         if (player != null) {
-            player.setPlayWhenReady(true);
+            if (!rateReceived) player.setPlayWhenReady(true);
             VideoSize s = player.getVideoSize();
             if (s.width > 0) layoutSurface(s.width, s.height, s.pixelWidthHeightRatio);
         }
@@ -766,9 +837,13 @@ public final class Video {
         if (shown) hide(why);
         itemUuid = null;
         currentUrl = null;
+        rateReceived = false;
+        requestedPlaying = false;
     }
 
     static void release() {
+        firstFrame = false;
+        if (videoShutter != null) videoShutter.setVisibility(View.VISIBLE);
         if (player != null) {
             player.removeListener(listener);
             player.release();
