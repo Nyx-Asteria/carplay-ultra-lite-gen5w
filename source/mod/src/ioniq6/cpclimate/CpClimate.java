@@ -112,8 +112,8 @@ public final class CpClimate extends ModEntry {
         m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("k5_integration", true));
         if (!targetVerified) return;
         boolean climate = m.settingBoolean("k5_integration", true);
-        boolean any = climate || m.settingBoolean("k5_integration", true) || m.settingBoolean("parked_video", false) || m.settingBoolean("ultra_theme", true);
-        if (!any) { m.log("[runtime] all features off; native patch withheld"); return; }
+        boolean any = climate || m.settingBoolean("parked_video", false) || m.settingBoolean("ultra_theme", true);
+        if (!any) { m.log("[runtime] all CPUL features off; disable CPUL itself to use standalone PPS CarPlay scaling"); return; }
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
         ClimateMap.loadSetpoints(new File(dir, "cpc-setpoints"));
@@ -256,7 +256,10 @@ public final class CpClimate extends ModEntry {
                             Object source = ((java.util.Map<?,?>) value).get("identifier");
                             if ("FM".equals(source)) {
                                 if (!radio.selectFm()) log.log("[radio] FM selection refused");
-                            } else log.log("[radio] unsupported source selection");
+                            } else {
+                                radio.cancelPendingTune();
+                                log.log("[radio] unsupported source selection");
+                            }
                             return;
                         }
                         if (radio != null && radio.fmSelected()) {
