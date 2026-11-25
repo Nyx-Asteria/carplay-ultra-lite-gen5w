@@ -1,0 +1,26 @@
+name: Theme catalog diagnostic
+on:
+  push:
+    branches: [k5-compatibility]
+    paths:
+      - '.github/workflows/theme-catalog.yml'
+      - 'source/tools/theme_catalog_probe.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Retrieve exact Apple theme metadata
+        run: python3 source/tools/theme_catalog_probe.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: theme-catalog-diagnostics
+          path: out/theme-catalog/
+          retention-days: 7

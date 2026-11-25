@@ -37,3 +37,6 @@
 ## Consolidated Ultra profile
 - Owner requested two default-on switches: CarPlay Ultra (identity, session start, virtual cluster, themed IDs, DBX, original full feature mask and enhanced RequestCarUI) and Ultra themes/UI synchronization (dependent on Ultra). Keep existing keys ultra_theme and ultra_ui_sync to preserve saved selections; an existing explicit off remains off. Retired individual experiment keys are no longer read. This is not proof the complete profile is safe on every firmware; validate on K5 while parked.
 - Midnight and matching wallpaper remain requirements, not implemented defaults. Upstream tree at 70e3ba2 has UiSync.java, UiSyncChannel.java and UiSyncTest.java but no theme asset catalog files by name. Continue searching source, not asking owner to provide identifiers.
+
+## Theme catalog diagnostic
+- Standalone path-triggered workflow, no compilation or release. Reproduces LIVI f84638ed theme_catalog.rs request and pinned Apple root trust; selects only 44C9FA31EC version 985, reads the ZIP by range and inspects package.json/theme.json plus filenames. No graphical assets downloaded. Results are diagnostic artifacts, not bundled into CPUL. Do not assume Midnight or wallpaper identifiers until results are inspected.
