@@ -66,11 +66,14 @@ final class TunnelDataSource extends BaseDataSource {
                     com.google.android.exoplayer2.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
                     HttpDataSource.HttpDataSourceException.TYPE_OPEN);
         }
+        uri = Uri.parse(response.url);
         int status = response.status;
-        if (status == 416 && position > 0) {
+        if (status == 416 && position > 0 && totalSize(response.header("content-range")) == position) {
             // asked from the very end: nothing left to read
             response.close();
             response = null;
+            body = null;
+            remaining = 0;
             opened = true;
             transferStarted(spec);
             return 0;
@@ -85,17 +88,25 @@ final class TunnelDataSource extends BaseDataSource {
         if (status == 206 && firstLen != length) {
             long total = totalSize(response.header("content-range"));
             long end = length >= 0 ? position + length : total;
-            if (total < 0 && length < 0) {
+            if (response.length <= 0 || (total < 0 && length < 0)) {
                 // no total size: can't plan the ranges; read this one and ask again from there
                 Video.trace("parallel: the server gave no total size; reading in one piece");
                 response.close();
                 response = http.get(url, position, length, spec.httpRequestHeaders);
-                body = response.body;
+                uri = Uri.parse(response.url);
                 status = response.status;
+                if (status < 200 || status > 299) {
+                    Map<String, List<String>> headers = response.headers;
+                    response.close();
+                    response = null;
+                    body = null;
+                    throw new HttpDataSource.InvalidResponseCodeException(status, null, null, headers, spec, new byte[0]);
+                }
+                body = response.body;
             } else {
                 long firstEnd = Math.min(end, position + response.length);
                 if (end > firstEnd) {
-                    body = new ParallelStream(http, url, spec.httpRequestHeaders, response, firstEnd, end);
+                    body = new ParallelStream(http, response.url, spec.httpRequestHeaders, response, firstEnd, end);
                     Video.trace("parallel: " + (end - position) + " B as " + ParallelStream.CHUNK / 1024 + " KB ranges over "
                             + ParallelStream.WORKERS + " more connections " + Video.tail(spec.uri.getPath()));
                 }
@@ -139,7 +150,10 @@ final class TunnelDataSource extends BaseDataSource {
             Video.trace("read failed (error): " + TunnelHttp.stack(e));
             throw new IOException("tunnel read: " + e, e);
         }
-        if (n < 0) return C.RESULT_END_OF_INPUT;
+        if (n < 0) {
+            if (remaining > 0) throw new java.io.EOFException("media response truncated with " + remaining + " bytes remaining");
+            return C.RESULT_END_OF_INPUT;
+        }
         if (remaining != C.LENGTH_UNSET) remaining -= n;
         bytesTransferred(n);
         return n;
