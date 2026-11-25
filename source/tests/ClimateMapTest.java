@@ -157,6 +157,29 @@ public class ClimateMapTest {
             }
             if (vent > 0) check("idle heating does not cancel ventilation", ClimateMap.commands(one(ClimateMap.DRIVER_SEAT_LEVEL, 0L), v, 2).isEmpty());
         }
+        // Batched phone writes must resolve to one step per seat, regardless of field order.
+        for (int side = 0; side < 2; side++) {
+            long hl = side == 0 ? ClimateMap.DRIVER_SEAT_LEVEL : ClimateMap.PASSENGER_SEAT_LEVEL;
+            long ho = side == 0 ? ClimateMap.DRIVER_SEAT_ON : ClimateMap.PASSENGER_SEAT_ON;
+            long vl = side == 0 ? ClimateMap.DRIVER_VENT_LEVEL : ClimateMap.PASSENGER_VENT_LEVEL;
+            long vo = side == 0 ? ClimateMap.DRIVER_VENT_ON : ClimateMap.PASSENGER_VENT_ON;
+            int code = side == 0 ? ClimateMap.SET_DRIVER_SEAT : ClimateMap.SET_PASSENGER_SEAT;
+            for (long level = 1; level <= 3; level++) {
+                Map<Long,Object> batch = new java.util.LinkedHashMap<Long,Object>();
+                batch.put(vo, true); batch.put(vl, level); batch.put(ho, false); batch.put(hl, 0L);
+                List<ClimateMap.Command> cs = ClimateMap.commands(batch, batch, 2);
+                check("batched ventilation side " + side + " level " + level,
+                        cs.size() == 1 && cs.get(0).a == code && cs.get(0).b == level + 2);
+                batch.clear();
+                batch.put(hl, level); batch.put(ho, true); batch.put(vl, 0L); batch.put(vo, false);
+                cs = ClimateMap.commands(batch, batch, 2);
+                check("batched heating side " + side + " level " + level,
+                        cs.size() == 1 && cs.get(0).a == code && cs.get(0).b == level + 5);
+            }
+            Map<Long,Object> batch = new java.util.LinkedHashMap<Long,Object>();
+            batch.put(hl, 2L); batch.put(vl, 2L);
+            check("ambiguous dual activation ignored " + side, ClimateMap.commands(batch, batch, 2).isEmpty());
+        }
         VehicleState.coolingLayout = true;
         VehicleState.wheelHeater = true;
         r = new ClimateMap.Reading();
