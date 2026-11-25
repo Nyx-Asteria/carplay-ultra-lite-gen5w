@@ -168,6 +168,7 @@ final class K5Radio {
         if (VehicleState.sxmSchemaTest) {
             values.put(4131L, true);
             values.put(4133L, "");
+            values.put(4134L, java.util.Collections.emptyList());
         }
         values.put(4358L, EMPTY_ARTWORK);
         values.put(4359L, 0L);
@@ -238,6 +239,10 @@ final class K5Radio {
             int channel = readInt(sxmTuner, SXM_IFACE, "getLastTunedChannelID");
             sxmAvailable = sxmTuner != null && channel >= 0;
             values.put(4131L, !sxmAvailable);
+            if (sxmAvailable) {
+                try { refreshSxmCatalog(values); }
+                catch (Throwable t) { log.log("[radio-sxm] catalog unavailable: " + t.getClass().getSimpleName()); }
+            }
             if (!sxmAvailable || !sxmActive) { sxmMetadataChannel = -1; return; }
             values.put(4133L, Integer.toString(channel));
             values.put(4354L, "SXM");
@@ -253,6 +258,55 @@ final class K5Radio {
     private int sxmMetadataChannel = -1;
     private long sxmMetadataGeneration = -1;
     private String sxmTitle = "", sxmArtist = "", sxmName = "";
+    private volatile java.util.Set<Integer> sxmKnownIds = java.util.Collections.emptySet();
+    private volatile long sxmKnownGeneration = -1;
+    private long sxmCatalogPoll;
+    private java.util.List<Object> sxmItems = java.util.Collections.emptyList();
+
+    // The verified Smart Favorites API supplies a bounded initial catalog.
+    // IDs are opaque OEM identifiers, never synthesized from channel numbers.
+    private void refreshSxmCatalog(java.util.Map<Long,Object> values) throws Exception {
+        long now = android.os.SystemClock.elapsedRealtime();
+        long generation = CpClimate.sessionGeneration;
+        if (generation != sxmKnownGeneration || now - sxmCatalogPoll >= 10000) {
+            sxmCatalogPoll = now;
+            sxmKnownGeneration = -1;
+            sxmKnownIds = java.util.Collections.emptySet();
+            sxmItems = java.util.Collections.emptyList();
+            int category = readInt(sxmTuner, SXM_IFACE, "getSmartFavoritesCategoryID");
+            if (category < 0) return;
+            Object records = Class.forName(SXM_IFACE).getMethod("getCategoryChannels", int.class)
+                    .invoke(sxmTuner, category);
+            Class<?> type = Class.forName("com.hkmc.media.sxm65h.Channel");
+            if (records == null || !records.getClass().isArray()
+                    || records.getClass().getComponentType() != type) return;
+            java.lang.reflect.Field id = type.getDeclaredField("mChannelID");
+            id.setAccessible(true);
+            java.util.Set<Integer> known = new java.util.HashSet<Integer>();
+            java.util.List<Object> items = new java.util.ArrayList<Object>();
+            for (int i = 0; i < Math.min(100, java.lang.reflect.Array.getLength(records)); i++) {
+                Object entry = java.lang.reflect.Array.get(records, i);
+                if (entry == null) continue;
+                Object raw = id.get(entry);
+                if (!(raw instanceof Number)) continue;
+                int channel = ((Number)raw).intValue();
+                if (channel < 0 || !known.add(channel)) continue;
+                String name = channelText(type, entry, "mChannelLongName");
+                if (name.isEmpty()) name = "SiriusXM";
+                java.util.Map<String,Object> item = new java.util.LinkedHashMap<String,Object>();
+                item.put("identifier", Integer.toString(channel));
+                item.put("mediaItemName", name);
+                item.put("mediaItemShortName", name);
+                items.add(item);
+            }
+            sxmItems = items;
+            sxmKnownIds = java.util.Collections.unmodifiableSet(known);
+            sxmKnownGeneration = generation;
+            log.log("[radio-sxm] favorite catalog size=" + items.size());
+        }
+        values.put(4134L, sxmItems);
+    }
+
     private void refreshSxmFavoriteMetadata(java.util.Map<Long,Object> values, int channel) {
         long now = android.os.SystemClock.elapsedRealtime();
         long generation = CpClimate.sessionGeneration;
