@@ -358,7 +358,16 @@ public final class Video {
                 .setTargetBufferBytes(24 * 1024 * 1024)
                 .setPrioritizeTimeOverSizeThresholds(false)
                 .build();
+        // Prefer the K5's known hardware AVC path and modest adaptive variants.
+        // These are preferences, not a blanket ban on other playable codecs.
+        com.google.android.exoplayer2.trackselection.DefaultTrackSelector selector =
+                new com.google.android.exoplayer2.trackselection.DefaultTrackSelector(context);
+        selector.setParameters(selector.buildUponParameters()
+                .setPreferredVideoMimeType(com.google.android.exoplayer2.util.MimeTypes.VIDEO_H264)
+                .setMaxVideoSize(1280, 720)
+                .setExceedVideoConstraintsIfNecessary(true));
         player = new ExoPlayer.Builder(context, renderers.setEnableDecoderFallback(true))
+                .setTrackSelector(selector)
                 .setLoadControl(load)
                 .setLooper(Looper.getMainLooper()).build();
         startCpuTrace();
@@ -559,6 +568,8 @@ public final class Video {
                 for (int i = 0; i < g.length; i++) {
                     com.google.android.exoplayer2.Format f = g.getTrackFormat(i);
                     b.append(' ').append(f.sampleMimeType).append(f.width > 0 ? " " + f.width + "x" + f.height : "")
+                            .append(f.codecs != null ? " codec=" + f.codecs : "")
+                            .append(f.bitrate > 0 ? " " + f.bitrate / 1000 + " kbps" : "")
                             .append(f.channelCount > 0 ? " " + f.channelCount + "ch" : "")
                             .append(g.isTrackSupported(i) ? "" : " (can't decode)").append(g.isTrackSelected(i) ? " [playing]" : "").append(';');
                 }
