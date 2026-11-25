@@ -291,6 +291,20 @@ final class K5Radio {
         if (probing || !enabled()) return;
         probing = true;
         probeStatus = "Collecting (2 min)";
+        // Match the system-side permission-gated, two-minute observation window.
+        try {
+            if (android.os.Process.myUid() == 1000 &&
+                    context.checkCallingOrSelfPermission("android.permission.DEVICE_POWER")
+                    == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                context.sendBroadcast(new Intent("ioniq6.cpclimate.RADIO_TRACE")
+                        .setPackage("android")
+                        .putExtra("issued", android.os.SystemClock.elapsedRealtime()),
+                        "android.permission.DEVICE_POWER");
+                log.log("[radio-probe] requested system mode/key trace");
+            } else log.log("[radio-probe] system trace permission unavailable; polling only");
+        } catch (Throwable t) {
+            log.log("[radio-probe] system trace request failed: " + t.getClass().getSimpleName());
+        }
         final long generation = CpClimate.sessionGeneration;
         Thread worker = new Thread(new Runnable() {
             public void run() {
