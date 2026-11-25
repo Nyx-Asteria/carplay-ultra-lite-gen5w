@@ -364,10 +364,15 @@ public final class Video {
         // These are preferences, not a blanket ban on other playable codecs.
         com.google.android.exoplayer2.trackselection.DefaultTrackSelector selector =
                 new com.google.android.exoplayer2.trackselection.DefaultTrackSelector(context);
+        // Picture-only diagnostics deliberately choose the lowest supported
+        // video bitrate to reduce startup traffic and decoder pressure.
+        // The normal audio/video path retains adaptive selection.
         selector.setParameters(selector.buildUponParameters()
                 .setPreferredVideoMimeType(com.google.android.exoplayer2.util.MimeTypes.VIDEO_H264)
                 .setMaxVideoSize(1280, 720)
-                .setExceedVideoConstraintsIfNecessary(true));
+                .setExceedVideoConstraintsIfNecessary(true)
+                .setForceLowestBitrate(noSound));
+        log("[video-selection] pictureOnly=" + noSound + " preferAVC=true maxPreferred=1280x720 lowestBitrate=" + noSound);
         player = new ExoPlayer.Builder(context, renderers.setEnableDecoderFallback(true))
                 .setTrackSelector(selector)
                 .setLoadControl(load)
