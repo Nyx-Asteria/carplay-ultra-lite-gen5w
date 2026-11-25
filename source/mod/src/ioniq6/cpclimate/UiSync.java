@@ -116,7 +116,8 @@ final class UiSync {
             if (version >= 2) withId(extra);
             out.add(message(RESET_COMPLETE, null, extra));
             out.add(message(COMMAND, command(ALLOW_LAYOUT_CHANGE, "allow", Boolean.TRUE), null));
-            if (wanted != null) out.add(message(COMMAND, requestLayout(wanted, light ? LIGHT : DARK), null));
+            if (wanted != null && "Cluster_Display".equals(panel.get("displayUUID")))
+                out.add(message(COMMAND, requestLayout(wanted, light ? LIGHT : DARK), null));
             out.add(message(COMMAND, command(GIVE_FOCUS, "tokenID", FOCUS_TOKEN), null));
         } else if (type != null && type == COMMAND && ready) {
             lastRx = orLast(header.get("psn"));

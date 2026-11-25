@@ -523,14 +523,14 @@ final class CarClimate extends Thread implements VehicleState.Car {
         if (wheelPressedAt != 0 && sincePress < WHEEL_SETTLE_MS) now = wheelPressedFor ? 1 : 0;
         if (now < 0) throw new IllegalStateException("the steering wheel heater's state can't be read");
         if ((now == 1) == want) return false;
-        wheelPressedAt = android.os.SystemClock.elapsedRealtime();
-        wheelPressedFor = want;
         Parcel data = Parcel.obtain(), reply = Parcel.obtain();
         try {
             data.writeInterfaceToken(USM_IFACE);
             data.writeInt(1);
-            usm.transact(txSetWheel, data, reply, 0);
+            if (!usm.transact(txSetWheel, data, reply, 0)) throw new IllegalStateException("wheel transaction rejected");
             reply.readException();
+            wheelPressedFor = want;
+            wheelPressedAt = android.os.SystemClock.elapsedRealtime();
         } finally {
             data.recycle();
             reply.recycle();
