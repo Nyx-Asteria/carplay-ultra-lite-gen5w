@@ -1,13 +1,13 @@
 {
   "id": "carplay-ultra-lite-k5",
   "name": "CarPlay Ultra-Lite K5",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0-rc.5",
   "hmgapi": ">=1.1.0-rc.8",
   "authors": [
     "cp-climate contributors"
   ],
   "license": "GPL-3.0-or-later",
-  "description": "Kia K5 DL322 USA 260507 CarPlay Ultra-Lite port: climate, vehicle information, Comfort thresholds, Ultra themes, experimental OEM popup suppression, parked video and read-only radio diagnostics. Vehicle validation pending. Based on LIVI (GPL-3.0).",
+  "description": "Kia K5 DL322 USA 260507 CarPlay Ultra-Lite: front climate and seats, Comfort thresholds, Ultra themes, native FM, optional projection scaling, experimental OEM popup suppression and parked video. Vehicle validation pending. Based on LIVI (GPL-3.0).",
   "system": [
     {
       "model": [
