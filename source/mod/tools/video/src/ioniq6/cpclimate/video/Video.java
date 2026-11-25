@@ -334,17 +334,29 @@ public final class Video {
         String lower = url.toLowerCase(java.util.Locale.US);
         String path = Uri.parse(url).getPath() == null ? "" : Uri.parse(url).getPath().toLowerCase(java.util.Locale.US);
         boolean progressive = !(path.endsWith(".m3u8") || path.endsWith(".m3u") || lower.contains(".m3u8?") || lower.contains("format=m3u8"));
-        MediaItem media = MediaItem.fromUri(url);
+        // The sender may describe an HLS asset whose URL has no playlist extension.
+        // Only use explicit MIME hints; do not infer HLS from the sending application.
+        for (String key : new String[] {"Content-Type", "contentType", "mimeType"}) {
+            Object hint = it.get(key);
+            if (!(hint instanceof String)) continue;
+            String mime = ((String) hint).split(";", 2)[0].trim().toLowerCase(java.util.Locale.US);
+            if ("application/vnd.apple.mpegurl".equals(mime) || "application/x-mpegurl".equals(mime)
+                    || "audio/mpegurl".equals(mime) || "audio/x-mpegurl".equals(mime)) {
+                progressive = false;
+                break;
+            }
+        }
+        MediaItem media = new MediaItem.Builder().setUri(url)
+                .setMimeType(progressive ? null : com.google.android.exoplayer2.util.MimeTypes.APPLICATION_M3U8).build();
         MediaSource source = progressive ? new ProgressiveMediaSource.Factory(data).createMediaSource(media)
                 : new HlsMediaSource.Factory(data).setAllowChunklessPreparation(true).createMediaSource(media);
         release();
         com.google.android.exoplayer2.DefaultRenderersFactory renderers = new Renderers(context);
-        // start after 4 s of video (quick start), but after a pause wait for 10 s so pauses come less often;
-        // keep loading up to 90 s ahead (2026-11-11: the default 2.5 s after a pause gave a pause every few seconds)
+        // Limit memory pressure on the K5; allow an initial frame sooner while retaining a longer rebuffer threshold.
         com.google.android.exoplayer2.DefaultLoadControl load = new com.google.android.exoplayer2.DefaultLoadControl.Builder()
-                .setBufferDurationsMs(30000, 90000, 4000, 10000)
-                .setTargetBufferBytes(64 * 1024 * 1024)
-                .setPrioritizeTimeOverSizeThresholds(true)
+                .setBufferDurationsMs(15000, 45000, 1500, 5000)
+                .setTargetBufferBytes(24 * 1024 * 1024)
+                .setPrioritizeTimeOverSizeThresholds(false)
                 .build();
         player = new ExoPlayer.Builder(context, renderers.setEnableDecoderFallback(true))
                 .setLoadControl(load)
@@ -521,7 +533,9 @@ public final class Video {
         @Override
         public void onPlaybackStateChanged(int state) {
             log("video: player " + (state == Player.STATE_BUFFERING ? "buffering" : state == Player.STATE_READY ? "ready"
-                    : state == Player.STATE_ENDED ? "ended" : "idle"));
+                    : state == Player.STATE_ENDED ? "ended" : "idle")
+                    + (player == null ? "" : " position=" + player.getCurrentPosition() + " buffered=" + player.getBufferedPosition()
+                    + " playWhenReady=" + player.getPlayWhenReady() + " firstFrame=" + firstFrame));
             updateStatus();
         }
 
