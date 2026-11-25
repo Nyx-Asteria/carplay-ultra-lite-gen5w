@@ -56,6 +56,14 @@
       "title": "Parked AirPlay Video & Audio",
       "description": "Experimental video with sound while safely parked. Stops when Park confirmation is lost.",
       "apply": "restart"
+    },
+    {
+      "key": "parked_video_picture_only",
+      "type": "toggle",
+      "default": false,
+      "title": "AirPlay Picture Only (Diagnostic)",
+      "description": "Disables the local AirPlay audio renderer from the start to isolate video decoding and rendering. Requires Parked AirPlay Video & Audio. All Park safety checks remain active.",
+      "apply": "restart"
     }
   ]
 }
