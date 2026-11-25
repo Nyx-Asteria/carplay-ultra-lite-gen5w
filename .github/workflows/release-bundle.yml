@@ -153,6 +153,7 @@ jobs:
           # Build PPS using its own regression tests and the same permanent key.
           (cd .pps && HMG_API="$PWD/../.hmgapi" ANDROID_JAR="$AJ" D8="$D8" HMGAPI_SDK="$SDK" HMGAPI_CP="$SDK/lib/hmgapi-engine.jar" PYTHON=/usr/bin/python3 SIGNING_KEY="$KEY" sh build.sh)
           PPS_VERSION=$(python3 -c 'import json; print(json.load(open(".pps/mod.json"))["version"])')
+          test "$PPS_VERSION" = "1.0.0"
           cp ".pps/dist/phone-projection-scaling-$PPS_VERSION.zip" out/packages/
           mkdir -p out/release
           for f in out/packages/*.zip; do
