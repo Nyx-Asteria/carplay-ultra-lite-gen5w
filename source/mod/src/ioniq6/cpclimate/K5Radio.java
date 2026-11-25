@@ -44,16 +44,52 @@ final class K5Radio {
         return ((Integer)m.invoke(proxy)).intValue();
     }
 
+    // Read the OEM cached scan results, never start a scan or retune.
+    // DL322 automotive.odex: RadioAllBsmFreqInfo.mBsmFreq (int),
+    // mIsBsmValidStaton (boolean). Keep the OEM spelling.
+    private long lastListPoll;
+    private java.util.List<Object> fmItems = java.util.Collections.emptyList();
+    private java.util.List<Object> readFmItems(Object tuner) throws Exception {
+        Object raw = Class.forName(RADIO_IFACE).getMethod("getRadioAllBsmFreqList").invoke(tuner);
+        if (!(raw instanceof java.util.List)) return java.util.Collections.emptyList();
+        Class<?> type = Class.forName("com.hkmc.media.RadioAllBsmFreqInfo");
+        java.lang.reflect.Field freq = type.getDeclaredField("mBsmFreq");
+        java.lang.reflect.Field valid = type.getDeclaredField("mIsBsmValidStaton");
+        freq.setAccessible(true); valid.setAccessible(true);
+        java.util.TreeSet<Long> frequencies = new java.util.TreeSet<Long>();
+        for (Object entry : (java.util.List<?>)raw) {
+            if (type.isInstance(entry) && valid.getBoolean(entry)) {
+                long khz = fmKhz(freq.getInt(entry));
+                if (khz >= 87900 && khz <= 107900 && (khz - 87900) % 200 == 0)
+                    frequencies.add(khz);
+            }
+        }
+        java.util.List<Object> items = new java.util.ArrayList<Object>();
+        for (Long khz : frequencies) {
+            String label = String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0);
+            java.util.Map<String,Object> item = new java.util.LinkedHashMap<String,Object>();
+            item.put("identifier", Long.toString(khz));
+            item.put("mediaItemName", label);
+            item.put("mediaItemShortName", label);
+            item.put("mediaItemType", "fm");
+            item.put("mediaItemCategory", 0L);
+            item.put("frequency", khz);
+            items.add(item);
+        }
+        return items;
+    }
+
     /** Read-only FM state; never change the OEM source merely because CarPlay connects. */
     java.util.Map<Long,Object> refreshFm() {
         java.util.Map<Long,Object> values = new java.util.LinkedHashMap<Long,Object>();
         values.put(4115L, true);
         values.put(4116L, "");
+        values.put(4118L, java.util.Collections.emptyList());
         values.put(4354L, "");
         values.put(4355L, "");
         values.put(4359L, 0L);
         values.put(4117L, ClimateMap.BLANK);
-        if (!enabled() || !CpClimate.sessionActive) { fmActive = false; return values; }
+        if (!enabled() || !CpClimate.sessionActive) { fmActive = false; lastListPoll = 0; fmItems = java.util.Collections.emptyList(); return values; }
         try {
             if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) { fmActive = false; return values; }
             if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
@@ -73,6 +109,21 @@ final class K5Radio {
             // The command path still checks active source ownership before tuning.
             values.put(4115L, !(fmTuner != null && fmAudio != null && khz > 0));
             values.put(4116L, fmActive ? Long.toString(khz) : "");
+            if (fmTuner != null && fmAudio != null && khz > 0) {
+                long now = android.os.SystemClock.elapsedRealtime();
+                if (lastListPoll == 0 || now - lastListPoll >= 10000) {
+                    lastListPoll = now;
+                    try {
+                        java.util.List<Object> next = readFmItems(fmTuner);
+                        if (!next.equals(fmItems)) log.log("[radio] cached OEM FM station list size=" + next.size());
+                        fmItems = next;
+                    } catch (Throwable t) {
+                        fmItems = java.util.Collections.emptyList();
+                        log.log("[radio] station list unavailable: " + t.getClass().getSimpleName());
+                    }
+                }
+                values.put(4118L, fmItems);
+            }
         } catch (Throwable t) { fmActive = false; fmTuner = null; fmAudio = null; }
         return values;
     }
