@@ -21,12 +21,13 @@ final class UiSyncChannel extends Thread {
 
     final File dir;
     final VsChannel.Log out;
-    final UiSync sync = new UiSync();
+    final UiSync sync;
 
     UiSyncChannel(File dir, VsChannel.Log out, UiSync.Layout layout) {
         super("cp-climate-uisync");
         this.dir = dir;
         this.out = out;
+        sync = new UiSync(new File(dir, "cpc-theme-preferences.properties"), true);
         sync.wanted = layout;
         setDaemon(true);
     }

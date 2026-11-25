@@ -141,9 +141,9 @@ public class UiSyncTest {
         Map<String, Object> d = (Map<String, Object>) c.get("data");
         Map<String, Object> active = (Map<String, Object>) d.get("activeComponents");
         // LIVI ui_sync.rs's test: layout 0D38B526…, its map zone F0786093… shows component 2B28C705…
-        check("request layout: command psn 4, Modular 0D38B526-…, palette blue, dark, fades, map zone component",
+        check("request layout: command psn 4, Modular 0D38B526-…, palette midnight, dark, fades, map zone component",
                 is(h, 2, 4, 1) && Long.valueOf(UiSync.REQUEST_LAYOUT).equals(n(c, "type"))
-                        && "0D38B526-1271-575D-8A92-393A86B718F9".equals(d.get("layoutID")) && "blue".equals(d.get("paletteID"))
+                        && "0D38B526-1271-575D-8A92-393A86B718F9".equals(d.get("layoutID")) && "midnight".equals(d.get("paletteID"))
                         && Long.valueOf(UiSync.DARK).equals(n(d, "appearanceMode")) && Boolean.TRUE.equals(d.get("fadeInNewLayout"))
                         && Boolean.TRUE.equals(d.get("fadeOutOldLayout")) && active != null && active.size() == 1
                         && "2B28C705-6563-5F11-8867-2AAEC2FC0555".equals(active.get("F0786093-7DEF-5F93-A171-2839E58C7EB4")));
@@ -154,14 +154,28 @@ public class UiSyncTest {
         out = sync.handle(complete);
         check("a reopened channel asks for the layout again", out.size() == 4
                 && "0D38B526-1271-575D-8A92-393A86B718F9".equals(((Map<String, Object>) commandOf(headerOf(out.get(2))).get("data")).get("layoutID")));
-        UiSync center = new UiSync();
+        UiSync center = new UiSync(null, true);
         center.wanted = UiSync.layout("Modular");
         Map<Object, Object> panel = new LinkedHashMap<Object, Object>();
         panel.put("displayUUID", "Center_Display");
         panel.put("data", Bplist.encode(map("type", 0L, "ssn", 1L, "psn", 1L, "version", 3L)));
         center.handle(OpackCodec.encode(panel));
         panel.put("data", Bplist.encode(map("type", 1L, "ssn", 1L, "psn", 1L, "version", 3L)));
-        check("center display does not receive cluster layout request", center.handle(OpackCodec.encode(panel)).size() == 3);
+        List<byte[]> centerOut = center.handle(OpackCodec.encode(panel));
+        Map<Object,Object> centerFrame = (Map<Object,Object>) OpackCodec.decode(centerOut.get(2));
+        Map<String,Object> centerHeader = (Map<String,Object>) Bplist.decode((byte[]) centerFrame.get("data"));
+        Map<String,Object> centerData = (Map<String,Object>) commandOf(centerHeader).get("data");
+        check("center requests its own Wallpaper layout, never a cluster layout",
+                centerOut.size() == 4 && UiSync.CENTER.id.equals(centerData.get("layoutID"))
+                && "blue".equals(centerData.get("paletteID"))
+                && ((Map<?,?>)centerData.get("activeComponents")).isEmpty());
+        sync.handle(fromPhone(3, UiSync.START_LAYOUT_TRANSITION, map("layoutID", UiSync.layout("DigiRing").id, "paletteID", "green")));
+        sync.reopen(); sync.handle(reset);
+        Map<String,Object> retained = (Map<String,Object>) commandOf(headerOf(sync.handle(complete).get(2))).get("data");
+        check("phone layout and palette survive reset", UiSync.layout("DigiRing").id.equals(retained.get("layoutID"))
+                && "green".equals(retained.get("paletteID")));
+        check("catalog palette constraints", UiSync.offered(UiSync.layout("Modular"),"midnight")
+                && !UiSync.offered(UiSync.CENTER,"midnight") && !UiSync.offered(UiSync.layout("MapsMedia"),"midnight"));
         boolean ids = true;
         for (UiSync.Layout l : UiSync.THEME_LAYOUTS)
             ids &= l.id.length() == 36 && l.zone.length() == 36 && l.component.length() == 36 && !l.palette.isEmpty();
