@@ -148,6 +148,37 @@ final class VehicleState {
         return changed ? OpackCodec.encode(list) : accessories;
     }
 
+    private byte[] withoutDab(byte[] accessories) {
+        Object decoded = OpackCodec.decode(accessories);
+        if (!(decoded instanceof List)) return accessories;
+        boolean removed = false;
+        for (Object accessory : (List<?>) decoded) {
+            if (!(accessory instanceof Map)) continue;
+            Object services = ((Map<?,?>) accessory).get("services");
+            if (!(services instanceof List)) continue;
+            java.util.Iterator<?> it = ((List<?>) services).iterator();
+            while (it.hasNext()) {
+                Object service = it.next();
+                if (!(service instanceof Map) || !Long.valueOf(4097).equals(
+                        OpackCodec.asLong(((Map<?,?>) service).get("iid")))) continue;
+                Object chars = ((Map<?,?>) service).get("characteristics");
+                if (chars instanceof List) for (Object characteristic : (List<?>) chars) {
+                    if (!(characteristic instanceof Map)) continue;
+                    Long iid = OpackCodec.asLong(((Map<?,?>) characteristic).get("iid"));
+                    if (iid == null) continue;
+                    values.remove(iid); writable.remove(iid); shared.remove(iid);
+                    names.remove(iid); notifiers.remove(iid);
+                    java.util.Iterator<Map.Entry<Long,Long>> links = notifiers.entrySet().iterator();
+                    while (links.hasNext()) if (iid.equals(links.next().getValue())) links.remove();
+                }
+                it.remove();
+                removed = true;
+            }
+        }
+        if (removed) out.log("[radio] European DAB service omitted");
+        return removed ? OpackCodec.encode(decoded) : accessories;
+    }
+
     // Schema discovery only: 0 is an unverified semantic value, not an Apple
     // satellite-radio assignment. Never impersonate FM or DAB.
     static volatile boolean sxmSchemaTest;
@@ -606,6 +637,9 @@ final class VehicleState {
             if (sxm != null) { acc = sxm; out.log("[radio] experimental SXM schema advertised disabled; semantic 0 unverified"); }
             else out.log("[radio] experimental SXM schema unavailable");
         }
+        // The North American K5 has no DAB tuner. Remove the European
+        // service after any opt-in SXM template experiment has used it.
+        acc = withoutDab(acc);
         values.put(NOW_PLAYING_SOURCE, "");
         if (ambientTest) {
             // the ambient light test: starts at the car's own colour (white if it can't be read)
