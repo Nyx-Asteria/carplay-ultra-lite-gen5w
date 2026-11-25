@@ -48,8 +48,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Nyx-Asteria/hmgapi-wireless-cp-aa
-          ref: 055f60559e971bf4b0dbdf86824c065d1b97aaa7
+          ref: 49f02ae5476c8fa3d4ae9650108d231a2ff4efcc
           path: .wireless
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Nyx-Asteria/Phone-Projection-Scaling
+          ref: 90c58da991d8ed5392b2549f05043366996de103
+          path: .pps
           persist-credentials: false
       - uses: actions/setup-java@v4
         with:
@@ -58,7 +64,7 @@ jobs:
       - name: SDK
         run: |
           sudo apt-get update -q
-          sudo apt-get install -yq clang lld zip unzip mksh
+          sudo apt-get install -yq clang lld zip unzip mksh python3-pyelftools
           (cd .hmgapi && ./build.sh sdk)
           mkdir -p out/sdk
           unzip -q .hmgapi/out/dist/hmgapi-mod-sdk-*.zip -d out/sdk
@@ -67,7 +73,7 @@ jobs:
           VERSION=$(python3 -c 'import json; print(json.load(open("source/mod/mod.json"))["version"])')
           echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$'
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-      - name: Build and sign five packages
+      - name: Build and sign six packages
         shell: bash
         env:
           MOD_KEY: ${{ secrets.MOD_KEY }}
@@ -142,6 +148,10 @@ jobs:
           cp -a "$W" out/staging/wireless-carplay-aa
           sh "$SDK/bin/build-mod.sh" out/staging/wireless-carplay-aa out/wireless-carplay-aa out/wireless-work
           HMGAPI_MOD_BUILD="$PWD/out/wireless-carplay-aa" sh "$SDK/bin/mkmodpkg.sh" out/staging/wireless-carplay-aa "$KEY"
+          # Build PPS using its own regression tests and the same permanent key.
+          (cd .pps && HMG_API="$PWD/../.hmgapi" ANDROID_JAR="$AJ" D8="$D8" HMGAPI_SDK="$SDK" HMGAPI_CP="$SDK/lib/hmgapi-engine.jar" PYTHON=/usr/bin/python3 SIGNING_KEY="$KEY" sh build.sh)
+          PPS_VERSION=$(python3 -c 'import json; print(json.load(open(".pps/mod.json"))["version"])')
+          cp ".pps/dist/phone-projection-scaling-$PPS_VERSION.zip" out/packages/
           mkdir -p out/release
           for f in out/packages/*.zip; do
             tmp=$(mktemp -d)
@@ -150,7 +160,7 @@ jobs:
             rm -rf "$tmp"
             cp "$f" out/release/
           done
-          test "$(find out/release -name '*.zip' | wc -l)" -eq 5
+          test "$(find out/release -name '*.zip' | wc -l)" -eq 6
           cp "docs/rc${VERSION##*.}-testing.md" out/release/TESTING.md
           (cd out/release && sha256sum *.zip > SHA256SUMS.txt && zip -q CarPlay-Ultra-Lite-K5-$VERSION-testing-bundle.zip *.zip TESTING.md SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
