@@ -162,13 +162,16 @@ public class UiSyncTest {
         center.handle(OpackCodec.encode(panel));
         panel.put("data", Bplist.encode(map("type", 1L, "ssn", 1L, "psn", 1L, "version", 3L)));
         List<byte[]> centerOut = center.handle(OpackCodec.encode(panel));
-        Map<Object,Object> centerFrame = (Map<Object,Object>) OpackCodec.decode(centerOut.get(2));
-        Map<String,Object> centerHeader = (Map<String,Object>) Bplist.decode((byte[]) centerFrame.get("data"));
-        Map<String,Object> centerData = (Map<String,Object>) commandOf(centerHeader).get("data");
-        check("center requests its own Wallpaper layout, never a cluster layout",
-                centerOut.size() == 4 && UiSync.CENTER.id.equals(centerData.get("layoutID"))
-                && "blue".equals(centerData.get("paletteID"))
-                && ((Map<?,?>)centerData.get("activeComponents")).isEmpty());
+        boolean centerPhoneManaged = centerOut.size() == 3;
+        long[] centerTypes = {UiSync.RESET_COMPLETE, UiSync.ALLOW_LAYOUT_CHANGE, UiSync.GIVE_FOCUS};
+        for (int k = 0; centerPhoneManaged && k < centerOut.size(); k++) {
+            Map<Object,Object> centerFrame = (Map<Object,Object>) OpackCodec.decode(centerOut.get(k));
+            Map<String,Object> centerHeader = (Map<String,Object>) Bplist.decode((byte[]) centerFrame.get("data"));
+            centerPhoneManaged = "Center_Display".equals(centerFrame.get("displayUUID"))
+                    && Long.valueOf(k == 0 ? UiSync.RESET_COMPLETE : UiSync.COMMAND).equals(n(centerHeader,"type"))
+                    && (k == 0 || Long.valueOf(centerTypes[k]).equals(n(commandOf(centerHeader),"type")));
+        }
+        check("center handshake permits phone-managed layouts without forcing Wallpaper/blue", centerPhoneManaged);
         sync.handle(fromPhone(3, UiSync.START_LAYOUT_TRANSITION, map("layoutID", UiSync.layout("DigiRing").id, "paletteID", "green")));
         sync.reopen(); sync.handle(reset);
         Map<String,Object> retained = (Map<String,Object>) commandOf(headerOf(sync.handle(complete).get(2))).get("data");
