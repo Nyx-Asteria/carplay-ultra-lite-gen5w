@@ -25,7 +25,7 @@ final class K5Radio {
                     && context.getPackageManager().resolveActivity(candidate,0)!=null) found=candidate;
         } catch (Exception e) { log.log("[radio] discovery failed: "+e.getClass().getSimpleName()); }
         launch=found;
-        log.log("[radio] stock radio launch available="+(launch!=null)+"; direct tuner unavailable pending OEM interface evidence");
+        log.log("[radio] stock radio launch available="+(launch!=null)+"; FM tuner subject to runtime service and firmware checks");
     }
     private volatile String probeStatus = "Ready";
     private volatile boolean fmActive;
@@ -135,18 +135,19 @@ final class K5Radio {
      * ModeConstants.ModeType FM1=2. Foreground behavior requires parked validation. */
     // A tune with explicit FM source may activate FM first. Only the latest
     // pending request is retained; it expires and cannot cross sessions.
-    private volatile long tuneRequest;
+    private final java.util.concurrent.atomic.AtomicLong tuneRequest = new java.util.concurrent.atomic.AtomicLong();
+    void cancelPendingTune() { tuneRequest.incrementAndGet(); }
     boolean selectAndTuneFm(final long khz) {
         if (khz < 87900 || khz > 107900 || (khz - 87900) % 200 != 0
                 || !enabled() || !CpClimate.sessionActive) return false;
         final long generation = CpClimate.sessionGeneration;
-        final long request = ++tuneRequest;
+        final long request = tuneRequest.incrementAndGet();
         if (fmActive) return tuneFm(khz);
-        if (!selectFm()) return false;
+        if (!selectFm(request)) return false;
         final long deadline = android.os.SystemClock.elapsedRealtime() + 5000;
         main.postDelayed(new Runnable() {
             public void run() {
-                if (!probeActive(generation) || request != tuneRequest) return;
+                if (!probeActive(generation) || request != tuneRequest.get()) return;
                 if (android.os.SystemClock.elapsedRealtime() >= deadline) {
                     log.log("[radio] FM activation timed out; pending tune discarded");
                     return;
@@ -158,12 +159,14 @@ final class K5Radio {
         return true;
     }
 
-    boolean selectFm() {
+    boolean selectFm() { return selectFm(tuneRequest.incrementAndGet()); }
+
+    private boolean selectFm(final long request) {
         if (!enabled() || !CpClimate.sessionActive) return false;
         final long generation = CpClimate.sessionGeneration;
         fmCommands.execute(new Runnable() {
             public void run() {
-                if (!probeActive(generation)) return;
+                if (!probeActive(generation) || request != tuneRequest.get()) return;
                 try {
                     if (!"7c99638e39c369c45fab9c485b103cf0".equals(
                             ModContext.md5("/system/framework/automotive.odex"))) return;
@@ -171,13 +174,13 @@ final class K5Radio {
                     // implementation can create Handler-backed listener transports.
                     main.post(new Runnable() {
                         public void run() {
-                            if (!probeActive(generation)) return;
+                            if (!probeActive(generation) || request != tuneRequest.get()) return;
                             try {
                                 Class<?> type = Class.forName("com.hkmc.mode.ModeManager");
                                 java.lang.reflect.Method change = type.getMethod("changeMode", Integer.class);
                                 if (change.getReturnType() != boolean.class) return;
                                 Object manager = type.getConstructor(Context.class).newInstance(context);
-                                if (!probeActive(generation)) return;
+                                if (!probeActive(generation) || request != tuneRequest.get()) return;
                                 Object accepted = change.invoke(manager, Integer.valueOf(2));
                                 log.log("[radio] OEM FM1 mode request accepted=" + accepted);
                             } catch (Throwable t) {
