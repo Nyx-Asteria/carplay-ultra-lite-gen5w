@@ -24,16 +24,19 @@ final class ComfortThresholds {
         installed = enabled() && p != null && "dev.lemoyne.comfort".equals(p.packageName);
         log.log("[comfort] compatible provider declared=" + installed);
     }
-    boolean enabled() { return mod.enabled() && mod.settingBoolean("comfort_thresholds", true); }
+    boolean enabled() { return mod.enabled() && mod.settingBoolean("k5_integration", true); }
     boolean present() { return installed; }
     void describe(VehiclePage page) {
-        page.sectionName("comfort", "Comfort");
-        page.tile("comfort", "thermometer");
+        page.sectionName("comfort_winter", "Comfort · Winter heating");
+        page.tile("comfort_winter", "flame");
+        page.sectionName("comfort_summer", "Comfort · Summer ventilation");
+        page.tile("comfort_summer", "snowflake");
         for (int i=0;i<IDS.length;i++) {
             String id = "comfort." + IDS[i];
-            page.line("comfort", id, LABELS[i], i<3 ? "flame" : "snowflake");
-            page.button("comfort", id+".minus", LABELS[i]+" -1°", "minus.circle");
-            page.button("comfort", id+".plus", LABELS[i]+" +1°", "plus.circle");
+            String section = i < 3 ? "comfort_winter" : "comfort_summer";
+            page.line(section, id, LABELS[i] + (i<3 ? " (≤)" : " (≥)"), i<3 ? "flame" : "snowflake");
+            page.button(section, id+".minus", LABELS[i]+" −1°", "minus.circle");
+            page.button(section, id+".plus", LABELS[i]+" +1°", "plus.circle");
         }
     }
     Bundle read(String operation, String id, Bundle args) {

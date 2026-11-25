@@ -30,7 +30,7 @@ final class VolumePanel {
                 final Handler handler = new Handler(thread.getLooper());
                 mod.hook(null, "framework.window_manager_service.intercept_key", new MethodHook() {
                     @Override protected void afterHookedMethod(Param key) {
-                        if (!mod.enabled() || !mod.settingBoolean("volume_panel", true) || !mod.settingBoolean("volume_link", true)
+                        if (!mod.enabled() || !mod.settingBoolean("k5_integration", true) || !mod.settingBoolean("k5_integration", true)
                                 || key.args.length == 0 || !(key.args[0] instanceof KeyEvent)) return;
                         KeyEvent e = (KeyEvent)key.args[0];
                         if (!isVolume(e.getKeyCode()) || e.getAction() != KeyEvent.ACTION_DOWN) return;
@@ -61,7 +61,7 @@ final class VolumePanel {
     }
     static synchronized void onStockKey(final Context c, final CarAudio audio) {
         final ModContext mod = CpClimate.mod;
-        if (mod == null || !mod.enabled() || !mod.settingBoolean("volume_panel", true) || !audio.panelReady()) return;
+        if (mod == null || !mod.enabled() || !mod.settingBoolean("k5_integration", true) || !audio.panelReady()) return;
         if (worker == null) {
             hide = CarApi.code(CarAudio.IFACE, "hideVolumeDisplay", "(Z)V");
             if (hide < 0) { mod.log("[volume-panel] hide getter unavailable; stock panel retained"); return; }
@@ -70,7 +70,7 @@ final class VolumePanel {
         }
         final long generation = CpClimate.sessionGeneration;
         for (long delay : new long[]{90,250}) worker.postDelayed(new Runnable() { public void run() {
-            if (generation != CpClimate.sessionGeneration || !audio.panelReady() || !mod.settingBoolean("volume_panel", true) || !foreground(c)) return;
+            if (generation != CpClimate.sessionGeneration || !audio.panelReady() || !mod.settingBoolean("k5_integration", true) || !foreground(c)) return;
             Parcel data = Parcel.obtain(), reply = Parcel.obtain();
             try {
                 IBinder b = CarClimate.service(CarAudio.SERVICE);

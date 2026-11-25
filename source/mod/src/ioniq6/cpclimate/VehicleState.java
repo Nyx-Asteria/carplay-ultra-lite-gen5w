@@ -440,7 +440,11 @@ final class VehicleState {
         long base = OpackCodec.asLong(seat.get("iid"));
         for (Object o : (List<Object>) seat.get("characteristics")) {
             Map<Object, Object> c = (Map<Object, Object>) o;
-            if (OpackCodec.asLong(c.get("iid")) == base + 1) c.put("minimumValue", coolingMin);
+            if (OpackCodec.asLong(c.get("iid")) == base + 1) {
+                c.put("minimumValue", coolingMin);
+                c.put("maximumValue", 3L);
+                c.put("stepValue", 1L);
+            }
         }
     }
 
@@ -960,7 +964,7 @@ final class VehicleState {
             long levelIid = pair[0], onIid = pair[1];
             Object level = find(written, levelIid), on = find(written, onIid);
             if (level instanceof Long) {
-                carSets(onIid, (Long) level > 0, changed);
+                carSets(onIid, (Long) level > 0 || (levelIid != FAN_LEVEL && extras && coolingLayout && (Long) level < 0), changed);
             } else if (on instanceof Boolean) {
                 boolean isOn = (Boolean) on;
                 boolean held = values.containsKey(levelIid);

@@ -48,9 +48,9 @@ public final class CpClimate extends ModEntry {
         targetVerified = model && core && identity && dipo;
         m.log("[preflight] target=" + model + " core=" + core + " identity=" + identity + " dipo=" + dipo + " ready=" + targetVerified);
         themePreflight = targetVerified
-                && m.settingBoolean("ultra_theme", true) && theme.available(m);
+                && m.settingBoolean("ultra_theme", false) && m.settingBoolean("ultra_identity", false) && theme.available(m);
         m.log("[theme] boot preflight=" + themePreflight);
-        if (targetVerified && m.settingBoolean("volume_panel", true) && m.settingBoolean("volume_link", true)) VolumePanel.zygote(m);
+        if (targetVerified && m.settingBoolean("k5_integration", true)) VolumePanel.zygote(m);
     }
 
     private static String property(String key) {
@@ -75,7 +75,7 @@ public final class CpClimate extends ModEntry {
     public static boolean videoAllowed() { return VideoUi.enabled && sessionActive && ParkedVideo.allowed(); }
 
     /** files/cpc-vspi.bplist: VehicleState.vspi for the native /info hook (removed if it can't be built) */
-    static void writeVspi(File dir, VsChannel.Log log) {
+    static boolean writeVspi(File dir, VsChannel.Log log) {
         File to = new File(dir, "cpc-vspi.bplist"), tmp = new File(dir, "cpc-vspi.bplist.tmp");
         try {
             byte[] b = new VehicleState(new VsChannel.Log() {
@@ -91,27 +91,28 @@ public final class CpClimate extends ModEntry {
             }
             if (!tmp.renameTo(to)) throw new java.io.IOException("rename failed");
             log.log("vehicleStateProtocolInfo for /info written (" + b.length + " bytes, accessory versions " + VehicleState.changedVersions + ")");
+            return true;
         } catch (Throwable t) {
             to.delete();
             tmp.delete();
-            log.log("vehicleStateProtocolInfo for /info not written, LIVI's is used: " + t);
+            log.log("vehicleStateProtocolInfo for /info not written: " + t);
+            return false;
         }
     }
 
     @Override
     public void appLoaded(ModContext m, LoadedApp app) {
         if ("com.tcc.iap2server".equals(app.packageName)) {
-            if (themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true)) {
+            if (themePreflight && m.enabled() && m.settingBoolean("ultra_theme", false)) {
                 theme.register(m);
             } else m.log("[theme] iAP2 contribution withheld by boot preflight/settings");
             return;
         }
         if (!DIPO.equals(app.packageName)) return;
-        m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("climate_test", true));
+        m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("k5_integration", true));
         if (!targetVerified) return;
-        boolean climate = m.settingBoolean("climate_test", true);
-        boolean any = climate || m.settingBoolean("native_radio", true) || m.settingBoolean("comfort_thresholds", true) || m.settingBoolean("vehicle_page", true) || m.settingBoolean("volume_link", true)
-                || m.settingBoolean("media_controls", true) || m.settingBoolean("parked_video", false) || themePreflight;
+        boolean climate = m.settingBoolean("k5_integration", true);
+        boolean any = climate || m.settingBoolean("k5_integration", true) || m.settingBoolean("parked_video", false) || m.settingBoolean("ultra_theme", false);
         if (!any) { m.log("[runtime] all features off; native patch withheld"); return; }
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
@@ -120,7 +121,13 @@ public final class CpClimate extends ModEntry {
             // CarPlay Ultra-Lite 1.0: two settings. Everything the development builds made switchable is fixed
             // at what was tested on the Ioniq 6 (CEEV USA 260507, 2026-11-08); the code for the other values stays.
             // Theme registration is not integrated yet. Never advertise unsupported Ultra mode.
-            boolean ultra = themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true);
+            boolean ultra = m.enabled() && m.settingBoolean("ultra_theme", false);
+            boolean cluster = ultra && m.settingBoolean("ultra_cluster", false);
+            boolean themedIds = cluster && m.settingBoolean("ultra_display_ids", false);
+            boolean variant = ultra && m.settingBoolean("ultra_variant", false);
+            boolean features = ultra && m.settingBoolean("ultra_features", false);
+            boolean enhanced = ultra && m.settingBoolean("ultra_enhanced_ui", false);
+            m.log("[theme] identity=" + themePreflight + " cluster=" + cluster + " themedIds=" + themedIds + " variant=" + variant + " features=" + features + " enhanced=" + enhanced);
             m.log("[theme] DiPO display profile enabled=" + ultra + " (shared provider native result not exposed)");
             writeSize(dir, "80");
             writeDock(dir, "1");                                  // the bottom dock with the climate bar
@@ -128,18 +135,18 @@ public final class CpClimate extends ModEntry {
             writeFlag(dir, "cpc-extras", climate, "LIVI display extras");
             writeCluster(dir, "full");                            // the instrument panel with its plugin (climate overlay)
             writeWide(dir, "0");
-            writeUltra(dir, ultra ? 2 : 0);                       // virtual cluster + the theme's display names
+            writeUltra(dir, themedIds ? 2 : cluster ? 1 : 0);                       // virtual cluster + the theme's display names
             boolean iapBridge = false, iap = false;               // iAP over CarPlay: an experiment, off
             writeFlag(dir, "cpc-iap", false, "iAPChannel");
             // the theme's vehicle: the Aston Martin DBX unless the vehicle_variant test setting picks another
             // (the Climate app shows a placeholder instead of its car picture with DBX; which model it needs is a test)
             String model = "DBX";
-            VehicleState.variant = ultra && !"none".equals(model) ? model : "";
+            VehicleState.variant = variant && !"none".equals(model) ? model : "";
             m.log("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
-            boolean uiSync = ultra;                               // the theme's layouts, palettes and wallpapers
+            boolean uiSync = ultra && m.settingBoolean("ultra_ui_sync", false);                               // the theme's layouts, palettes and wallpapers
             writeFlag(dir, "cpc-uisync", uiSync, "uiSync (CarPlay theme layouts and palettes)");
-            writeFeatures(dir, ultra ? "livi_nonaudio" : "off");
-            writeFlag(dir, "cpc-xfeat", ultra, "/info enhancedRequestCarUI");
+            writeFeatures(dir, features ? (m.settingBoolean("ultra_full_features", false) ? "livi_all" : "livi_nonaudio") : "off");
+            writeFlag(dir, "cpc-xfeat", enhanced, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
             // Stage 2 is not validated: do not offer video even if an old setting is saved.
             int extraBits = m.settingBoolean("parked_video", false) && app.context != null ? 1 : 0;
@@ -161,7 +168,7 @@ public final class CpClimate extends ModEntry {
             writeNumber(dir, "cpc-xenable", extraBits, extraBits != 0 ? "SETUP extra features: videoPlayback" : "SETUP extra features off");
             writeNumber(dir, "cpc-hid", 0, "LIVI input devices in /info");   // on, iOS drew a knob-focus box
             m.log("[native] requesting CarPlayCore recipe; application result is reported by HMG-API");
-            m.nativePatch(app, "libCarPlayCore.so");
+
             // M2: the vehicle state data streams the native SETUP handler sends the phone to;
             // M3: answered from one VehicleState the two lanes share
             VsChannel.Log log = new VsChannel.Log() {
@@ -198,24 +205,25 @@ public final class CpClimate extends ModEntry {
             VehicleState.twoRear = "d".equals(layout);
             // /info's copy of the car (the phone builds its car from it): cp-climate's description, not LIVI's
             K5Vehicle vehicle = null;
-            if (app.context != null && (m.settingBoolean("vehicle_page", true) || m.settingBoolean("comfort_thresholds", true) || m.settingBoolean("native_radio", true))) {
+            if (app.context != null && (m.settingBoolean("k5_integration", true))) {
                 vehicle = new K5Vehicle(app.context, m, state, lanes, log);
                 VehicleState.vehiclePage = vehicle.page;
             } else { VehicleState.vehiclePage = null; m.log("[vehicle] page disabled or context unavailable"); }
-            writeVspi(dir, log);
+            if (!writeVspi(dir, log)) { m.log("[native] dynamic schema unavailable; patch withheld"); return; }
+            m.nativePatch(app, "libCarPlayCore.so");
             m.log("[climate] profile=K5 front heat/vent -3..3, rear seats=false, ambient=false");
             CarClimate car = climate ? new CarClimate(state, lanes, log) : null;
             VsChannel.car = car;
             for (VsChannel ch : lanes) ch.start();
             if (car != null) car.start();
             if (vehicle != null) vehicle.start();
-            if (m.settingBoolean("volume_link", true)) {
+            if (m.settingBoolean("k5_integration", true)) {
                 CarAudio audio = new CarAudio(state, lanes, log, m);
                 CarAudio.instance = audio;
                 audio.listen(app.context);
                 audio.start();
             } else m.log("[audio] volume link disabled");
-            if (m.settingBoolean("media_controls", true)) {
+            if (m.settingBoolean("k5_integration", true)) {
                 final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
                 media = new CarPlayMedia(new CarPlayMedia.Later() {
                     public void post(Runnable action, long delayMs) { handler.postDelayed(action, delayMs); }
@@ -225,7 +233,7 @@ public final class CpClimate extends ModEntry {
             }
             m.log("[climate] reader and both vehicle-state lanes started");
             // the Ultra experiment: the virtual cluster's video goes here and is thrown away
-            if (ultra) new ClusterSink(log).start();
+            if (cluster) new ClusterSink(log).start();
             if ((extraBits & 1) != 0) new ClusterSink(log, 7134, "videoPlayback").start();
             if ((extraBits & 1) != 0) VideoMessages.instance.start();
             // video stage 1: requestUI("videoplayback:") kept from DiPO (no jump to the launcher), screen borrowed as LIVI does

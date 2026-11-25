@@ -227,7 +227,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
 
     static boolean allowed(ClimateMap.Command c) {
         hmgapi.hook.ModContext m = testContext;
-        if (m == null || !m.enabled() || !m.settingBoolean("climate_test", true)) return false;
+        if (m == null || !m.enabled() || !m.settingBoolean("k5_integration", true)) return false;
         if (c.kind == ClimateMap.REAR) return rearDefrost;
         if (c.kind == ClimateMap.SEAT)
             return (c.a == ClimateMap.SET_DRIVER_SEAT || c.a == ClimateMap.SET_PASSENGER_SEAT)
