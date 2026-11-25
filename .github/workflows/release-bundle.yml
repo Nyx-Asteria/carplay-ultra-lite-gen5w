@@ -86,6 +86,13 @@ jobs:
           CP="$PWD/out/work/classes:$AJ:$SDK/lib/hmgapi-runtime.jar:$SDK/lib/hmgapi-runtime-stubs.jar"
           javac --release 8 -cp "$CP" -d out/tests source/tests/ClimateMapTest.java
           java -cp "out/tests:$CP" ioniq6.cpclimate.ClimateMapTest
+          python3 - <<'PY'
+          import plistlib
+          with open('out/python.bplist','wb') as f:
+              plistlib.dump(dict(small=7,mid=300,wide=70000,huge=5000000000,neg=-2,s='Cluster_Display',u='Zürich ✓',t=True,f=False,d=bytes([1,2,3]),l=[1,'two'],n={'x':2},r=1.5,long='x'*40),f,fmt=plistlib.FMT_BINARY)
+          PY
+          javac --release 8 -cp "$CP" -d out/tests source/tests/UiSyncTest.java
+          java -cp "out/tests:$CP" ioniq6.cpclimate.UiSyncTest out/tests out/python.bplist out/java.bplist
           sh source/mod/tools/video/fetch-libs.sh
           HMGAPI_MOD_CLASSES="$PWD/out/work/classes" HMGAPI_R8_CLASSPATH_ARGS="--classpath $SDK/lib/hmgapi-runtime.jar --classpath $SDK/lib/hmgapi-runtime-stubs.jar" sh source/mod/build.sh "$PWD/out/core"
           cp -a source/mod out/staging/cpul
