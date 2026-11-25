@@ -47,15 +47,15 @@ final class K5Radio {
     /** Read-only FM state; never change the OEM source merely because CarPlay connects. */
     java.util.Map<Long,Object> refreshFm() {
         java.util.Map<Long,Object> values = new java.util.LinkedHashMap<Long,Object>();
-        fmActive = false;
         values.put(4115L, true);
+        values.put(4116L, "");
         values.put(4354L, "");
         values.put(4355L, "");
         values.put(4359L, 0L);
         values.put(4117L, ClimateMap.BLANK);
-        if (!enabled() || !CpClimate.sessionActive) return values;
+        if (!enabled() || !CpClimate.sessionActive) { fmActive = false; return values; }
         try {
-            if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) return values;
+            if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) { fmActive = false; return values; }
             if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
             if (fmAudio == null) fmAudio = service(CarAudio.SERVICE, CarAudio.IFACE);
             long khz = fmKhz(readInt(fmTuner, RADIO_IFACE, "getLastFMFrequency"));
@@ -69,8 +69,10 @@ final class K5Radio {
                 values.put(4355L, String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0));
                 values.put(4359L, 1L);
             }
-            // Source stays disabled until native command handling is available.
-        } catch (Throwable t) { fmTuner = null; fmAudio = null; }
+            // Enable tuning and seeking only while OEM FM is confirmed active.
+            values.put(4115L, !fmActive);
+            values.put(4116L, fmActive ? Long.toString(khz) : "");
+        } catch (Throwable t) { fmActive = false; fmTuner = null; fmAudio = null; }
         return values;
     }
 
