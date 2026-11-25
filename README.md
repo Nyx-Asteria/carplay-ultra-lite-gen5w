@@ -6,7 +6,7 @@
 
 A dedicated CarPlay Ultra-style experience for the Kia K5, powered by HMG-API.
 
-[![Status](https://img.shields.io/badge/status-RC5_testing-f59e0b?style=flat-square)](#development)
+[![Status](https://img.shields.io/badge/status-RC3_testing-f59e0b?style=flat-square)](#development)
 [![HMG-API](https://img.shields.io/badge/HMG--API-required-2563eb?style=flat-square)](https://github.com/Open-HMG/HMG-API)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-22c55e?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-K5_Gen5W-64748b?style=flat-square)](#compatibility)
@@ -69,7 +69,7 @@ Themed display IDs require virtual cluster; full mask requires extended features
 
 ## Development
 
-RC5 includes the accumulated RC3 follow-up changes: binary wheel control, targeted overlay collection, and session-start contribution support. See [testing notes](docs/rc5-testing.md).
+RC3 includes the accumulated RC3 follow-up changes: binary wheel control, targeted overlay collection, and session-start contribution support. See [testing notes](docs/rc3-testing.md).
 
 The bundle includes [Wireless 2.2.1-rc.1](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa), a separately test-signed fork retaining upstream navigation changes while restoring direct OEM hotspot startup. Its experimental session-start extension prepares the response before Bluetooth iAP2 component 4 connects. Requires theme identity and receiver metadata; an ordinary session may be needed first. Stock Wireless remains identification-only. Test the Wireless fork separately with Ultra off before enabling the extension; retain a rollback copy of the working package.
 
@@ -79,7 +79,7 @@ CPUL owns the CarPlayCore vehicle-state integration; Wireless owns iAP2 identifi
 
 The diagnostic collector exports allowlisted firmware, including SystemUI, Mobis_SystemPopup, HKMC_MediaGate, framework2 and media_cmd, for the unresolved popup hooks. Keep proprietary firmware private. The collector verifies sizes and defers hashing to the host.
 
-Package ID: `carplay-ultra-lite-k5`; version: `1.0.0-rc.5`. The [RC5 workflow](.github/workflows/rc5-bundle.yml) builds five test-signed packages and publishes only after build checks and signature verification. Hardware validation remains separate. Test parked, including normal wireless reconnects and rollback.
+Package ID: `carplay-ultra-lite-k5`; version: `1.0.0-rc.3`. The [RC3 workflow](.github/workflows/release-bundle.yml) builds five test-signed packages and publishes only after build checks and signature verification. Hardware validation remains separate. Test parked, including normal wireless reconnects and rollback.
 
 ## Credits
 
