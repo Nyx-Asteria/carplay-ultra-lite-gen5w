@@ -23,6 +23,10 @@ final class UiSyncChannel extends Thread {
     final VsChannel.Log out;
     final UiSync sync;
 
+    UiSyncChannel(File dir, VsChannel.Log out, UiSync.Layout layout) {
+        this(dir, out, layout, false);
+    }
+
     UiSyncChannel(File dir, VsChannel.Log out, UiSync.Layout layout, boolean legacyCenterLayout) {
         super("cp-climate-uisync");
         this.dir = dir;
