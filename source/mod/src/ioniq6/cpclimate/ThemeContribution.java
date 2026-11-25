@@ -35,7 +35,17 @@ final class ThemeContribution {
             Object value = theme.getConstructor(String.class, long.class, String.class)
                     .newInstance("44C9FA31EC", 985L, "19.0");
             Method unregister = api.getMethod("removeTheme", String.class);
-            api.getMethod("registerTheme", String.class, theme).invoke(service, mod.id, value);
+            boolean start = mod.settingBoolean("ultra_session_start", true);
+            Method registration = null;
+            try { registration = api.getMethod("registerTheme", String.class, theme, boolean.class); }
+            catch (NoSuchMethodException stock) { /* original v2 provider */ }
+            if (registration != null) {
+                registration.invoke(service, mod.id, value, start);
+                mod.log("[theme] CarPlayStartSession requested=" + start + " (provider native result unverified)");
+            } else {
+                api.getMethod("registerTheme", String.class, theme).invoke(service, mod.id, value);
+                if (start) mod.log("[theme] CarPlayStartSession unavailable: provider extension not installed; identification only");
+            }
             registered = service;
             remove = unregister;
             mod.log("Ultra theme contribution accepted by registry (native activation unverified)");

@@ -42,6 +42,14 @@
       "apply": "restart"
     },
     {
+      "key": "ultra_session_start",
+      "type": "toggle",
+      "default": true,
+      "title": "Ultra: CarPlayStartSession",
+      "description": "Requires Ultra theme identity and a compatible Wireless provider. Respond to CarPlayAvailability with receiver and theme metadata; stock startup remains available when prerequisites are missing. Restart required.",
+      "apply": "restart"
+    },
+    {
       "key": "ultra_cluster",
       "type": "toggle",
       "default": false,
