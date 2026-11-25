@@ -187,6 +187,8 @@ public final class CpClimate extends ModEntry {
             // the ambient light test (off): one shared, writable setting in CarPlay's car settings whose value is a #RRGGBB
             // that is sent to the car's mood light; see VehicleState.withAmbientTest and CarClimate.writeAmbient
             VehicleState.ambientTest = CarClimate.ambientTest = false;
+            VehicleState.sxmSchemaTest = m.settingBoolean("k5_integration", true)
+                    && m.settingBoolean("sxm_schema_test", false);
             // the extra seat and wheel controls (off): rear seat heat, front seat ventilation, steering wheel heater
             VehicleState.extras = ClimateMap.extras = climate;
             VehicleState.climateEnabled = climate;
