@@ -604,8 +604,8 @@ public final class Video {
             Object key = m.get("key") != null ? m.get("key") : m.get("property");
             if (key != null) r.put("key", key);
             boolean ready = player != null && player.getPlaybackState() == Player.STATE_READY;
-            if ("hasEnabledAudio".equals(key)) r.put("value", Boolean.TRUE);
-            else if ("muted".equals(key)) r.put("value", Boolean.FALSE);
+            if ("hasEnabledAudio".equals(key)) r.put("value", !noSound);
+            else if ("muted".equals(key)) r.put("value", noSound || (player != null && player.getVolume() == 0f));
             else if ("seekableTimeRanges".equals(key) && ready) r.put("value", Collections.singletonList(range(0, durationMs())));
             else if ("loadedTimeRanges".equals(key) && ready) r.put("value", Collections.singletonList(range(0, player.getBufferedPosition())));
             r.put("kind", "response");
@@ -722,6 +722,20 @@ public final class Video {
             window = new FrameLayout(context);
             window.setBackgroundColor(Color.BLACK);
             surface = new SurfaceView(context);
+            // Observe the real KitKat surface lifecycle, not just the Java view.
+            surface.getHolder().addCallback(new android.view.SurfaceHolder.Callback() {
+                @Override public void surfaceCreated(android.view.SurfaceHolder holder) {
+                    log("[video-surface] created valid=" + holder.getSurface().isValid());
+                }
+                @Override public void surfaceChanged(android.view.SurfaceHolder holder, int format, int width, int height) {
+                    log("[video-surface] changed " + width + "x" + height + " format=" + format);
+                }
+                @Override public void surfaceDestroyed(android.view.SurfaceHolder holder) {
+                    firstFrame = false;
+                    if (videoShutter != null) videoShutter.setVisibility(View.VISIBLE);
+                    log("[video-surface] destroyed");
+                }
+            });
             window.addView(surface, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER));
             controls = new FrameLayout(context);
             TextView close = button("✕  Back to CarPlay");
