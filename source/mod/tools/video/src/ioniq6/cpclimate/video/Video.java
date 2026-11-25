@@ -60,6 +60,8 @@ public final class Video {
     static SurfaceView surface;
     static TextView status;
     static FrameLayout controls;
+    static View videoShutter;
+    static boolean firstFrame;
     static Object itemUuid;
     static long streamId = -1;
     static boolean shown;
@@ -350,10 +352,10 @@ public final class Video {
         player.addAnalyticsListener(steps);
         player.setMediaSource(source, startMs);
         player.setPlayWhenReady(false);
+        if (surface != null) player.setVideoSurfaceView(surface);
         player.prepare();
         if (!noSound) watchAudioClock(player, audioAttempt);
         currentUrl = url;
-        if (surface != null) player.setVideoSurfaceView(surface);
         log("video: playing " + host(url) + " (" + (progressive ? "progressive" : "HLS") + ", from " + startMs / 1000 + " s) through the phone");
     }
 
@@ -391,6 +393,8 @@ public final class Video {
 
         @Override
         public void onRenderedFirstFrame(EventTime t, Object output, long renderTimeMs) {
+            firstFrame = true;
+            if (videoShutter != null) videoShutter.setVisibility(View.GONE);
             log("video: first picture shown");
         }
 
@@ -680,6 +684,11 @@ public final class Video {
             status.setTextSize(20);
             status.setPadding(24, 24, 24, 24);
             controls.addView(status, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.RIGHT));
+            // SurfaceView punches a hole in the overlay window on KitKat.
+            // Cover that hole until the decoder actually renders a frame.
+            videoShutter = new View(context);
+            videoShutter.setBackgroundColor(Color.BLACK);
+            window.addView(videoShutter, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
             window.addView(controls, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
             window.setOnTouchListener(new View.OnTouchListener() {
                 @Override
@@ -698,6 +707,7 @@ public final class Video {
             if (player != null) player.setVideoSurfaceView(surface);
         }
         window.setVisibility(View.VISIBLE);
+        if (videoShutter != null) videoShutter.setVisibility(firstFrame ? View.GONE : View.VISIBLE);
         controls.setVisibility(View.VISIBLE);
         shown = true;
         if (player != null) {
@@ -769,6 +779,8 @@ public final class Video {
     }
 
     static void release() {
+        firstFrame = false;
+        if (videoShutter != null) videoShutter.setVisibility(View.VISIBLE);
         if (player != null) {
             player.removeListener(listener);
             player.release();
