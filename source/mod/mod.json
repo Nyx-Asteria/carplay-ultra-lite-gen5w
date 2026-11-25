@@ -1,7 +1,7 @@
 {
   "id": "carplay-ultra-lite-k5",
   "name": "CarPlay Ultra-Lite K5",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0-rc.5",
   "hmgapi": ">=1.1.0-rc.8",
   "authors": [
     "cp-climate contributors"

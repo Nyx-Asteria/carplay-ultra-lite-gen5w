@@ -6,7 +6,7 @@
 
 A dedicated CarPlay Ultra-style experience for the Kia K5, powered by HMG-API.
 
-[![Status](https://img.shields.io/badge/status-RC4_testing-f59e0b?style=flat-square)](#development)
+[![Status](https://img.shields.io/badge/status-RC5_testing-f59e0b?style=flat-square)](#development)
 [![HMG-API](https://img.shields.io/badge/HMG--API-required-2563eb?style=flat-square)](https://github.com/Open-HMG/HMG-API)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-22c55e?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-K5_Gen5W-64748b?style=flat-square)](#compatibility)
@@ -45,7 +45,7 @@ Target: 2022 Kia K5 US, `DL322.USA.0000.V015.012.260507`, Gen5W_M, Android 4.4.2
 - [HMG-API](https://github.com/Open-HMG/HMG-API) v1.1.0-rc.8 or later and an existing working Wireless CarPlay installation.
 - iOS 26 or later for Ultra-style features.
 - Install the test-signed CPUL package from [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases). Optional Comfort and diagnostic packages are separate.
-- Preserve the working Wireless package and Wi-Fi setup. Do not install a competing EV Routing identity patch.
+- Preserve a rollback copy of the working Wireless package and Wi-Fi setup. The included fork is optional for basic CPUL and required for the session-start extension. Do not install a competing EV Routing identity patch.
 - Test signing keys change between builds; uninstall previous test packages if signatures conflict. Back up settings first.
 
 ## Settings
@@ -69,9 +69,9 @@ Themed display IDs require virtual cluster; full mask requires extended features
 
 ## Development
 
-RC4 includes the accumulated RC3 follow-up changes: binary wheel control, targeted overlay collection, and session-start contribution support. See [testing notes](docs/rc4-testing.md).
+RC5 includes the accumulated RC3 follow-up changes: binary wheel control, targeted overlay collection, and session-start contribution support. See [testing notes](docs/rc5-testing.md).
 
-The session-start provider source overlay is **experimental and not compiled, packaged or included in this release**. Stock Wireless remains identification-only. CPUL falls back to the existing two-argument theme registration. See [provider overlay notes](source/provider-session-start/NOTICE.md). The overlay is based on public Wireless RC9 source, not the working RC7 log 2 build; do not install it as a replacement. Native ABI and protocol encoding require independent verification.
+The bundle includes [Wireless 2.2.1-rc.1](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa), a separately test-signed fork retaining upstream navigation changes while restoring direct OEM hotspot startup. Its experimental session-start extension prepares the response before Bluetooth iAP2 component 4 connects. Requires theme identity and receiver metadata; an ordinary session may be needed first. Stock Wireless remains identification-only. Test the Wireless fork separately with Ultra off before enabling the extension; retain a rollback copy of the working package.
 
 ## Technical details
 
@@ -79,7 +79,7 @@ CPUL owns the CarPlayCore vehicle-state integration; Wireless owns iAP2 identifi
 
 The diagnostic collector exports allowlisted firmware, including SystemUI, Mobis_SystemPopup, HKMC_MediaGate, framework2 and media_cmd, for the unresolved popup hooks. Keep proprietary firmware private. The collector verifies sizes and defers hashing to the host.
 
-Package ID: `carplay-ultra-lite-k5`; version: `1.0.0-rc.4`. The [RC4 workflow](.github/workflows/rc4-bundle.yml) builds four test-signed packages and publishes only after build checks and signature verification. Hardware validation remains separate. Test parked, including normal wireless reconnects and rollback.
+Package ID: `carplay-ultra-lite-k5`; version: `1.0.0-rc.5`. The [RC5 workflow](.github/workflows/rc5-bundle.yml) builds five test-signed packages and publishes only after build checks and signature verification. Hardware validation remains separate. Test parked, including normal wireless reconnects and rollback.
 
 ## Credits
 
