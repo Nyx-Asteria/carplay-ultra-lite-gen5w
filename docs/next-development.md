@@ -33,3 +33,7 @@
 - Volume/media popup suppression next: use captured OEM binaries to locate pre-presentation path; preserve audio controls and stock behavior outside CarPlay.
 - Radio last: investigate OEM tuner integration and source/state feedback.
 - Climate layout minor tweaks deferred; seat and wheel implementation still requires parked hardware validation. Preserve working wireless negotiation and do not trigger a release during development.
+
+## Consolidated Ultra profile
+- Owner requested two default-on switches: CarPlay Ultra (identity, session start, virtual cluster, themed IDs, DBX, original full feature mask and enhanced RequestCarUI) and Ultra themes/UI synchronization (dependent on Ultra). Keep existing keys ultra_theme and ultra_ui_sync to preserve saved selections; an existing explicit off remains off. Retired individual experiment keys are no longer read. This is not proof the complete profile is safe on every firmware; validate on K5 while parked.
+- Midnight and matching wallpaper remain requirements, not implemented defaults. Upstream tree at 70e3ba2 has UiSync.java, UiSyncChannel.java and UiSyncTest.java but no theme asset catalog files by name. Continue searching source, not asking owner to provide identifiers.
