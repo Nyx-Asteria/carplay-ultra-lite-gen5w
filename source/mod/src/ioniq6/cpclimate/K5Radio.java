@@ -100,6 +100,33 @@ final class K5Radio {
         return true;
     }
 
+    /** US FM: odd 200 kHz channels, OEM frequency in 10 kHz units.
+     * RadioNA WrapperUtil identifies the boolean as isFMStep50KHz; the
+     * two-argument MicomRadioManager overload supplies PI/PTy zero. */
+    boolean tuneFm(final long khz) {
+        if (khz < 87900 || khz > 107900 || (khz - 87900) % 200 != 0
+                || !enabled() || !CpClimate.sessionActive || !fmActive) return false;
+        final long generation = CpClimate.sessionGeneration;
+        fmCommands.execute(new Runnable() {
+            public void run() {
+                if (!probeActive(generation)) return;
+                try {
+                    Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
+                    if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
+                            || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
+                    Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
+                    if (tuner == null || !probeActive(generation)) return;
+                    java.lang.reflect.Method method = Class.forName(RADIO_IFACE).getMethod(
+                            "directTune", int.class, boolean.class, int.class, int.class);
+                    if (method.getReturnType() != boolean.class) return;
+                    Object result = method.invoke(tuner, (int)(khz / 10), false, 0, 0);
+                    log.log("[radio] FM tune " + khz + " kHz accepted=" + result);
+                } catch (Throwable t) { log.log("[radio] FM tune failed: " + t.getClass().getSimpleName()); }
+            }
+        });
+        return true;
+    }
+
     boolean fmSelected() { return fmActive; }
 
     String diagnosticStatus() { return probeStatus; }
