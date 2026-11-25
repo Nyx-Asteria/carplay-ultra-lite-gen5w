@@ -277,7 +277,9 @@ public final class Video {
         if ("insertPlayQueueItem".equals(type)) {
             insert(m);
         } else if ("setRate".equals(type)) {
-            double rate = number(m.get("rate"), 0);
+            Object rawRate = m.get("rate");
+            Long rateMillis = rawRate instanceof Map ? cmMillis(rawRate) : null;
+            double rate = rateMillis != null ? rateMillis / 1000.0 : number(rawRate, 0);
             rateReceived = true;
             requestedPlaying = rate > 0;
             if (player != null) player.setPlayWhenReady(requestedPlaying);
@@ -590,6 +592,9 @@ public final class Video {
         Map<String, Object> r = new LinkedHashMap<String, Object>();
         if ("playbackInfo".equals(type)) {
             r.put("info", info());
+            // LIVI's playbackInfo response uses value with seconds, rather than info with CMTime.
+            // Retain the existing DiPlay-shaped response during compatibility testing.
+            r.put("value", liviPlaybackInfo());
             r.put("kind", "response");
             r.put("type", "playbackInfo");
         } else if ("seek".equals(type)) {
@@ -638,6 +643,28 @@ public final class Video {
         return info;
     }
 
+    static Map<String, Object> liviPlaybackInfo() {
+        Map<String, Object> out = new LinkedHashMap<String, Object>();
+        boolean valid = player != null && player.getPlayerError() == null;
+        boolean ready = valid && (player.getPlaybackState() == Player.STATE_READY || player.getPlaybackState() == Player.STATE_ENDED);
+        long pos = valid ? Math.max(0, player.getCurrentPosition()) : 0;
+        long duration = valid ? durationMs() : 0;
+        long buffered = valid ? Math.max(pos, player.getBufferedPosition()) : pos;
+        out.put("duration", duration / 1000.0);
+        out.put("position", pos / 1000.0);
+        out.put("rate", valid && player.isPlaying() ? 1.0 : 0.0);
+        out.put("readyToPlay", ready);
+        out.put("playbackBufferEmpty", buffered <= pos && !ready);
+        out.put("playbackBufferFull", duration > 0 && buffered >= duration);
+        out.put("playbackLikelyToKeepUp", ready);
+        out.put("loadedTimeRanges", Collections.singletonList(dict("start", 0.0, "duration", buffered / 1000.0)));
+        out.put("seekableTimeRanges", valid && player.isCurrentMediaItemSeekable() && duration > 0
+                ? Collections.singletonList(dict("start", 0.0, "duration", duration / 1000.0))
+                : Collections.emptyList());
+        if (itemUuid != null) out.put("uuid", itemUuid);
+        return out;
+    }
+
     static long durationMs() {
         long d = player == null ? C.TIME_UNSET : player.getDuration();
         return d == C.TIME_UNSET ? 0 : d;
@@ -671,6 +698,10 @@ public final class Video {
     }
 
     static Long cmMillis(Object t) {
+        if (t instanceof Number) {
+            double seconds = ((Number) t).doubleValue();
+            return Double.isNaN(seconds) || Double.isInfinite(seconds) ? null : (long) (seconds * 1000);
+        }
         if (!(t instanceof Map)) return null;
         Map<?, ?> m = (Map<?, ?>) t;
         double value = number(m.get("value"), Double.NaN), scale = number(m.get("timescale"), 0);
