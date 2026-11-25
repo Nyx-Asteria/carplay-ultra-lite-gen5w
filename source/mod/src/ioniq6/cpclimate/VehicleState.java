@@ -634,7 +634,23 @@ final class VehicleState {
         acc = withoutCurrentSource(acc);
         if (sxmSchemaTest) {
             byte[] sxm = withSxmSchema(acc, values);
-            if (sxm != null) { acc = sxm; out.log("[radio] experimental SXM schema advertised disabled; semantic 0 unverified"); }
+            if (sxm != null) {
+                acc = sxm;
+                names.put(4129L, "sxmSourceIdentifier");
+                names.put(4130L, "sxmSemanticType");
+                names.put(4131L, "sxmDisabled");
+                names.put(4132L, "sxmLabel");
+                names.put(4133L, "sxmCurrentChannel");
+                names.put(4134L, "sxmChannels");
+                names.put(4135L, "sxmChannelImages");
+                names.put(4136L, "sxmChannelsNotifier");
+                names.put(4137L, "sxmImagesNotifier");
+                values.put(4134L, java.util.Collections.emptyList());
+                values.put(4135L, java.util.Collections.emptyList());
+                notifiers.put(4134L, 4136L);
+                notifiers.put(4135L, 4137L);
+                out.log("[radio] experimental SXM schema advertised disabled; semantic 0 unverified");
+            }
             else out.log("[radio] experimental SXM schema unavailable");
         }
         // The North American K5 has no DAB tuner. Remove the European
