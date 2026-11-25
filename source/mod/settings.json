@@ -10,6 +10,14 @@
       "apply": "restart"
     },
     {
+      "key": "suppress_stock_volume",
+      "type": "toggle",
+      "default": true,
+      "title": "Suppress stock volume popup",
+      "description": "Hide OEM volume presentation only while connected CarPlay is foreground and CPUL volume feedback is ready. Restart recommended.",
+      "apply": "restart"
+    },
+    {
       "key": "parked_video",
       "type": "toggle",
       "default": false,

@@ -86,6 +86,8 @@ jobs:
           CP="$PWD/out/work/classes:$AJ:$SDK/lib/hmgapi-runtime.jar:$SDK/lib/hmgapi-runtime-stubs.jar"
           javac --release 8 -cp "$CP" -d out/tests source/tests/ClimateMapTest.java
           java -cp "out/tests:$CP" ioniq6.cpclimate.ClimateMapTest
+          javac --release 8 -cp "$CP" -d out/tests source/tests/VolumePanelPolicyTest.java
+          java -cp "out/tests:$CP" ioniq6.cpclimate.VolumePanelPolicyTest
           python3 - <<'PY'
           import plistlib
           with open('out/python.bplist','wb') as f:
