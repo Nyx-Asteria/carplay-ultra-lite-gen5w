@@ -170,6 +170,14 @@ final class CarClimate extends Thread implements VehicleState.Car {
     @Override
     public void phoneWrote(Map<Long, Object> written, Map<Long, Object> now) {
         List<ClimateMap.Command> list = ClimateMap.commands(written, now, unit);
+        for (Map.Entry<Long,Object> e : written.entrySet()) {
+            long iid = e.getKey();
+            if (iid == ClimateMap.DRIVER_SEAT_LEVEL || iid == ClimateMap.DRIVER_SEAT_ON
+                    || iid == ClimateMap.PASSENGER_SEAT_LEVEL || iid == ClimateMap.PASSENGER_SEAT_ON
+                    || iid == ClimateMap.DRIVER_VENT_LEVEL || iid == ClimateMap.DRIVER_VENT_ON
+                    || iid == ClimateMap.PASSENGER_VENT_LEVEL || iid == ClimateMap.PASSENGER_VENT_ON)
+                out.log("[seat] write iid=" + iid + " value=" + e.getValue() + " commands=" + list);
+        }
         if (!rearDefrost) {
             for (java.util.Iterator<ClimateMap.Command> i = list.iterator(); i.hasNext(); )
                 if (i.next().kind == ClimateMap.REAR) i.remove();
@@ -364,6 +372,8 @@ final class CarClimate extends Thread implements VehicleState.Car {
                 .append(", BCM listener ").append(bcmListenerOk ? "verified" : "differs, not registered").toString();
     }
 
+    private int lastDriverRaw = Integer.MIN_VALUE, lastPassengerRaw = Integer.MIN_VALUE;
+
     ClimateMap.Reading read() throws Exception {
         if (txGetStatus < 0) return null;   // no climate status call on this firmware: nothing to show
         if (datc == null) {
@@ -392,8 +402,15 @@ final class CarClimate extends Thread implements VehicleState.Car {
         // Same OEM feedback path as HMG-API Hub/Comfort: BCM, not USM.
         IBinder seatBody = service(BCM);
         if (seatBody != null) {
-            r.driverSeat = validSeatState(bodyInt(seatBody, txDriverSeat));
-            r.passengerSeat = validSeatState(bodyInt(seatBody, txPassengerSeat));
+            int driverRaw = bodyInt(seatBody, txDriverSeat);
+            int passengerRaw = bodyInt(seatBody, txPassengerSeat);
+            if (driverRaw != lastDriverRaw || passengerRaw != lastPassengerRaw) {
+                out.log("[seat] BCM raw driver=" + driverRaw + " passenger=" + passengerRaw);
+                lastDriverRaw = driverRaw;
+                lastPassengerRaw = passengerRaw;
+            }
+            r.driverSeat = validSeatState(driverRaw);
+            r.passengerSeat = validSeatState(passengerRaw);
         }
         if (rearDefrost || VehicleState.wheelHeater) {
             watchBody();
