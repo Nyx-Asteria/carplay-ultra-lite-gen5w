@@ -2,7 +2,7 @@
 """Standalone metadata probe, based on LIVI theme_catalog.rs (f84638ed).
 No device credentials, no firmware changes, no asset redistribution.
 """
-import base64, hashlib, io, json, pathlib, re, ssl, urllib.request, zipfile
+import base64, hashlib, io, json, pathlib, re, ssl, urllib.request, urllib.error, zipfile
 
 OUT = pathlib.Path("out/theme-catalog")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -81,7 +81,16 @@ def main():
     ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.load_verify_locations(cadata=ssl.DER_cert_to_PEM_cert(der))
     req=urllib.request.Request(CATALOG,data=json.dumps(ASK).encode(),headers={"Content-Type":"application/json"})
-    token=fetch(req,ctx).decode()
+    try:
+        token=fetch(req,ctx).decode()
+        print("Catalog TLS: LIVI pinned root", flush=True)
+    except urllib.error.URLError as exc:
+        if not isinstance(exc.reason, ssl.SSLCertVerificationError):
+            raise
+        print("Pinned-root TLS failed:", exc.reason, flush=True)
+        print("Retrying with current OS CA bundle; hostname and expiry checks remain enabled", flush=True)
+        token=fetch(req,ssl.create_default_context()).decode()
+        print("Catalog TLS: verified system trust", flush=True)
     part=token.split(".")[1]
     catalog=json.loads(base64.urlsafe_b64decode(part+"="*(-len(part)%4)))
     assets=catalog["Assets"]

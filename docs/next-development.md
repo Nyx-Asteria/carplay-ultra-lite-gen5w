@@ -40,3 +40,5 @@
 
 ## Theme catalog diagnostic
 - Standalone path-triggered workflow, no compilation or release. Reproduces LIVI f84638ed theme_catalog.rs request and pinned Apple root trust; selects only 44C9FA31EC version 985, reads the ZIP by range and inspects package.json/theme.json plus filenames. No graphical assets downloaded. Results are diagnostic artifacts, not bundled into CPUL. Do not assume Midnight or wallpaper identifiers until results are inspected.
+
+- Initial catalog diagnostic failed in TLS validation during the POST (expired certificate in the pinned trust chain). Retry with the current runner OS trust store, retaining full TLS verification; never disable certificate or hostname checks. LIVI cluster.rs uses fetched metadata to select receiver-side layout/palette and map components; that alone does not establish that fetching metadata on the car is required for the phone's theme selector. Investigate negotiated theme identity, display IDs and UI sync before adding a runtime network dependency.
