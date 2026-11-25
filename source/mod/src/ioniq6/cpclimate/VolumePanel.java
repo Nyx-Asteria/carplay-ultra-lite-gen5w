@@ -132,6 +132,32 @@ final class VolumePanel {
                 }
             });
             m.log("[radio-meta] live SIS station-name hook installed");
+            Hooks.findAndHookMethod(radio, "onHDRadioID3AlbumArtReceived", byte[].class, String.class, new MethodHook() {
+                @Override protected void afterHookedMethod(Param p) {
+                    try {
+                        if (!m.enabled() || !m.settingBoolean("k5_integration", true)) return;
+                        final Object service = p.thisObject;
+                        if (!(p.args[0] instanceof byte[]) || !(p.args[1] instanceof String)) return;
+                        byte[] raw = (byte[])p.args[0];
+                        final String file = (String)p.args[1];
+                        if (raw.length == 0 || raw.length > 131072 || file.length() > 256
+                                || !file.toLowerCase(java.util.Locale.US).endsWith(".logo")) return;
+                        final byte[] image = raw.clone();
+                        final long received = android.os.SystemClock.elapsedRealtime();
+                        handler.post(new Runnable() { public void run() {
+                            try {
+                                if (android.os.SystemClock.elapsedRealtime() - received > 500) return;
+                                long khz = K5Radio.fmKhz(((Integer)frequency.invoke(service)).intValue());
+                                if (khz <= 0 || !K5Radio.logoMatchesFrequency(file, khz)) return;
+                                context.sendBroadcast(new Intent(K5Radio.METADATA_ACTION).setPackage("com.daudio.app.dipo")
+                                        .putExtra("frequency", khz).putExtra("artwork", image)
+                                        .putExtra("file", file).putExtra("received", received), PERMISSION);
+                            } catch (Throwable ignored) {}
+                        }});
+                    } catch (Throwable ignored) {}
+                }
+            });
+            m.log("[radio-meta] live station-logo hook installed");
         } catch (Throwable t) { m.log("[radio-meta] live SIS unavailable: " + t.getClass().getSimpleName()); }
     }
 

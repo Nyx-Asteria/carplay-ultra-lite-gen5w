@@ -30,6 +30,27 @@ final class K5Radio {
     }
     static final String METADATA_ACTION = "ioniq6.cpclimate.RADIO_METADATA";
     private volatile StationName stationName;
+    private volatile StationArtwork stationArtwork;
+    private static final byte[] EMPTY_ARTWORK = new byte[0];
+    private static final class StationArtwork {
+        final long khz, generation;
+        final byte[] bytes;
+        StationArtwork(long khz, long generation, byte[] bytes) {
+            this.khz = khz; this.generation = generation; this.bytes = bytes;
+        }
+    }
+    // Observed OEM logo naming: 0000102049_Z100_10030.logo (100.3 MHz).
+    // Withhold unknown names rather than assigning a delayed image to another station.
+    static boolean logoMatchesFrequency(String file, long khz) {
+        return file != null && file.toLowerCase(java.util.Locale.US).endsWith("_" + (khz / 10) + ".logo");
+    }
+    static boolean supportedArtwork(byte[] b) {
+        if (b == null || b.length < 8 || b.length > 131072) return false;
+        boolean png = (b[0]&255)==137 && b[1]==80 && b[2]==78 && b[3]==71
+                && b[4]==13 && b[5]==10 && b[6]==26 && b[7]==10;
+        boolean jpeg = (b[0]&255)==255 && (b[1]&255)==216 && (b[2]&255)==255;
+        return png || jpeg;
+    }
     private static final class StationName {
         final long khz, generation, received;
         final String name;
@@ -47,8 +68,17 @@ final class K5Radio {
                     long now = android.os.SystemClock.elapsedRealtime();
                     String name = i.getStringExtra("name");
                     if (khz < 87500 || khz > 108000 || received < 0 || now < received
-                            || now - received > 2000 || name == null || name.length() > 256) return;
-                    stationName = new StationName(khz, CpClimate.sessionGeneration, received, name);
+                            || now - received > 2000) return;
+                    if (name != null && name.length() <= 256) {
+                        stationName = new StationName(khz, CpClimate.sessionGeneration, received, name);
+                    }
+                    byte[] image = i.getByteArrayExtra("artwork");
+                    if (image != null && logoMatchesFrequency(i.getStringExtra("file"), khz)) {
+                        if (supportedArtwork(image)) {
+                            stationArtwork = new StationArtwork(khz, CpClimate.sessionGeneration, image);
+                            log.log("[radio-meta] station logo received " + khz + " kHz bytes=" + image.length);
+                        } else log.log("[radio-meta] unsupported station logo encoding bytes=" + image.length);
+                    }
                 }
             }, new android.content.IntentFilter(METADATA_ACTION), "android.permission.DEVICE_POWER", main);
         } catch (Throwable t) { log.log("[radio-meta] receiver unavailable: " + t.getClass().getSimpleName()); }
@@ -131,6 +161,7 @@ final class K5Radio {
         values.put(4118L, java.util.Collections.emptyList());
         values.put(4354L, "");
         values.put(4355L, "");
+        values.put(4358L, EMPTY_ARTWORK);
         values.put(4359L, 0L);
         values.put(4117L, ClimateMap.BLANK);
         if (!enabled() || !CpClimate.sessionActive) { fmActive = false; lastListPoll = 0; fmItems = java.util.Collections.emptyList(); return values; }
@@ -143,11 +174,13 @@ final class K5Radio {
             int stream = readInt(fmAudio, CarAudio.IFACE, "getCurStreamType");
             // RC4 observed FM mode 2 / stream 38, AM mode 1 / stream 39.
             fmActive = khz > 0 && mode == 2 && stream == 38;
-            if (!fmActive) { stationName = null; lastFmFrequency = -1; }
+            if (!fmActive) { stationName = null; stationArtwork = null; lastFmFrequency = -1; }
             if (fmActive) {
                 if (lastFmFrequency != khz) {
                     StationName previous = stationName;
                     if (previous != null && previous.khz != khz) stationName = null;
+                    StationArtwork art = stationArtwork;
+                    if (art != null && art.khz != khz) stationArtwork = null;
                     lastFmFrequency = khz;
                 }
                 values.put(4117L, khz);
@@ -157,6 +190,9 @@ final class K5Radio {
                 if (current != null && current.khz == khz && current.generation == CpClimate.sessionGeneration
                         && !current.name.isEmpty()) title = current.name;
                 values.put(4355L, title);
+                StationArtwork art = stationArtwork;
+                if (art != null && art.khz == khz && art.generation == CpClimate.sessionGeneration)
+                    values.put(4358L, art.bytes);
                 values.put(4359L, 1L);
             }
             // Advertise an available FM source even before it is selected.
