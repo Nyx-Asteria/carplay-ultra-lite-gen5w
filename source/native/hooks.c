@@ -462,6 +462,8 @@ static int add_view_area(CF info, int pct, int edge, int extras, int wide) {
         release(copy);
     }
     put(info, &K_displays, out);
+    LOG("cp-climate: Ultra display registration: main=%s, alternate=%s, original count=%d\n",
+        themed ? "Center_Display" : "stock UUID", themed ? "Cluster_Display" : "virtual UUID", (int)n);
     return 1;
 }
 
@@ -543,6 +545,7 @@ static int add_alt_display(CF info, int themed) {
     for (CFIndex i = 0; i < n; i++) {
         CF d = at(displays, i);
         if (is(d, T_CFDictionaryGetTypeID) && dict_int(d, &K_dispType) == STREAM_ALT_SCREEN) {
+            LOG("cp-climate: Ultra display registration skipped: existing type 111 display (themed=%d)\n", themed);
             release(out);
             return 0;
         }
