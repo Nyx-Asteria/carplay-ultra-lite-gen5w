@@ -67,6 +67,11 @@ public final class CpClimate extends ModEntry {
     }
 
     static ModContext mod;
+    private static volatile SessionLogging sessionLogging;
+    static void runtimeLog(String msg) {
+        SessionLogging logger=sessionLogging;
+        if(logger!=null) logger.log(msg); else if(mod!=null) mod.log(msg);
+    }
     static final Set<String> copied = new HashSet<String>();
     static boolean busy;
     static volatile long sessionGeneration;
@@ -122,6 +127,7 @@ public final class CpClimate extends ModEntry {
         if (!any) { m.log("[runtime] all CPUL features off; disable CPUL itself to use standalone PPS CarPlay scaling"); return; }
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
+        if (sessionLogging == null) sessionLogging = new SessionLogging(m, dir, property("ro.build.display.id"));
         ClimateMap.loadSetpoints(new File(dir, "cpc-setpoints"));
         {
             // RC6 verified baseline; themed identity and display IDs are paired.
@@ -162,7 +168,7 @@ public final class CpClimate extends ModEntry {
                     writeNumber(dir, "cpc-video-nosound", sound ? 0 : 1, "video: picture only");
                     m.log("[video-audio] local player audio requested=" + sound + "; stock projection route untouched");
                     writeNumber(dir, "cpc-video-nopicture", 0, "video: picture enabled");
-                    new VideoMessages(new VsChannel.Log() { public void log(String s) { m.log("[video] " + s); } });
+                    new VideoMessages(new VsChannel.Log() { public void log(String s) { runtimeLog("[video] " + s); } });
                     if (!VideoMessages.startEngine(app.context)) {
                         m.log("[video] engine unavailable; feature withheld");
                         extraBits = 0;
@@ -178,7 +184,7 @@ public final class CpClimate extends ModEntry {
             VsChannel.Log log = new VsChannel.Log() {
                 @Override
                 public void log(String msg) {
-                    mod.log(msg);
+                    runtimeLog(msg);
                 }
             };
             VehicleState[] state = new VehicleState[1];
@@ -320,7 +326,8 @@ public final class CpClimate extends ModEntry {
                 if (media != null) media.ended(p.thisObject);
                 VideoMessages.stopEngine("session finalized");
                 sessionGeneration++;
-                m.log("[session] finalized");
+                runtimeLog("[session] finalized");
+                if(sessionLogging!=null) sessionLogging.finish("DiPO finalization observed; cause unknown");
                 copyLater(COPY_DELAY_MS);
             }
         };
@@ -329,8 +336,9 @@ public final class CpClimate extends ModEntry {
             protected void afterHookedMethod(Param p) {
                 sessionGeneration++;
                 sessionActive = true;
+                if(sessionLogging!=null) sessionLogging.start(sessionGeneration);
                 if (media != null) media.started(p.thisObject);
-                m.log("[session] started generation=" + sessionGeneration);
+                runtimeLog("[session] started generation=" + sessionGeneration);
                 IapBridge.carPlay = p.thisObject;
                 VideoUi.install(p.thisObject, app.classLoader);
                 copyLater(COPY_DELAY_MS);
@@ -365,7 +373,7 @@ public final class CpClimate extends ModEntry {
     }
 
     @Override public void onEnabled(ModContext m, boolean enabled) {
-        if (!enabled) { theme.unregister(m); sessionActive = false; sessionGeneration++; VideoMessages.stopEngine("mod disabled"); }
+        if (!enabled) { theme.unregister(m); sessionActive = false; sessionGeneration++; VideoMessages.stopEngine("mod disabled"); if(sessionLogging!=null) sessionLogging.finish("mod disabled"); }
         m.log("[runtime] enabled=" + enabled + "; restart required to change advertised capabilities");
     }
 
