@@ -386,6 +386,52 @@ final class K5Radio {
         return text.substring(0, Math.min(256, text.length()));
     }
 
+    // DL322 ODEX debug parameter names: tuneDirect(int channelID, boolean override).
+    // Never request override; accept only IDs returned by the OEM catalog.
+    boolean tuneSxm(String identifier) {
+        final int channel;
+        try { channel = Integer.parseInt(identifier); }
+        catch (NumberFormatException e) { return false; }
+        final long generation = CpClimate.sessionGeneration;
+        if (!VehicleState.sxmSchemaTest || !sxmAvailable || !probeActive(generation)
+                || sxmKnownGeneration != generation || !sxmKnownIds.contains(channel)) return false;
+        final long request = tuneRequest.incrementAndGet();
+        if (sxmActive) { queueSxmTune(channel, generation, request); return true; }
+        if (!selectRadioMode(request, 13)) return false;
+        final long deadline = android.os.SystemClock.elapsedRealtime() + 7000;
+        main.postDelayed(new Runnable() {
+            public void run() {
+                if (!probeActive(generation) || request != tuneRequest.get()) return;
+                if (android.os.SystemClock.elapsedRealtime() >= deadline) {
+                    log.log("[radio-sxm] activation timed out; tune discarded"); return;
+                }
+                if (sxmActive) { queueSxmTune(channel, generation, request); return; }
+                main.postDelayed(this, 250);
+            }
+        }, 250);
+        return true;
+    }
+    private void queueSxmTune(final int channel, final long generation, final long request) {
+        fmCommands.execute(new Runnable() {
+            public void run() {
+                try {
+                    if (!probeActive(generation) || request != tuneRequest.get()
+                            || !VehicleState.sxmSchemaTest || sxmKnownGeneration != generation
+                            || !sxmKnownIds.contains(channel)) return;
+                    Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
+                    Object tuner = service(serviceName("SXM65H_SERVICE"), SXM_IFACE);
+                    if (tuner == null || readInt(audio, CarAudio.IFACE, "getAudioMode") != 4
+                            || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 41) return;
+                    java.lang.reflect.Method tune = Class.forName(SXM_IFACE).getMethod("tuneDirect", int.class, boolean.class);
+                    if (tune.getReturnType() != int.class || !probeActive(generation)
+                            || request != tuneRequest.get()) return;
+                    Object result = tune.invoke(tuner, channel, false);
+                    log.log("[radio-sxm] native tune ID=" + channel + " result=" + result + "; awaiting channel feedback");
+                } catch (Throwable t) { log.log("[radio-sxm] tune failed: " + t.getClass().getSimpleName()); }
+            }
+        });
+    }
+
     boolean sxmSelected() { return sxmActive; }
     boolean selectSxm() {
         if (!VehicleState.sxmSchemaTest || !sxmAvailable) return false;

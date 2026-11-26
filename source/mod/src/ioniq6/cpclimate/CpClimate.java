@@ -238,6 +238,12 @@ public final class CpClimate extends ModEntry {
                             if (radio == null || !(value instanceof java.util.Map)) return;
                             java.util.Map<?,?> params = (java.util.Map<?,?>) value;
                             Object source = params.get("sourceIdentifier");
+                            if ("SXM".equals(source)) {
+                                if (!"tuneToIdentifier".equals(name) || !(params.get("identifier") instanceof String)
+                                        || !radio.tuneSxm((String)params.get("identifier")))
+                                    log.log("[radio-sxm] tune refused: unsupported or unknown channel ID");
+                                return;
+                            }
                             if (source != null && !"FM".equals(source)) return;
                             Long khz = null;
                             if ("tuneToFrequency".equals(name)) khz = OpackCodec.asLong(params.get("frequency"));
