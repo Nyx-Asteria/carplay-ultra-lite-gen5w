@@ -1,5 +1,16 @@
 # Changelog
 
+## K5 1.0.0-rc.9 (unreleased development candidate)
+
+- Persistent categorized session logging, bounded retention, USB export, native capture, cross-process SiriusXM diagnostic capture, session summaries and regression tests.
+- Independent heating and ventilation immediate-feedback settings; separate requested and actual seat state, typed paired feedback, transition tests and authoritative BCM reconciliation.
+- Radio source activation traces, bounded coalescing and stale tune rejection, service recovery, HD primary preservation and multicast diagnostics. SXM catalog retry, nonempty snapshot preservation, guarded live metadata capture and session/channel invalidation. HD multicast control, SXM artwork/seek and live metadata verification remain pending.
+- AirPlay shared readiness/rate reporting, seekability checks, player teardown and first-frame diagnostics, session generation checks on queued commands and responses. First hardware frame reported in RC8; disconnect cause unresolved. No parked-video restriction changes.
+- Theme provider recheck in consumer processes, display-local handshake state and merged preferences. Independent UI Sync Negotiation and Phone-Managed Cluster Layout experiments default off. Existing DBX identity and center wallpaper experiment preserved. Theme selector and center negotiation remain unverified.
+- Bose read-only sample validity, strict audio getter replies, stale volume authorization invalidation, OEM panel fallback, vehicle information and Comfort session checks. No new Bose setter.
+- Wireless remains primary validation; wired optional only if equivalent identity configuration is available. See [RC9 test plan](docs/rc9-testing.md).
+- Companion release revisions and signed packaging pending coordinated release authorization; no claim of vehicle validation.
+
 ## K5 1.0.0-rc.8 (vehicle testing)
 
 ### Radio and audio

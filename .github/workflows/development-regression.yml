@@ -6,6 +6,8 @@ on:
       - 'source/mod/src/**'
       - 'source/mod/tools/video/**'
       - 'source/mod/build.sh'
+      - 'source/mod/settings.json'
+      - 'source/mod/mod.json'
       - 'source/native/**'
       - 'source/tests/**'
       - '.github/workflows/development-regression.yml'

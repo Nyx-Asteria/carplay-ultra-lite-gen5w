@@ -118,6 +118,8 @@ UI Synchronization requires Ultra Sidebars and CarPlay Ultra. The wallpaper expe
 
 ## Development
 
+RC9 is an unreleased development candidate. See the [RC9 test plan](docs/rc9-testing.md) and [changelog](CHANGELOG.md). RC8 remains the published baseline until a signed candidate is released.
+
 | Milestone | Status |
 | --- | --- |
 | RC4–RC6 | Earlier vehicle testing releases |
