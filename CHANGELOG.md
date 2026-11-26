@@ -1,6 +1,6 @@
 # Changelog
 
-## K5 1.0.0-rc.9 (unreleased development candidate)
+## K5 1.0.0-rc.9 (vehicle testing)
 
 - Persistent categorized session logging, bounded retention, USB export, native capture, cross-process SiriusXM diagnostic capture, session summaries and regression tests.
 - Independent heating and ventilation immediate-feedback settings; separate requested and actual seat state, typed paired feedback, transition tests and authoritative BCM reconciliation.
@@ -9,7 +9,10 @@
 - Theme provider recheck in consumer processes, display-local handshake state and merged preferences. Independent UI Sync Negotiation and Phone-Managed Cluster Layout experiments default off. Existing DBX identity and center wallpaper experiment preserved. Theme selector and center negotiation remain unverified.
 - Bose read-only sample validity, strict audio getter replies, stale volume authorization invalidation, OEM panel fallback, vehicle information and Comfort session checks. No new Bose setter.
 - Wireless remains primary validation; wired optional only if equivalent identity configuration is available. See [RC9 test plan](docs/rc9-testing.md).
-- Companion release revisions and signed packaging pending coordinated release authorization; no claim of vehicle validation.
+- WCP 2.2.1-rc.5 (`9c904db`): bounded persistent session journal and USB export, opt-in native capture, teardown timing and transport counters, attachment generation guards, receive readiness race fixes; shared identity API and native capability recipes unchanged.
+- STBT 1.0.0-rc.2 (`d5720ef`): bounded session journal and USB export, stale distance invalidation, guidance registration gating, route-stop cleanup, focused opt-in third-party packet diagnostics and component attribution; Waze guidance not verified.
+- PPS 1.0.0, Comfort 1.1.8-cpul.rc.1, collector RC4 and compatibility check remain pinned to the previous bundle revisions. Seven packages signed with the existing permanent author key and verified before publication.
+- Known vehicle blockers: EWF currently uninstalled; external-file conflicts require separate HMG-API recovery. USB dongle projection crashes with CPUL sidebars enabled (reported); avoid this configuration pending investigation. Wired operation is not verified. No claim of vehicle validation.
 
 ## K5 1.0.0-rc.8 (vehicle testing)
 

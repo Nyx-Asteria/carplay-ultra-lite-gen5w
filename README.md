@@ -6,7 +6,7 @@
 
 An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by HMG-API.
 
-[![Development](https://img.shields.io/badge/development-RC8_testing-f59e0b?style=flat-square)](#development)
+[![Development](https://img.shields.io/badge/development-RC9_testing-f59e0b?style=flat-square)](#development)
 [![HMG-API](https://img.shields.io/badge/HMG--API-1.1.0--rc.8%2B-2563eb?style=flat-square)](https://github.com/Open-HMG/HMG-API)
 [![Platform](https://img.shields.io/badge/platform-K5_Gen5W__M-64748b?style=flat-square)](#compatibility)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-22c55e?style=flat-square)](LICENSE)
@@ -19,7 +19,7 @@ An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by 
 
 An independent K5 port of [SafariForest's CarPlay Ultra-Lite](https://github.com/SafariForest/carplay-ultra-lite-gen5w). Native vehicle controls, Ultra-style appearance and parked video are integrated into CarPlay without adding EV routing or changing the physical instrument cluster.
 
-> **RC8 vehicle testing build.** Check Releases for the signed bundle; retain RC7 for rollback. RC8 adds native radio, seat feedback experiments, navigation integration and targeted diagnostics. See the [RC8 changelog and vehicle test guide](docs/rc8-testing.md), [RC7 guide](docs/rc7-testing.md) and [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases).
+> **RC9 vehicle testing build.** Retain RC8 for rollback. See the [RC9 testing guide](docs/rc9-testing.md), [changelog](CHANGELOG.md) and [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases).
 
 ## Features
 
@@ -64,7 +64,7 @@ FM tuning and physical seek were verified in earlier vehicle tests. RC8 implemen
 - LIVI-compatible playback-status fields and scalar timing support alongside the existing response.
 - Fresh Park feedback and active CarPlay session required; video is disabled by default. When enabled, audio is attempted with a picture-only fallback; an optional picture-only diagnostic disables audio rendering from startup and prefers a low video bitrate.
 
-RC7 observed hardware decoder initialization and a DRM unsupported error on protected content. Ordinary unprotected first-frame playback remains unverified. Playback remains experimental. Independent AirPlay mirroring and YouTube discovery are future work, not features of this build. See [standalone AirPlay integration](docs/standalone-airplay-integration.md).
+RC7 observed hardware decoder initialization and a DRM unsupported error on protected content. RC8 reportedly rendered a first hardware-decoded frame, but the session disconnected shortly afterward; sustained playback remains unverified. Playback remains experimental. Independent AirPlay mirroring and YouTube discovery are future work, not features of this build. See [standalone AirPlay integration](docs/standalone-airplay-integration.md).
 
 ## Compatibility
 
@@ -84,19 +84,19 @@ Exact firmware fingerprints gate activation. Other cars and firmware are unsuppo
 
 Download a published package from [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases). Preserve a rollback copy of working wireless projection and back up settings first.
 
-The RC8 bundle includes:
+The RC9 bundle includes:
 
 | Package | Role |
 | --- | --- |
 | CPUL K5 | Vehicle integration and Ultra |
-| [Wireless CP/AA fork](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa) | 2.2.1-rc.4 wireless projection and Ultra identity/session-start |
+| [Wireless CP/AA fork](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa) | 2.2.1-rc.5 wireless projection and Ultra identity/session-start |
 | [Phone Projection Scaling](https://github.com/Nyx-Asteria/Phone-Projection-Scaling) | Stable 1.0.0 relative projection scaling |
 | [Comfort fork](https://github.com/Nyx-Asteria/hmgapi-comfort) | Optional comfort thresholds |
-| [Standalone TBT](https://github.com/Nyx-Asteria/Standalone_TBT) | 1.0.0-rc.1; experimental Waze recovery, single navigation publisher |
+| [Standalone TBT](https://github.com/Nyx-Asteria/Standalone_TBT) | 1.0.0-rc.2; experimental Waze recovery, single navigation publisher |
 | Compatibility check | Firmware and environment checks |
 | Firmware collector | Incremental navigation/iAP2 binaries and opt-in CPUL runtime logs |
 
-The RC8 bundle is configured to use one permanent author identity. Older test-signed packages may need removal before installing packages signed with the permanent key. Do not install competing identity patches. Disable WCP cluster/HUD TBT before installing Standalone TBT; keep wireless bridge, audio, shared identity and Now Playing enabled. Remove the original TBT fork first. Test wireless reconnect and rollback while parked.
+The RC9 bundle is configured to use one permanent author identity. Older test-signed packages may need removal before installing packages signed with the permanent key. Do not install competing identity patches. Disable WCP cluster/HUD TBT before installing Standalone TBT; keep wireless bridge, audio, shared identity and Now Playing enabled. Remove the original TBT fork first. Test wireless reconnect and rollback while parked.
 
 ## Settings
 
@@ -105,10 +105,13 @@ Restart after changing settings. Explicit saved selections are retained.
 | Setting | Default |
 | --- | --- |
 | K5 Vehicle Integration | On |
+| Seat Heating Immediate Feedback | On |
 | Seat Ventilation Immediate Feedback (Experimental) | Off |
 | CarPlay Ultra | On |
 | Enable Ultra Sidebars | On |
 | UI Synchronization | Off |
+| Independent UI Sync Negotiation (Experimental) | Off |
+| Phone-Managed Cluster Layout (Experimental) | Off |
 | Force Theme Wallpaper (Experimental) | Off |
 | SiriusXM Discovery | Off |
 | Parked AirPlay Video & Audio | Off |
@@ -118,7 +121,7 @@ UI Synchronization requires Ultra Sidebars and CarPlay Ultra. The wallpaper expe
 
 ## Development
 
-RC9 is an unreleased development candidate. See the [RC9 test plan](docs/rc9-testing.md) and [changelog](CHANGELOG.md). RC8 remains the published baseline until a signed candidate is released.
+RC9 is a vehicle testing candidate. See the [RC9 test plan](docs/rc9-testing.md) and [changelog](CHANGELOG.md).
 
 | Milestone | Status |
 | --- | --- |

@@ -1,6 +1,9 @@
 # K5 RC9 vehicle validation / RC10 evidence collection
 
-This is a development test plan, not a statement that the candidate has been published or vehicle-verified. Target DL322 USA 260507, API 19. Retain the known-working RC8 rollback bundle and settings. Companion revisions must be confirmed before the coordinated signed release; do not install a competing identity or navigation publisher.
+This is a development test plan, not a statement that the candidate has been published or vehicle-verified. Target DL322 USA 260507, API 19. Retain the known-working RC8 rollback bundle and settings. Companion pins: WCP RC5 9c904db, STBT RC2 d5720ef; do not install a competing identity or navigation publisher.
+
+## Known recovery blockers
+EWF is currently uninstalled and HMG-API external-file conflicts require separate recovery before testing. USB dongle projection reportedly crashes with CPUL sidebars enabled; avoid that combination pending investigation. Do not bypass conflict checks. Restore a known-good projection configuration first. Wired testing is optional and not verified.
 
 ## First connection and logging
 - Install the correctly signed CPUL candidate with compatible WCP shared identity, and retain EWF if required for the working wireless configuration. Test while parked.
