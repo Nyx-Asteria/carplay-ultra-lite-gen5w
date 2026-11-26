@@ -102,9 +102,11 @@ final class VsChannel extends Thread {
     void deliver(List<VehicleState.Out> answers) {
         for (VehicleState.Out a : answers) {
             VsChannel to = lanes[a.lane], other = lanes[1 - a.lane];
-            if ((to == null || !to.send(a.message)) && (other == null || !other.send(a.message))) {
-                out.log("VS no stream left to answer on");
-            }
+            int delivered=-1;
+            if(to!=null&&to.send(a.message))delivered=a.lane;
+            else if(other!=null&&other.send(a.message))delivered=1-a.lane;
+            if(delivered<0)out.log("VS no stream left to answer on");
+            if(a.seatDiagnostic!=null)out.log("[seat-feedback] notification"+a.seatDiagnostic+" requestedLane="+a.lane+" sentLane="+delivered+" socketWrite="+(delivered>=0));
         }
     }
 

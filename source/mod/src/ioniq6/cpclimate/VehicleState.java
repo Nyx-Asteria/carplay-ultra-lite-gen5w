@@ -41,10 +41,13 @@ final class VehicleState {
     static final class Out {
         final int lane;
         final byte[] message;
+        final String seatDiagnostic;
 
-        Out(int lane, byte[] message) {
+        Out(int lane, byte[] message) { this(lane,message,null); }
+        Out(int lane, byte[] message, String seatDiagnostic) {
             this.lane = lane;
             this.message = message;
+            this.seatDiagnostic = seatDiagnostic;
         }
     }
 
@@ -959,7 +962,7 @@ final class VehicleState {
             // the phone's "no value" for each, as a registerResponse gives it for a value the car doesn't have
             Map<Object, Object> m = dict("command", "updateNotify", "errors", blanked);
             if (!changed.isEmpty()) m.put("values", changed);
-            answers.add(new Out(HIGH, wrap(m)));
+            answers.add(new Out(HIGH, wrap(m), seatNotificationDiagnostic(changed)));
             return answers;
         }
         Out notify = updateNotify(changed);
@@ -1266,7 +1269,22 @@ final class VehicleState {
 
     private static Out updateNotify(Map<Object, Object> changed) {
         if (changed.isEmpty()) return null;
-        return new Out(HIGH, wrap(dict("command", "updateNotify", "values", changed)));
+        return new Out(HIGH, wrap(dict("command", "updateNotify", "values", changed)), seatNotificationDiagnostic(changed));
+    }
+
+    static String seatNotificationDiagnostic(Map<Object,Object> changed) {
+        StringBuilder s=new StringBuilder();
+        for(Map.Entry<Object,Object> e:changed.entrySet()) {
+            Long iid=OpackCodec.asLong(e.getKey());
+            if(iid==null||!frontSeatValue(iid))continue;
+            Object value=e.getValue();
+            if(!(value instanceof Long)&&!(value instanceof Boolean)) {
+                s.append(" iid=").append(iid).append(":unexpected-type");
+                continue;
+            }
+            s.append(" iid=").append(iid).append(':').append(value.getClass().getSimpleName()).append('=').append(value);
+        }
+        return s.length()==0?null:s.toString();
     }
 
     static byte[] wrap(Object inner) {
