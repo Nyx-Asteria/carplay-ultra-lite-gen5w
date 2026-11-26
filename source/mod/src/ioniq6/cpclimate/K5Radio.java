@@ -124,6 +124,8 @@ final class K5Radio {
     private Object sxmTuner;
     private static final String SXM_IFACE = "com.hkmc.media.sxm65h.ISXM65HService";
     private Object fmTuner, fmAudio;
+    private String lastServiceHealth="";
+    private void serviceHealth(String state){if(!state.equals(lastServiceHealth)){lastServiceHealth=state;log.log("[radio-service] "+state);}}
     private static final String RADIO_IFACE = "com.hkmc.media.IRadioService";
 
     /** North American OEM FM values are in 10 kHz units. Reject unknown/out-of-band readings. */
@@ -221,15 +223,20 @@ final class K5Radio {
             sxmArt = null; currentSxmChannel = -1; fullSxm = null;
             sxmKnownGeneration = -1; sxmKnownIds = java.util.Collections.emptySet();
             lastListPoll = 0; fmItems = java.util.Collections.emptyList();
+            fmTuner=null; fmAudio=null; sxmTuner=null; lastServiceHealth="";
             return values;
         }
         try {
             if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) { fmActive = false; sxmActive = false; sxmAvailable = false; return values; }
             if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
             if (fmAudio == null) fmAudio = service(CarAudio.SERVICE, CarAudio.IFACE);
-            long khz = fmKhz(readInt(fmTuner, RADIO_IFACE, "getLastFMFrequency"));
+            long khz=-1;
+            try { khz=fmKhz(readInt(fmTuner,RADIO_IFACE,"getLastFMFrequency")); }
+            catch(Throwable t){fmTuner=null; lastListPoll=0; fmItems=java.util.Collections.emptyList();}
             int mode = readInt(fmAudio, CarAudio.IFACE, "getAudioMode");
             int stream = readInt(fmAudio, CarAudio.IFACE, "getCurStreamType");
+            if(mode<0||stream<0)fmAudio=null;
+            serviceHealth("FM="+(fmTuner!=null&&khz>0)+" audio="+(fmAudio!=null)+" mode="+mode+" stream="+stream);
             // RC4 observed FM mode 2 / stream 38, AM mode 1 / stream 39.
             activationLog(activationTrace.sample(CpClimate.sessionGeneration,tuneRequest.get(),mode,stream,android.os.SystemClock.elapsedRealtime()));
             fmActive = khz > 0 && mode == 2 && stream == 38;
@@ -292,7 +299,12 @@ final class K5Radio {
                 }
                 values.put(4118L, fmItemsFor(cached));
             }
-        } catch (Throwable t) { fmActive = false; sxmActive = false; sxmAvailable = false; fmTuner = null; fmAudio = null; sxmTuner = null; }
+        } catch (Throwable t) {
+            fmActive=false; sxmActive=false; sxmAvailable=false; fmAudio=null;
+            stationName=null; stationArtwork=null; clearTags(); lastFmFrequency=-1;
+            currentSxmChannel=-1; sxmArt=null;
+            serviceHealth("audio sample unavailable: "+t.getClass().getSimpleName());
+        }
         return values;
     }
 
@@ -324,7 +336,7 @@ final class K5Radio {
             // A channel ID is not necessarily its displayed channel number.
             // Publish text only when the OEM channel record matches exactly.
             refreshSxmFavoriteMetadata(values, channel);
-        } catch (Throwable t) { sxmTuner = null; }
+        } catch (Throwable t) { sxmTuner=null; sxmAvailable=false; currentSxmChannel=-1; sxmArt=null; values.put(4131L,true); }
     }
 
     private long sxmRequestGeneration = -1;
@@ -335,7 +347,6 @@ final class K5Radio {
         long generation = CpClimate.sessionGeneration;
         long now = android.os.SystemClock.elapsedRealtime();
         if (sxmRequestGeneration == generation || (sxmRequestTime >= 0 && now - sxmRequestTime < 30000)) return;
-        sxmRequestGeneration = generation;
         sxmRequestTime = now;
         try {
             Class<?> iface = Class.forName(SXM_IFACE);
@@ -346,6 +357,7 @@ final class K5Radio {
             categories.invoke(sxmTuner);
             if (!probeActive(generation) || !sxmActive) return;
             channels.invoke(sxmTuner);
+            sxmRequestGeneration = generation;
             log.log("[radio-sxm] requested OEM category and channel catalog; awaiting asynchronous updates");
         } catch (Throwable t) { log.log("[radio-sxm] catalog request unavailable: " + t.getClass().getSimpleName()); }
     }
