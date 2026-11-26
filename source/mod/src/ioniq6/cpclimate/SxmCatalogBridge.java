@@ -11,12 +11,16 @@ import java.util.ArrayList;
 
 /** Passive observation of RadioNA's already decoded OEM catalog. Never owns its listener. */
 final class SxmCatalogBridge {
+    private static void diagnostic(ModContext m,String event) {
+        m.log(event);
+        android.util.Log.i("CPULCrossProcess",event);
+    }
     static final String ACTION = "ioniq6.cpclimate.SXM_CATALOG";
     static void install(final ModContext m, final Context context) {
         try {
             if (!"a909ed44ac10909a83af0a1109e12f92".equals(ModContext.md5("/system/app/HKMC_RadioNA.odex"))) return;
             if (context.checkCallingOrSelfPermission("android.permission.DEVICE_POWER") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                m.log("[radio-sxm] catalog bridge withheld: sender permission unavailable");
+                diagnostic(m,"[radio-sxm] catalog bridge withheld: sender permission unavailable");
                 return;
             }
             ClassLoader cl = context.getClassLoader();
@@ -49,11 +53,11 @@ final class SxmCatalogBridge {
                                 .putExtra("received", android.os.SystemClock.elapsedRealtime())
                                 .putExtra("ids", keys).putExtra("names", names.toArray(new String[0]))
                                 .putExtra("titles", empty).putExtra("artists", empty), "android.permission.DEVICE_POWER");
-                        m.log("[radio-sxm] forwarded decoded eligible catalog count=" + keys.length);
-                    } catch (Throwable t) { m.log("[radio-sxm] catalog bridge failed: " + t.getClass().getSimpleName()); }
+                        diagnostic(m,"[radio-sxm] forwarded decoded eligible catalog count=" + keys.length);
+                    } catch (Throwable t) { diagnostic(m,"[radio-sxm] catalog bridge failed: " + t.getClass().getSimpleName()); }
                 }
             });
-            m.log("[radio-sxm] decoded catalog observer installed");
+            diagnostic(m,"[radio-sxm] decoded catalog observer installed");
             final android.os.HandlerThread worker = new android.os.HandlerThread("cpul-sxm-art");
             worker.start();
             final android.os.Handler handler = new android.os.Handler(worker.getLooper());
@@ -85,11 +89,11 @@ final class SxmCatalogBridge {
                             context.sendBroadcast(new Intent(ACTION).setPackage(CpClimate.DIPO)
                                     .putExtra("received", received).putExtra("artChannel", channelId)
                                     .putExtra("artwork", image), "android.permission.DEVICE_POWER");
-                        } catch (Throwable t) { m.log("[radio-sxm] artwork unavailable: " + t.getClass().getSimpleName()); }
+                        } catch (Throwable t) { diagnostic(m,"[radio-sxm] artwork unavailable: " + t.getClass().getSimpleName()); }
                     }});
                 }
             });
-        } catch (Throwable t) { m.log("[radio-sxm] catalog observer unavailable: " + t.getClass().getSimpleName()); }
+        } catch (Throwable t) { diagnostic(m,"[radio-sxm] catalog observer unavailable: " + t.getClass().getSimpleName()); }
     }
     private static Field field(Class<?> c, String name) throws Exception {
         Field f = c.getDeclaredField(name); f.setAccessible(true); return f;

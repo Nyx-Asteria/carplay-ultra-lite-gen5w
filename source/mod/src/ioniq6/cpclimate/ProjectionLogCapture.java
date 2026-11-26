@@ -14,6 +14,17 @@ final class ProjectionLogCapture extends Thread {
     private static final Pattern SCREEN=Pattern.compile("(?i)theme screen SETUP type (\\d{1,5})");
     ProjectionLogCapture(SessionLogging sink){super("cpul-projection-log");this.sink=sink;setDaemon(true);}
     static String classify(String body) {
+        int marker=body.indexOf("CPULCrossProcess");
+        if(marker>=0) {
+            int colon=body.indexOf(':',marker);
+            if(colon<0)return null;
+            String event=body.substring(colon+1).trim();
+            if(event.matches("\\[radio-sxm\\] forwarded decoded eligible catalog count=\\d{1,3}"))return event;
+            if(event.equals("[radio-sxm] catalog bridge withheld: sender permission unavailable")||
+               event.equals("[radio-sxm] decoded catalog observer installed"))return event;
+            if(event.matches("\\[radio-sxm\\] (catalog bridge failed|artwork unavailable|catalog observer unavailable): [A-Za-z0-9_]{1,80}"))return event;
+            return null;
+        }
         Matcher m=STREAM.matcher(body);
         if(m.find())return "[projection] unsupported stream type="+m.group(1);
         if(body.contains("Unsupported stream type"))return "[projection] unsupported stream type=unknown";
@@ -39,7 +50,7 @@ final class ProjectionLogCapture extends Thread {
             try{
                 // API 19 logcat has no reliable --pid or -T option; reject stale backlog by timestamp.
                 long started=System.currentTimeMillis();
-                p=new ProcessBuilder("logcat","-v","threadtime","-s","TccCarPlay:*").redirectErrorStream(true).start();
+                p=new ProcessBuilder("logcat","-v","threadtime","-s","TccCarPlay:*","CPULCrossProcess:I").redirectErrorStream(true).start();
                 BufferedReader in=new BufferedReader(new InputStreamReader(p.getInputStream(),"UTF-8"));
                 SimpleDateFormat date=new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS",Locale.US);
                 date.setLenient(false);
