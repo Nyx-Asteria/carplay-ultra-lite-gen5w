@@ -17,6 +17,8 @@ final class ComfortThresholds {
     final VsChannel.Log log;
     final boolean installed;
     private Bundle latest;
+    private long latestGeneration=-1;
+    void invalidate(){latest=null;latestGeneration=-1;}
     private boolean failed;
     ComfortThresholds(Context context, ModContext mod, VsChannel.Log log) {
         this.context = context; this.mod = mod; this.log = log;
@@ -47,18 +49,22 @@ final class ComfortThresholds {
     }
     void refresh(Map<String,Object> fresh) {
         try {
-            latest = read("get", null, null);
+            long generation=CpClimate.sessionGeneration;
+            Bundle sample=read("get",null,null);
+            if(!CpClimate.sessionActive||generation!=CpClimate.sessionGeneration){invalidate();return;}
+            latest=sample;
+            latestGeneration=generation;
             if (failed) log.log("[comfort] threshold bridge recovered");
             failed = false;
         } catch (Exception e) {
-            latest = null;
+            invalidate();
             if (!failed) log.log("[comfort] threshold bridge unavailable: " + e.getClass().getSimpleName());
             failed = true;
         }
         for (String id: IDS) fresh.put("comfort."+id, latest == null ? VehiclePage.NONE : latest.getInt(id)+(latest.getBoolean("metric") ? " °C" : " °F"));
     }
     void adjust(String command) {
-        if (!enabled() || !CpClimate.sessionActive || latest == null) return;
+        if (!enabled() || !CpClimate.sessionActive || latest == null || latestGeneration!=CpClimate.sessionGeneration) return;
         for (String id: IDS) {
             int delta = command.equals("comfort."+id+".plus") ? 1 : command.equals("comfort."+id+".minus") ? -1 : 0;
             if (delta == 0) continue;
@@ -66,9 +72,11 @@ final class ComfortThresholds {
                 Bundle args = new Bundle();
                 args.putInt("delta", delta);
                 args.putBoolean("metric", latest.getBoolean("metric"));
-                latest = read("adjust", id, args);
+                Bundle confirmed=read("adjust",id,args);
+                if(!CpClimate.sessionActive||latestGeneration!=CpClimate.sessionGeneration){invalidate();return;}
+                latest=confirmed;
                 log.log("[comfort] confirmed " + id + "=" + latest.getInt(id));
-            } catch (Exception e) { latest=null; log.log("[comfort] adjustment refused: "+e.getClass().getSimpleName()); }
+            } catch (Exception e) { invalidate(); log.log("[comfort] adjustment refused: "+e.getClass().getSimpleName()); }
             return;
         }
     }

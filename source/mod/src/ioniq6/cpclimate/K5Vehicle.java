@@ -68,9 +68,10 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
             return;
         }
         final Intent i = shortcuts.get(id);
-        if (i == null) return;
+        if (i == null || !enabled() || !CpClimate.sessionActive) return;
+        final long generation=CpClimate.sessionGeneration;
         main.post(new Runnable() { public void run() {
-            if (!enabled() || !CpClimate.sessionActive) { log.log("[vehicle] shortcut rejected: inactive session"); return; }
+            if (!enabled() || !CpClimate.sessionActive || generation!=CpClimate.sessionGeneration) { log.log("[vehicle] shortcut rejected: inactive or stale session"); return; }
             try { context.startActivity(new Intent(i).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); log.log("[vehicle] opened " + id); }
             catch (Exception e) { log.log("[vehicle] launch failed " + id + ": " + e.getClass().getSimpleName()); }
         }});
@@ -96,6 +97,7 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
             if (arg) data.writeByte((byte)0);
             if (!b.transact(code, data, reply, 0)) return Double.NaN;
             reply.readException();
+            if(reply.dataAvail()<4)return Double.NaN;
             return floating ? reply.readFloat() : reply.readInt();
         } catch (Throwable t) { return Double.NaN; }
         finally { data.recycle(); reply.recycle(); }
@@ -105,6 +107,7 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
         while (!isInterrupted()) {
             try {
                 if ((enabled() || comfort.enabled()) && CpClimate.sessionActive) {
+                    long generation=CpClimate.sessionGeneration;
                     Map<String,Object> fresh = new LinkedHashMap<String,Object>();
                     if (enabled()) {
                     double u = read("com.hkmc.micom.usm", CarApi.USM, unit, false, false);
@@ -129,13 +132,14 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
                     if (radio.available()) fresh.put("radio.status", radio.diagnosticStatus());
                     CarAudio audio = CarAudio.instance;
                     fresh.put("audio.bose", audio == null ? VehiclePage.NONE : audio.boseStatus());
+                    if(!CpClimate.sessionActive||generation!=CpClimate.sessionGeneration)continue;
                     Map<Long,Object> changed = page.update(fresh);
                     if (enabled() && radio.available()) changed.putAll(radio.refreshFm());
                     VehicleState current;
                     synchronized (state) { current = state[0]; }
-                    if (current != null && !changed.isEmpty()) lanes[1].deliver(current.fromCar(changed));
+                    if (current != null && !changed.isEmpty() && CpClimate.sessionActive && generation==CpClimate.sessionGeneration) lanes[1].deliver(current.fromCar(changed));
                 }
-                if (!CpClimate.sessionActive) adjustments.clear();
+                if (!CpClimate.sessionActive) { adjustments.clear(); comfort.invalidate(); }
                 Thread.sleep(comfort.present() ? 1000 : 5000);
             } catch (InterruptedException done) { return; }
             catch (Throwable t) { log.log("[vehicle] refresh failed: " + t.getClass().getSimpleName()); try { Thread.sleep(5000); } catch (InterruptedException done) { return; } }
