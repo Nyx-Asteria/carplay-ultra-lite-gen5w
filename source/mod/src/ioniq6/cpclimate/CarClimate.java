@@ -44,6 +44,9 @@ final class CarClimate extends Thread implements VehicleState.Car {
     static final int txSetFront = CarApi.code(CarApi.DATC, "setFrontClimateControl", "(II)V");
     static final int txDriverSeat = CarApi.code(CarApi.BCM, "getDrvSeatHeatState", "()I");
     static final int txPassengerSeat = CarApi.code(CarApi.BCM, "getAstSeatHeatState", "()I");
+    // Compare USM's own state with BCM feedback without changing the command path.
+    static final int txUsmDriverState = CarApi.code(CarApi.USM, "getFrontSeatHeat_DrvState", "()I");
+    static final int txUsmPassengerState = CarApi.code(CarApi.USM, "getFrontSeatHeat_AstState", "()I");
     static final int txSetDriverSeat = CarApi.code(CarApi.USM, "setFrontSeatHeatDrvStep", "(I)V");
     static final int txSetPassengerSeat = CarApi.code(CarApi.USM, "setFrontSeatHeatAstStep", "(I)V");
     static final int txRear = CarApi.code(CarApi.VR, "set_RrDefogger_Cmd_AVN", "(I)V");
@@ -250,9 +253,12 @@ final class CarClimate extends Thread implements VehicleState.Car {
             IBinder bodyService = service(BCM);
             int before = bodyService == null ? -1 : bodyInt(bodyService,
                     c.a == ClimateMap.SET_DRIVER_SEAT ? txDriverSeat : txPassengerSeat);
+            IBinder usmService = service(USM);
+            int usmBefore = usmService == null ? -1 : seat(usmService,
+                    c.a == ClimateMap.SET_DRIVER_SEAT ? txUsmDriverState : txUsmPassengerState);
             out.log("[seat-dispatch] side=" + (c.a == ClimateMap.SET_DRIVER_SEAT ? "driver" : "passenger")
                     + " transaction=" + (c.a == ClimateMap.SET_DRIVER_SEAT ? txSetDriverSeat : txSetPassengerSeat)
-                    + " before=" + before + " requested=" + c.b);
+                    + " before=" + before + " usmBefore=" + usmBefore + " requested=" + c.b);
         }
         if (c.kind == ClimateMap.REAR) return pressRear(c.a);
         if (c.kind == ClimateMap.AMBIENT) return writeAmbient(c.a, c.b, c.c);
