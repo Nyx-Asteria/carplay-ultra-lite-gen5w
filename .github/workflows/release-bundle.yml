@@ -57,10 +57,23 @@ jobs:
           ref: 150962a2624f9b855ab6c41d3d5a631cdb7cbd30
           path: .pps
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Nyx-Asteria/Standalone_TBT
+          ref: d3602d5f1f470434f4b2eafb59acca3c6901085a
+          path: .tbt
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+      - name: Cache checksum-pinned video dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            source/mod/tools/video/libs
+            source/mod/tools/video/r8.jar
+          key: cpul-video-${{ runner.os }}-${{ hashFiles('source/mod/tools/video/fetch-libs.sh') }}
       - name: SDK
         run: |
           sudo apt-get update -q
@@ -75,7 +88,7 @@ jobs:
           test "$(git log -1 --format=%s)" = "Release $VERSION"
           test -f "docs/rc${VERSION##*.}-testing.md"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-      - name: Build and sign six packages
+      - name: Build and sign seven packages
         shell: bash
         env:
           MOD_KEY: ${{ secrets.MOD_KEY }}
@@ -156,6 +169,22 @@ jobs:
           PPS_VERSION=$(python3 -c 'import json; print(json.load(open(".pps/mod.json"))["version"])')
           test "$PPS_VERSION" = "1.0.0"
           cp ".pps/dist/phone-projection-scaling-$PPS_VERSION.zip" out/packages/
+          # Standalone TBT owns navigation publishing when WCP TBT is disabled.
+          # Build the pinned fork using its own policy regressions and our permanent author key.
+          TBT_AJ="$ANDROID_HOME/platforms/android-19/android.jar"
+          test -f "$TBT_AJ" || sdkmanager "platforms;android-19"
+          (
+            cd .tbt
+            mkdir -p out/policy
+            javac --release 8 -d out/policy src/CpSessionLifecycle.java src/CpSubscriptionRecovery.java tests/CpSessionLifecycleTest.java tests/CpSubscriptionRecoveryTest.java
+            java -cp out/policy hmgapi.mods.projection.carplay.CpSessionLifecycleTest
+            java -cp out/policy hmgapi.mods.projection.carplay.CpSubscriptionRecoveryTest
+            python3 tests/export_refresh_test.py
+            HMG_API="$OUT/../.hmgapi" ANDROID_JAR="$TBT_AJ" D8="$D8" SIGNING_KEY="$KEY" sh build.sh
+          )
+          TBT_VERSION=$(python3 -c 'import json; print(json.load(open(".tbt/mod.json"))["version"])')
+          test "$TBT_VERSION" = "1.0.0-rc.1"
+          cp ".tbt/dist/standalone-tbt-$TBT_VERSION.zip" out/packages/
           mkdir -p out/release
           for f in out/packages/*.zip; do
             tmp=$(mktemp -d)
@@ -164,8 +193,9 @@ jobs:
             rm -rf "$tmp"
             cp "$f" out/release/
           done
-          test "$(find out/release -name '*.zip' | wc -l)" -eq 6
+          test "$(find out/release -name '*.zip' | wc -l)" -eq 7
           cp "docs/rc${VERSION##*.}-testing.md" out/release/TESTING.md
+          printf '\n## Standalone TBT coexistence\nDisable WCP Turn-by-turn on the cluster and HUD, apply and restart before testing Standalone TBT. Keep wireless bridge, audio, shared identity and phone Now Playing enabled. Remove the original Phone Projection TBT before installing the renamed fork. Never enable two navigation publishers.\n' >> out/release/TESTING.md
           (cd out/release && sha256sum *.zip > SHA256SUMS.txt && zip -q CarPlay-Ultra-Lite-K5-$VERSION-testing-bundle.zip *.zip TESTING.md SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
