@@ -19,6 +19,11 @@ final class RadioActivationTrace {
     synchronized String sample(long g,long r,int mode,int stream,long now) {
         if(!active)return null;
         if(g!=generation||r!=request){active=false;return "superseded target="+target+" request="+request;}
+        // Missing binder samples are not evidence of a source transition.
+        if(mode<0||stream<0){
+            if(now-started>=8000){active=false;return "observation_incomplete target="+target+" request="+request;}
+            return null;
+        }
         boolean owns=target==2?mode==2&&stream==38:target==13&&mode==4&&stream==41;
         String event=null;
         if(owns&&!acquired){acquired=true;acquiredAt=now;event="acquired";}

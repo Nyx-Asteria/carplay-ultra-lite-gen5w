@@ -20,6 +20,11 @@ public final class RadioActivationTraceTest {
         t.begin(2,5,2,21000);
         check(t.result(2,5,false,21010).startsWith("rejected"));
         check(t.sample(2,5,2,38,22000)==null);
+        t.begin(3,6,2,30000);t.result(3,6,true,30010);
+        check(t.sample(3,6,2,38,30100).startsWith("acquired"));
+        check(t.sample(3,6,-1,-1,30200)==null);
+        check(t.sample(3,6,2,38,30300)==null);
+        check(t.sample(3,6,-1,-1,38000).startsWith("observation_incomplete"));
         System.out.println("RadioActivationTraceTest passed");
     }
 }

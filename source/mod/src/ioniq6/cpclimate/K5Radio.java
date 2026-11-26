@@ -228,10 +228,13 @@ final class K5Radio {
         }
         try {
             if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) { fmActive = false; sxmActive = false; sxmAvailable = false; return values; }
-            if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
             if (fmAudio == null) fmAudio = service(CarAudio.SERVICE, CarAudio.IFACE);
             long khz=-1;
-            try { khz=fmKhz(readInt(fmTuner,RADIO_IFACE,"getLastFMFrequency")); }
+            try {
+                if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
+                khz=fmKhz(readInt(fmTuner,RADIO_IFACE,"getLastFMFrequency"));
+                if(khz<=0)fmTuner=null;
+            }
             catch(Throwable t){fmTuner=null; lastListPoll=0; fmItems=java.util.Collections.emptyList();}
             int mode = readInt(fmAudio, CarAudio.IFACE, "getAudioMode");
             int stream = readInt(fmAudio, CarAudio.IFACE, "getCurStreamType");
@@ -303,6 +306,7 @@ final class K5Radio {
             fmActive=false; sxmActive=false; sxmAvailable=false; fmAudio=null;
             stationName=null; stationArtwork=null; clearTags(); lastFmFrequency=-1;
             currentSxmChannel=-1; sxmArt=null;
+            activationLog(activationTrace.sample(CpClimate.sessionGeneration,tuneRequest.get(),-1,-1,android.os.SystemClock.elapsedRealtime()));
             serviceHealth("audio sample unavailable: "+t.getClass().getSimpleName());
         }
         return values;
@@ -317,6 +321,7 @@ final class K5Radio {
             if (sxmTuner == null) sxmTuner = service(serviceName("SXM65H_SERVICE"), SXM_IFACE);
             int channel = readInt(sxmTuner, SXM_IFACE, "getLastTunedChannelID");
             sxmAvailable = sxmTuner != null && channel >= 0;
+            if(!sxmAvailable)sxmTuner=null;
             values.put(4131L, !sxmAvailable);
             if (sxmAvailable) {
                 if (sxmActive) requestSxmCatalog();
