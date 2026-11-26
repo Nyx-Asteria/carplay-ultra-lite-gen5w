@@ -6,7 +6,7 @@
 
 An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by HMG-API.
 
-[![Development](https://img.shields.io/badge/development-RC7-f59e0b?style=flat-square)](#development)
+[![Development](https://img.shields.io/badge/development-RC8_preparation-f59e0b?style=flat-square)](#development)
 [![HMG-API](https://img.shields.io/badge/HMG--API-1.1.0--rc.8%2B-2563eb?style=flat-square)](https://github.com/Open-HMG/HMG-API)
 [![Platform](https://img.shields.io/badge/platform-K5_Gen5W__M-64748b?style=flat-square)](#compatibility)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-22c55e?style=flat-square)](LICENSE)
@@ -19,7 +19,7 @@ An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by 
 
 An independent K5 port of [SafariForest's CarPlay Ultra-Lite](https://github.com/SafariForest/carplay-ultra-lite-gen5w). Native vehicle controls, Ultra-style appearance and parked video are integrated into CarPlay without adding EV routing or changing the physical instrument cluster.
 
-> **RC7 testing build:** Version 1.0.0-rc.7 targets the K5 DL322 USA 260507. Host regression checks passed before release preparation; vehicle validation is pending. See the [full RC7 changelog and testing guide](docs/rc7-testing.md) and [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases).
+> **RC8 in preparation — not published.** RC7 remains the available testing baseline. RC8 adds native radio, seat feedback experiments, navigation integration and targeted diagnostics. See the [RC8 changelog and vehicle test guide](docs/rc8-testing.md), [RC7 guide](docs/rc7-testing.md) and [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases).
 
 ## Features
 
@@ -36,7 +36,7 @@ An independent K5 port of [SafariForest's CarPlay Ultra-Lite](https://github.com
 | Comfort thresholds | Optional separate Comfort package |
 | Vehicle information | Odometer and vehicle shortcuts; fuel range remains unresolved |
 
-Heating and wheel heating were reported working in earlier testing. RC7 changes separate SeatFan feedback to publish BCM-confirmed level and power together; both front ventilation cycles are covered by host tests and require vehicle validation.
+Heating and wheel heating were reported working in earlier testing. RC7 changes separate SeatFan feedback to publish BCM-confirmed level and power together; both front ventilation cycles are covered by host tests and require vehicle validation. RC8 adds authoritative state validation and an opt-in immediate feedback comparison; driver heating reversion and ventilation visual feedback remain unresolved.
 
 ### Ultra appearance & projection
 
@@ -54,7 +54,7 @@ Heating and wheel heating were reported working in earlier testing. RC7 changes 
 - Bounded asynchronous source activation and cancellation.
 - Unsupported European DAB service omitted; stock radio shortcut and read-only diagnostic collector retained.
 
-Manual FM tuning was verified on RC6. RC7 uses permission-checked OEM seek keys and cached FM station lists; those changes require vehicle testing. Bounded diagnostics collect source routing, HD/RDS metadata, SiriusXM favorites and Bose Centerpoint state. SiriusXM discovery remains disabled by default and does not enable tuning. Metadata, favorites and artwork publication remain incomplete.
+FM tuning and physical seek were verified in earlier vehicle tests. RC8 implements native OEM seek, cached/observed station lists, HD primary-program metadata and artwork, and opt-in SiriusXM source/catalog/direct tuning with OEM eligibility checks. HD multicast is diagnostic-only; Bose Centerpoint is read-only. New radio functions require vehicle validation.
 
 ### Parked AirPlay video
 
@@ -64,7 +64,7 @@ Manual FM tuning was verified on RC6. RC7 uses permission-checked OEM seek keys 
 - LIVI-compatible playback-status fields and scalar timing support alongside the existing response.
 - Fresh Park feedback and active CarPlay session required; video is disabled by default. When enabled, audio is attempted with a picture-only fallback; an optional picture-only diagnostic disables audio rendering from startup and prefers a low video bitrate.
 
-Playback remains experimental. Independent AirPlay mirroring and YouTube discovery are future work, not features of this build. See [standalone AirPlay integration](docs/standalone-airplay-integration.md).
+RC7 observed hardware decoder initialization and a DRM unsupported error on protected content. Ordinary unprotected first-frame playback remains unverified. Playback remains experimental. Independent AirPlay mirroring and YouTube discovery are future work, not features of this build. See [standalone AirPlay integration](docs/standalone-airplay-integration.md).
 
 ## Compatibility
 
@@ -84,7 +84,7 @@ Exact firmware fingerprints gate activation. Other cars and firmware are unsuppo
 
 Download a published package from [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases). Preserve a rollback copy of working wireless projection and back up settings first.
 
-The RC7 bundle is configured to include:
+The planned RC8 bundle includes:
 
 | Package | Role |
 | --- | --- |
@@ -92,10 +92,11 @@ The RC7 bundle is configured to include:
 | [Wireless CP/AA fork](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa) | 2.2.1-rc.4 wireless projection and Ultra identity/session-start |
 | [Phone Projection Scaling](https://github.com/Nyx-Asteria/Phone-Projection-Scaling) | Stable 1.0.0 relative projection scaling |
 | [Comfort fork](https://github.com/Nyx-Asteria/hmgapi-comfort) | Optional comfort thresholds |
+| [Standalone TBT](https://github.com/Nyx-Asteria/Standalone_TBT) | 1.0.0-rc.1; experimental Waze recovery, single navigation publisher |
 | Compatibility check | Firmware and environment checks |
-| Firmware collector | Allowlisted diagnostic export |
+| Firmware collector | Incremental navigation/iAP2 binaries and opt-in CPUL runtime logs |
 
-The RC7 bundle is configured to use one permanent author identity. Older test-signed packages may need removal before installing packages signed with the permanent key. Do not install competing identity patches. Test wireless reconnect and rollback while parked.
+The RC8 bundle is configured to use one permanent author identity. Older test-signed packages may need removal before installing packages signed with the permanent key. Do not install competing identity patches. Disable WCP cluster/HUD TBT before installing Standalone TBT; keep wireless bridge, audio, shared identity and Now Playing enabled. Remove the original TBT fork first. Test wireless reconnect and rollback while parked.
 
 ## Settings
 
@@ -104,6 +105,7 @@ Restart after changing settings. Explicit saved selections are retained.
 | Setting | Default |
 | --- | --- |
 | K5 Vehicle Integration | On |
+| Seat Ventilation Immediate Feedback (Experimental) | Off |
 | CarPlay Ultra | On |
 | Enable Ultra Sidebars | On |
 | UI Synchronization | Off |
@@ -121,9 +123,10 @@ UI Synchronization requires Ultra Sidebars and CarPlay Ultra. The wallpaper expe
 | RC4–RC6 | Earlier vehicle testing releases |
 | RC7 | Consolidated settings, seat feedback, radio diagnostics, theme negotiation, parked video diagnostics, stable PPS |
 | Remaining vehicle validation | Seat cycling, radio controls and metadata, themes, standard CarPlay fallback, first video frame |
-| Future | Complete SiriusXM controls, native metadata and artwork, standalone AirPlay and YouTube discovery |
+| RC8 | Prepared: radio, climate feedback, theme diagnostics, companion TBT and incremental collector |
+| Future | HD multicast control, confirmed SXM/Bose support, theme selector, standalone AirPlay and YouTube discovery |
 
-[Development regression](.github/workflows/development-regression.yml) compiles the main module and video engine and runs climate, Park, volume policy and UI synchronization checks without publishing. [Release bundle](.github/workflows/release-bundle.yml) builds six packages and verifies author signatures before publishing a non-draft release marked Latest. The release is a testing build despite its publication status.
+[Development regression](.github/workflows/development-regression.yml) compiles the main module and video engine and runs climate, Park, volume policy and UI synchronization checks without publishing. [Release bundle](.github/workflows/release-bundle.yml) builds seven packages and verifies author signatures before publishing a non-draft release marked Latest. The release is a testing build despite its publication status.
 
 Read [development notes](docs/next-development.md), [radio diagnostics](docs/k5-radio.md) and [integration details](docs/integration.md) for technical background. Host tests do not establish vehicle functionality.
 

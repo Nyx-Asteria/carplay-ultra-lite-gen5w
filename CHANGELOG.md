@@ -1,5 +1,36 @@
 # Changelog
 
+## K5 1.0.0-rc.8 (prepared; not released)
+
+### Radio and audio
+- Native IRadioService FM seek replaces injected keys; retain source/session checks. Route volume to confirmed FM/SXM audio streams.
+- Diagnose OEM scan rejection counts and merge observed frequencies when cached scan results are empty. Bridge frequency-matched SIS station names, primary-program ID3 title/artist/album and bounded PNG/JPEG station logos.
+- Experimental SiriusXM source activation, channel feedback, Smart Favorites metadata and catalog, native direct tuning with subscription/skip/lock checks, full decoded RadioNA catalog observer and cached artwork. Request OEM catalog asynchronously, share snapshots, retain full catalog when favorites are unavailable, clear session caches, trace getter and eligibility results. No entitlement changes.
+- Read-only Bose Centerpoint availability/state diagnostics; no amplifier writes.
+- Passive HD SPS method tracing in the existing two-minute radio diagnostic window; actual HD2/HD3 control and Apple multicast encoding remain unverified.
+- Add radio policy regression coverage.
+
+### Climate
+- Preserve pre-write and actual BCM seat state; explicit power-off takes precedence over retained levels, and opposite-mode idle writes do not disable active seats. Resolve one native command per seat per request.
+- Trace resolved commands and pre-dispatch BCM/USM values; withhold disconnected seat commands.
+- Publish paired subscribed ventilation feedback for physical and phone changes; authoritative read/register values, deduplication, typed complete feedback validation and IID uniqueness checks.
+- New opt-in Seat Ventilation Immediate Feedback experiment (default off), with later BCM reconciliation. Add regression assertions for malformed feedback and both timing paths.
+- Driver heating reversion and ventilation visual state remain unresolved until vehicle testing.
+
+### Ultra, themes and video
+- Preserve legacy DBX identity and receiver 950.7.1; supplement existing center view-area metadata without changing geometry. Log unclaimed stream types, optional screen SETUP identifiers and alternate display registration.
+- Record theme compatibility catalog metadata and research leads. Empty theme selector, black wallpaper and missing center handshake remain unresolved. No alternate identity encoding introduced.
+- Distinguish DRM playback errors from transport/decoder errors. Hardware decoder initialization observed in RC7; first frame of ordinary unprotected media still unverified. Park and active-session gates retained.
+- Retry transient Maven dependency downloads and cache checksum-pinned dependencies.
+
+### Companion bundle
+- WCP 2.2.1-rc.4 (23c1983): retain working wireless projection, shared identity and Now Playing; documentation/rollback updates. STBT 1.0.0-rc.1 (2533e82): lifecycle/subscription recovery, parser improvements and opt-in Waze recovery; no claim Waze works.
+- PPS 1.0.0 (150962a), Comfort 1.1.8-cpul.rc.1 (2724ac5), firmware dumper RC4 development (f786403), CPUL Check. Dumper retains incremental navigation/iAP2 targets and adds opt-in CPUL log export.
+- Seven packages, common permanent signing key, signature verification and checksums; normal non-draft release marked Latest when authorized. No signed RC8 bundle exists yet.
+
+Full [RC8 test guide](docs/rc8-testing.md). Historical upstream Ioniq releases follow.
+
+
 Versions after 1.0.0 are test builds running on one car (Hyundai Ioniq 6, US, firmware 260507). 1.3.3 is published as a test build (an update for a car on 1.0.0); the main release is still 1.0.0.
 
 ## 1.3.3 (2026-11-10, in testing)

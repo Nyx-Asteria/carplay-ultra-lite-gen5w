@@ -54,7 +54,7 @@
       "type": "toggle",
       "default": false,
       "title": "SiriusXM Discovery",
-      "description": "Advertises a disabled experimental satellite radio source. Does not enable tuning.",
+      "description": "Advertises an experimental SiriusXM source with OEM catalog and eligible channel tuning. Requires vehicle validation; no entitlement changes.",
       "apply": "restart"
     },
     {
