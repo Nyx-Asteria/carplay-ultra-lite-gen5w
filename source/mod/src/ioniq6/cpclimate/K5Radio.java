@@ -641,21 +641,27 @@ final class K5Radio {
      * RadioNA WrapperUtil identifies the boolean as isFMStep50KHz; the
      * two-argument MicomRadioManager overload supplies PI/PTy zero. */
     boolean tuneFm(final long khz) {
+        return tuneFm(khz,tuneRequest.incrementAndGet());
+    }
+    private boolean tuneFm(final long khz, final long request) {
         if (khz < 87900 || khz > 107900 || (khz - 87900) % 200 != 0
                 || !enabled() || !CpClimate.sessionActive || !fmActive) return false;
         final long generation = CpClimate.sessionGeneration;
         fmCommands.execute(new Runnable() {
             public void run() {
-                if (!probeActive(generation)) return;
+                if (!probeActive(generation) || request != tuneRequest.get()) return;
                 try {
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
                     Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
-                    if (tuner == null || !probeActive(generation)) return;
+                    if (tuner == null || !probeActive(generation) || request != tuneRequest.get()) return;
                     java.lang.reflect.Method method = Class.forName(RADIO_IFACE).getMethod(
                             "directTune", int.class, boolean.class, int.class, int.class);
-                    if (method.getReturnType() != boolean.class) return;
+                    if (method.getReturnType() != boolean.class || !probeActive(generation) || request != tuneRequest.get()
+                            || readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
+                            || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38
+                            || request != tuneRequest.get()) return;
                     Object result = method.invoke(tuner, (int)(khz / 10), false, 0, 0);
                     log.log("[radio] FM tune " + khz + " kHz accepted=" + result);
                 } catch (Throwable t) { log.log("[radio] FM tune failed: " + t.getClass().getSimpleName()); }
@@ -676,7 +682,7 @@ final class K5Radio {
                 || !enabled() || !CpClimate.sessionActive) return false;
         final long generation = CpClimate.sessionGeneration;
         final long request = tuneRequest.incrementAndGet();
-        if (fmActive) return tuneFm(khz);
+        if (fmActive) return tuneFm(khz, request);
         if (!selectFm(request)) return false;
         final long deadline = android.os.SystemClock.elapsedRealtime() + 5000;
         main.postDelayed(new Runnable() {
@@ -686,7 +692,7 @@ final class K5Radio {
                     log.log("[radio] FM activation timed out; pending tune discarded");
                     return;
                 }
-                if (fmActive) { tuneFm(khz); return; }
+                if (fmActive) { tuneFm(khz, request); return; }
                 main.postDelayed(this, 250);
             }
         }, 250);
