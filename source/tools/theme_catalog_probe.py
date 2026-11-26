@@ -108,7 +108,14 @@ def main():
     catalog=json.loads(base64.urlsafe_b64decode(part+"="*(-len(part)%4)))
     assets=catalog["Assets"]
     versions=[a.get("_ContentVersion") for a in assets if a.get("ContentIdentifier")==ASSET]
-    save("catalog-summary.json",{"asset":ASSET,"requested_version":VERSION,"versions":versions,"asset_count":len(assets)})
+    # Keep compatibility metadata for every matching catalog entry, without
+    # copying download URLs or substituting a different asset version.
+    matching = [{k:v for k,v in a.items() if re.search(
+        r"version|compatib|identifier|audience|supported|product|build", k, re.I)
+        and not k.startswith("__")} for a in assets if a.get("ContentIdentifier")==ASSET]
+    save("catalog-summary.json",{"asset":ASSET,"requested_version":VERSION,"versions":versions,
+        "asset_count":len(assets),"matching_compatibility":matching})
+    print("Matching compatibility metadata:", json.dumps(matching, indent=2), flush=True)
     print("Matching asset versions:",versions,flush=True)
     asset=next((a for a in assets if a.get("ContentIdentifier")==ASSET and a.get("_ContentVersion")==VERSION),None)
     if asset is None: raise RuntimeError("exact asset version absent; no substitution")
