@@ -140,6 +140,9 @@ final class K5Radio {
     private long lastListPoll;
     private String lastScanSummary = "";
     private java.util.List<Object> fmItems = java.util.Collections.emptyList();
+    // Observed stations are a fallback, not a claimed complete RF scan.
+    private final java.util.TreeMap<Long,String> observedFm = new java.util.TreeMap<Long,String>();
+    private long observedGeneration = -1;
     private java.util.List<Object> readFmItems(Object tuner) throws Exception {
         Object raw = Class.forName(RADIO_IFACE).getMethod("getRadioAllBsmFreqList").invoke(tuner);
         if (!(raw instanceof java.util.List)) {
@@ -159,11 +162,7 @@ final class K5Radio {
             if (!valid.getBoolean(entry)) { invalid++; continue; }
             long candidate = fmKhz(freq.getInt(entry));
             if (candidate < 87900 || candidate > 107900 || (candidate - 87900) % 200 != 0) offGrid++;
-            if (type.isInstance(entry) && valid.getBoolean(entry)) {
-                long khz = fmKhz(freq.getInt(entry));
-                if (khz >= 87900 && khz <= 107900 && (khz - 87900) % 200 == 0)
-                    frequencies.add(khz);
-            }
+            else frequencies.add(candidate);
         }
         String scanSummary = "raw=" + entries.size() + " invalid=" + invalid
                 + " unexpected=" + unexpected + " offGrid=" + offGrid + " unique=" + frequencies.size();
@@ -171,13 +170,21 @@ final class K5Radio {
             lastScanSummary = scanSummary;
             log.log("[radio] FM scan cache " + scanSummary);
         }
+        return fmItemsFor(frequencies);
+    }
+
+    private java.util.List<Object> fmItemsFor(java.util.Set<Long> frequencies) {
+        java.util.TreeSet<Long> all = new java.util.TreeSet<Long>(frequencies);
+        all.addAll(observedFm.keySet());
         java.util.List<Object> items = new java.util.ArrayList<Object>();
-        for (Long khz : frequencies) {
+        for (Long khz : all) {
             String label = String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0);
             java.util.Map<String,Object> item = new java.util.LinkedHashMap<String,Object>();
             item.put("identifier", Long.toString(khz));
-            item.put("mediaItemName", label);
-            item.put("mediaItemShortName", label);
+            String name = observedFm.get(khz);
+            if (name == null || name.isEmpty()) name = label;
+            item.put("mediaItemName", name);
+            item.put("mediaItemShortName", name);
             item.put("mediaItemType", "fm");
             item.put("mediaItemCategory", 0L);
             item.put("frequency", khz);
@@ -217,6 +224,10 @@ final class K5Radio {
             sxmActive = mode == 4 && stream == 41;
             refreshSxm(values);
             if (!fmActive) { stationName = null; stationArtwork = null; clearTags(); lastFmFrequency = -1; }
+            if (observedGeneration != CpClimate.sessionGeneration) {
+                observedFm.clear(); fmItems = java.util.Collections.emptyList(); lastListPoll = 0;
+                observedGeneration = CpClimate.sessionGeneration;
+            }
             if (fmActive) {
                 if (lastFmFrequency != khz) {
                     StationName previous = stationName;
@@ -233,6 +244,11 @@ final class K5Radio {
                 if (current != null && current.khz == khz && current.generation == CpClimate.sessionGeneration
                         && !current.name.isEmpty()) title = current.name;
                 values.put(4355L, title);
+                if (khz >= 87900 && khz <= 107900 && (khz - 87900) % 200 == 0) {
+                    if (current != null && current.khz == khz && current.generation == CpClimate.sessionGeneration
+                            && !current.name.isEmpty()) observedFm.put(khz, current.name);
+                    else if (!observedFm.containsKey(khz)) observedFm.put(khz, "");
+                }
                 publishTags(values, khz);
                 StationArtwork art = stationArtwork;
                 if (art != null && art.khz == khz && art.generation == CpClimate.sessionGeneration)
@@ -256,7 +272,13 @@ final class K5Radio {
                         log.log("[radio] station list unavailable: " + t.getClass().getSimpleName());
                     }
                 }
-                values.put(4118L, fmItems);
+                java.util.Set<Long> cached = new java.util.TreeSet<Long>();
+                for (Object item : fmItems) {
+                    if (!(item instanceof java.util.Map)) continue;
+                    Object frequency = ((java.util.Map<?,?>)item).get("frequency");
+                    if (frequency instanceof Long) cached.add((Long)frequency);
+                }
+                values.put(4118L, fmItemsFor(cached));
             }
         } catch (Throwable t) { fmActive = false; sxmActive = false; sxmAvailable = false; fmTuner = null; fmAudio = null; sxmTuner = null; }
         return values;
