@@ -334,6 +334,7 @@ final class K5Radio {
         } catch (Throwable t) { log.log("[radio-sxm] catalog request unavailable: " + t.getClass().getSimpleName()); }
     }
 
+    private long sxmDiscoveryGeneration = -1;
     private int sxmCatalogChannel = -1;
     private final java.util.Map<Integer,String[]> sxmMetadata = new java.util.HashMap<Integer,String[]>();
     private volatile java.util.Set<Integer> sxmKnownIds = java.util.Collections.emptySet();
@@ -357,6 +358,18 @@ final class K5Radio {
             if (category < 0) return;
             Object records = Class.forName(SXM_IFACE).getMethod("getCategoryChannels", int.class)
                     .invoke(sxmTuner, category);
+            // Discover read-only catalog accessors without invoking unknown methods.
+            if (sxmDiscoveryGeneration != generation) {
+                sxmDiscoveryGeneration = generation;
+                for (java.lang.reflect.Method method : Class.forName(SXM_IFACE).getMethods()) {
+                    String name = method.getName();
+                    if (!name.startsWith("get") || !(name.contains("Channel") || name.contains("Categor"))) continue;
+                    StringBuilder signature = new StringBuilder(name).append('(');
+                    for (Class<?> parameter : method.getParameterTypes()) signature.append(parameter.getName()).append(',');
+                    signature.append(") -> ").append(method.getReturnType().getName());
+                    log.log("[radio-sxm] catalog accessor " + signature);
+                }
+            }
             Class<?> type = Class.forName("com.hkmc.media.sxm65h.Channel");
             if (records == null || !records.getClass().isArray()
                     || records.getClass().getComponentType() != type) return;
