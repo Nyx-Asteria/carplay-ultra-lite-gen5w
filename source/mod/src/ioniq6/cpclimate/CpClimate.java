@@ -108,6 +108,12 @@ public final class CpClimate extends ModEntry {
             } else m.log("[theme] iAP2 contribution withheld by boot preflight/settings");
             return;
         }
+        if (K5Radio.PACKAGE.equals(app.packageName)) {
+            if (targetVerified && m.enabled() && m.settingBoolean("k5_integration", true)
+                    && m.settingBoolean("sxm_schema_test", false) && app.context != null)
+                SxmCatalogBridge.install(m, app.context);
+            return;
+        }
         if (!DIPO.equals(app.packageName)) return;
         m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("k5_integration", true));
         if (!targetVerified) return;

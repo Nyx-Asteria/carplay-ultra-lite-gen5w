@@ -26,6 +26,7 @@ final class K5Radio {
         } catch (Exception e) { log.log("[radio] discovery failed: "+e.getClass().getSimpleName()); }
         launch=found;
         listenMetadata();
+        listenSxmCatalog();
         log.log("[radio] stock radio launch available="+(launch!=null)+"; FM tuner subject to runtime service and firmware checks");
     }
     static final String METADATA_ACTION = "ioniq6.cpclimate.RADIO_METADATA";
@@ -334,6 +335,33 @@ final class K5Radio {
         } catch (Throwable t) { log.log("[radio-sxm] catalog request unavailable: " + t.getClass().getSimpleName()); }
     }
 
+    private volatile SxmSnapshot fullSxm;
+    private static final class SxmSnapshot {
+        final long generation;
+        final int[] ids;
+        final String[] names, titles, artists;
+        SxmSnapshot(long generation, int[] ids, String[] names, String[] titles, String[] artists) {
+            this.generation = generation; this.ids = ids; this.names = names; this.titles = titles; this.artists = artists;
+        }
+    }
+    private void listenSxmCatalog() {
+        try {
+            context.registerReceiver(new android.content.BroadcastReceiver() {
+                @Override public void onReceive(Context c, Intent i) {
+                    if (!enabled() || !CpClimate.sessionActive || !VehicleState.sxmSchemaTest) return;
+                    long age = android.os.SystemClock.elapsedRealtime() - i.getLongExtra("received", -1);
+                    if (age < 0 || age > 2000) return;
+                    int[] ids = i.getIntArrayExtra("ids");
+                    String[] names = i.getStringArrayExtra("names"), titles = i.getStringArrayExtra("titles"), artists = i.getStringArrayExtra("artists");
+                    if (ids == null || ids.length > 512 || names == null || titles == null || artists == null
+                            || names.length != ids.length || titles.length != ids.length || artists.length != ids.length) return;
+                    fullSxm = new SxmSnapshot(CpClimate.sessionGeneration, ids, names, titles, artists);
+                    log.log("[radio-sxm] full OEM catalog received count=" + ids.length);
+                }
+            }, new android.content.IntentFilter(SxmCatalogBridge.ACTION), "android.permission.DEVICE_POWER", main);
+        } catch (Throwable t) { log.log("[radio-sxm] catalog receiver unavailable: " + t.getClass().getSimpleName()); }
+    }
+    private SxmSnapshot appliedSxm;
     private long sxmDiscoveryGeneration = -1;
     private int sxmCatalogChannel = -1;
     private final java.util.Map<Integer,String[]> sxmMetadata = new java.util.HashMap<Integer,String[]>();
@@ -347,7 +375,10 @@ final class K5Radio {
     private void refreshSxmCatalog(java.util.Map<Long,Object> values, int channelId) throws Exception {
         long now = android.os.SystemClock.elapsedRealtime();
         long generation = CpClimate.sessionGeneration;
-        if (generation != sxmKnownGeneration || channelId != sxmCatalogChannel || now - sxmCatalogPoll >= 10000) {
+        SxmSnapshot snapshot = fullSxm;
+        if (snapshot != null && snapshot.generation != generation) snapshot = null;
+        if (generation != sxmKnownGeneration || snapshot != appliedSxm || channelId != sxmCatalogChannel || now - sxmCatalogPoll >= 10000) {
+            appliedSxm = snapshot;
             sxmCatalogChannel = channelId;
             sxmMetadata.clear();
             sxmCatalogPoll = now;
@@ -402,6 +433,25 @@ final class K5Radio {
                 item.put("mediaItemCategory", 0L);
                 items.add(item);
             }
+            if (snapshot != null) {
+                // Favor fresh per-channel favorites metadata over the older full catalog.
+                for (int i = 0; i < snapshot.ids.length; i++) {
+                    int channel = snapshot.ids[i];
+                    if (channel < 0 || known.contains(channel)) continue;
+                    if (!sxmUnlocked(sxmTuner, channel)) continue;
+                    known.add(channel);
+                    String name = snapshot.names[i];
+                    if (name == null || name.isEmpty()) name = "SiriusXM";
+                    java.util.Map<String,Object> item = new java.util.LinkedHashMap<String,Object>();
+                    item.put("identifier", Integer.toString(channel));
+                    item.put("mediaItemName", name);
+                    item.put("mediaItemShortName", name);
+                    item.put("mediaItemCategory", 0L);
+                    items.add(item);
+                    // Full catalog is a name snapshot, not authoritative live track metadata.
+                    if (!sxmMetadata.containsKey(channel)) sxmMetadata.put(channel, new String[]{name, "", ""});
+                }
+            }
             sxmItems = items;
             sxmKnownIds = java.util.Collections.unmodifiableSet(known);
             sxmKnownGeneration = generation;
@@ -427,6 +477,11 @@ final class K5Radio {
             return n == (expected ? 1 : 0);
         }
         return false;
+    }
+
+    private int readIntWithChannel(Object tuner, String name, int channel) throws Exception {
+        java.lang.reflect.Method m = Class.forName(SXM_IFACE).getMethod(name, int.class);
+        return tuner != null && m.getReturnType() == int.class ? ((Integer)m.invoke(tuner, channel)).intValue() : -1;
     }
 
     private boolean sxmUnlocked(Object tuner, int channel) {
@@ -484,7 +539,9 @@ final class K5Radio {
                     if (tuner == null || readInt(audio, CarAudio.IFACE, "getAudioMode") != 4
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 41) return;
                     java.lang.reflect.Method tune = Class.forName(SXM_IFACE).getMethod("tuneDirect", int.class, boolean.class);
-                    if (!sxmUnlocked(tuner, channel) || tune.getReturnType() != int.class || !probeActive(generation)
+                    if (readIntWithChannel(tuner, "isChannelSubscribed", channel) != 1
+                            || readIntWithChannel(tuner, "isChannelSkipped", channel) != 0
+                            || !sxmUnlocked(tuner, channel) || tune.getReturnType() != int.class || !probeActive(generation)
                             || request != tuneRequest.get()) return;
                     Object result = tune.invoke(tuner, channel, false);
                     log.log("[radio-sxm] native tune ID=" + channel + " result=" + result + "; awaiting channel feedback");
