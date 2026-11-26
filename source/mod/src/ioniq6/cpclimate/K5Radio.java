@@ -220,7 +220,7 @@ final class K5Radio {
         if (!enabled() || !CpClimate.sessionActive) {
             fmActive = false; sxmActive = false; sxmAvailable = false;
             stationName = null; stationArtwork = null; clearTags(); lastFmFrequency = -1;
-            sxmArt = null; currentSxmChannel = -1; fullSxm = null; sxmLive=null;
+            sxmArt = null; currentSxmChannel = -1; fullSxm = null; sxmLive.clear();
             sxmKnownGeneration = -1; sxmKnownIds = java.util.Collections.emptySet();
             lastListPoll = 0; fmItems = java.util.Collections.emptyList();
             fmTuner=null; fmAudio=null; sxmTuner=null; lastServiceHealth="";
@@ -305,7 +305,7 @@ final class K5Radio {
         } catch (Throwable t) {
             fmActive=false; sxmActive=false; sxmAvailable=false; fmAudio=null;
             stationName=null; stationArtwork=null; clearTags(); lastFmFrequency=-1;
-            currentSxmChannel=-1; sxmArt=null;
+            currentSxmChannel=-1; sxmArt=null; sxmLive.clear();
             activationLog(activationTrace.sample(CpClimate.sessionGeneration,tuneRequest.get(),-1,-1,android.os.SystemClock.elapsedRealtime()));
             serviceHealth("audio sample unavailable: "+t.getClass().getSimpleName());
         }
@@ -328,8 +328,12 @@ final class K5Radio {
                 try { refreshSxmCatalog(values, channel); }
                 catch (Throwable t) { log.log("[radio-sxm] catalog unavailable: " + t.getClass().getSimpleName()); }
             }
-            if (!sxmAvailable || !sxmActive) { currentSxmChannel = -1; sxmArt = null; sxmLive=null; return; }
-            if (currentSxmChannel != channel) { sxmArt = null; currentSxmChannel = channel; }
+            if (!sxmAvailable || !sxmActive) { currentSxmChannel = -1; sxmArt = null; sxmLive.clear(); return; }
+            if (currentSxmChannel != channel) {
+                sxmArt = null;
+                sxmLive.channelChanged(CpClimate.sessionGeneration,channel);
+                currentSxmChannel = channel;
+            }
             if (sxmArt != null && sxmArt.generation != CpClimate.sessionGeneration) sxmArt = null;
             SxmArt art = sxmArt;
             if (art != null && art.channel == channel && art.generation == CpClimate.sessionGeneration)
@@ -341,12 +345,12 @@ final class K5Radio {
             // A channel ID is not necessarily its displayed channel number.
             // Publish text only when the OEM channel record matches exactly.
             refreshSxmFavoriteMetadata(values, channel);
-            SxmLiveMetadata live=sxmLive;
+            SxmLiveMetadata live=sxmLive.current(CpClimate.sessionGeneration,channel);
             if(live!=null&&live.matches(CpClimate.sessionGeneration,channel)){
                 values.put(4355L,live.title.isEmpty()?(live.name.isEmpty()?"SiriusXM":live.name):live.title);
                 values.put(4356L,live.artist);
             }
-        } catch (Throwable t) { sxmTuner=null; sxmAvailable=false; currentSxmChannel=-1; sxmArt=null; values.put(4131L,true); }
+        } catch (Throwable t) { sxmTuner=null; sxmAvailable=false; currentSxmChannel=-1; sxmArt=null; sxmLive.clear(); values.put(4131L,true); }
     }
 
     private final SxmCatalogRequest sxmCatalogRequest = new SxmCatalogRequest();
@@ -371,7 +375,7 @@ final class K5Radio {
     }
 
     private volatile SxmSnapshot fullSxm;
-    private volatile SxmLiveMetadata sxmLive;
+    private final SxmMetadataState sxmLive=new SxmMetadataState();
     private volatile SxmArt sxmArt;
     private volatile int currentSxmChannel = -1;
     private static final class SxmArt {
@@ -400,7 +404,7 @@ final class K5Radio {
                     if(i.hasExtra("liveChannel")){
                         int id=i.getIntExtra("liveChannel",-1);
                         if(sxmActive&&id>=0){
-                            sxmLive=new SxmLiveMetadata(CpClimate.sessionGeneration,id,i.getStringExtra("liveName"),i.getStringExtra("liveTitle"),i.getStringExtra("liveArtist"));
+                            sxmLive.receive(new SxmLiveMetadata(CpClimate.sessionGeneration,id,i.getStringExtra("liveName"),i.getStringExtra("liveTitle"),i.getStringExtra("liveArtist")));
                         }
                         return;
                     }
