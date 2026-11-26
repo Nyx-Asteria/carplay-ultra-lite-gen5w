@@ -89,6 +89,17 @@ final class VolumePanel {
             ClassLoader cl = (ClassLoader) Points.get(null, "framework.hkmc_loader.class_loader", loader);
             if (cl == null) return;
             installLiveMetadata(m, cl, context, handler);
+            // Passive SPS tracing: independently resolve each candidate on this firmware.
+            // Raw arguments are evidence, not an assumed Apple multicast mapping.
+            final String radio = "com.hkmc.micom.RadioService";
+            traceMethod(m, cl, radio, "onHDRadioSPSStatusChanged", int.class, int.class);
+            traceMethod(m, cl, radio, "spsChannelDirect", int.class);
+            traceMethod(m, cl, radio, "spsChannelUp");
+            traceMethod(m, cl, radio, "spsChannelDown");
+            traceMethod(m, cl, radio, "directLastSPSTune", int.class, int.class, boolean.class);
+            traceMethod(m, cl, radio, "requestHdOnOffWithSpsChannel", boolean.class, boolean.class, int.class);
+            traceMethod(m, cl, radio, "directTune", int.class, boolean.class, int.class, int.class);
+            traceMethod(m, cl, radio, "clearLastSPSOnTune");
             traceMethod(m, cl, "com.hkmc.micom.RadioService", "onHDRadioID3TagChanged",
                     int.class, int.class, String.class);
             traceMethod(m, cl, "com.hkmc.micom.RadioService", "onHDRadioSISNameReceived",
@@ -198,7 +209,8 @@ final class VolumePanel {
                 @Override protected void afterHookedMethod(Param p) {
                     try {
                         if (!radioTrace(m)) return;
-                        StringBuilder line = new StringBuilder("[radio-meta] ").append(name);
+                        StringBuilder line = new StringBuilder("[radio-meta] ").append(name)
+                                .append(" elapsed=").append(android.os.SystemClock.elapsedRealtime());
                         for (Object value : p.args) {
                             line.append(' ');
                             if (value instanceof byte[]) line.append("bytes=").append(((byte[])value).length);
