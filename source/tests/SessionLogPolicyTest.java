@@ -22,6 +22,11 @@ public final class SessionLogPolicyTest {
         check(SessionLogPolicy.sanitize("session key: ABC").equals("[sensitive message withheld]"));
         check(SessionLogPolicy.sanitize("https://example.com/private").equals("[sensitive message withheld]"));
         check(SessionLogPolicy.sanitize("one\ntwo").equals("one two"));
+        check(SessionLogPolicy.sanitize("peer aa:bb:cc:dd:ee:ff").equals("peer [address withheld]"));
+        check(SessionLogPolicy.sanitize("peer 192.168.1.10:7000").equals("peer [address withheld]:7000"));
+        check(SessionLogPolicy.sanitize("peer [fe80::1234%wlan0]:7000").equals("peer [[address withheld]]:7000"));
+        check(SessionLogPolicy.sanitize("peer 2001:db8:0:1:2:3:4:5").equals("peer [address withheld]"));
+        check(SessionLogPolicy.sanitize("at 12:34:56").equals("at 12:34:56"));
         check(p.suppressed() == 3);
         p.reset();
         check(p.suppressed() == 0);
