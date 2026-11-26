@@ -26,6 +26,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Cache checksum-pinned video dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            source/mod/tools/video/libs
+            source/mod/tools/video/r8.jar
+          key: cpul-video-${{ runner.os }}-${{ hashFiles('source/mod/tools/video/fetch-libs.sh') }}
       - name: Compile and test without publishing
         run: |
           set -euo pipefail
