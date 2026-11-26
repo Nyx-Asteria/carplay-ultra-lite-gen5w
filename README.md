@@ -6,7 +6,7 @@
 
 An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by HMG-API.
 
-[![Development](https://img.shields.io/badge/development-RC8_preparation-f59e0b?style=flat-square)](#development)
+[![Development](https://img.shields.io/badge/development-RC8_testing-f59e0b?style=flat-square)](#development)
 [![HMG-API](https://img.shields.io/badge/HMG--API-1.1.0--rc.8%2B-2563eb?style=flat-square)](https://github.com/Open-HMG/HMG-API)
 [![Platform](https://img.shields.io/badge/platform-K5_Gen5W__M-64748b?style=flat-square)](#compatibility)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-22c55e?style=flat-square)](LICENSE)
@@ -19,7 +19,7 @@ An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by 
 
 An independent K5 port of [SafariForest's CarPlay Ultra-Lite](https://github.com/SafariForest/carplay-ultra-lite-gen5w). Native vehicle controls, Ultra-style appearance and parked video are integrated into CarPlay without adding EV routing or changing the physical instrument cluster.
 
-> **RC8 in preparation — not published.** RC7 remains the available testing baseline. RC8 adds native radio, seat feedback experiments, navigation integration and targeted diagnostics. See the [RC8 changelog and vehicle test guide](docs/rc8-testing.md), [RC7 guide](docs/rc7-testing.md) and [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases).
+> **RC8 vehicle testing build.** Check Releases for the signed bundle; retain RC7 for rollback. RC8 adds native radio, seat feedback experiments, navigation integration and targeted diagnostics. See the [RC8 changelog and vehicle test guide](docs/rc8-testing.md), [RC7 guide](docs/rc7-testing.md) and [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases).
 
 ## Features
 
@@ -84,7 +84,7 @@ Exact firmware fingerprints gate activation. Other cars and firmware are unsuppo
 
 Download a published package from [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases). Preserve a rollback copy of working wireless projection and back up settings first.
 
-The planned RC8 bundle includes:
+The RC8 bundle includes:
 
 | Package | Role |
 | --- | --- |
@@ -123,7 +123,7 @@ UI Synchronization requires Ultra Sidebars and CarPlay Ultra. The wallpaper expe
 | RC4–RC6 | Earlier vehicle testing releases |
 | RC7 | Consolidated settings, seat feedback, radio diagnostics, theme negotiation, parked video diagnostics, stable PPS |
 | Remaining vehicle validation | Seat cycling, radio controls and metadata, themes, standard CarPlay fallback, first video frame |
-| RC8 | Prepared: radio, climate feedback, theme diagnostics, companion TBT and incremental collector |
+| RC8 | Testing: radio, climate feedback, theme diagnostics, companion TBT and incremental collector |
 | Future | HD multicast control, confirmed SXM/Bose support, theme selector, standalone AirPlay and YouTube discovery |
 
 [Development regression](.github/workflows/development-regression.yml) compiles the main module and video engine and runs climate, Park, volume policy and UI synchronization checks without publishing. [Release bundle](.github/workflows/release-bundle.yml) builds seven packages and verifies author signatures before publishing a non-draft release marked Latest. The release is a testing build despite its publication status.

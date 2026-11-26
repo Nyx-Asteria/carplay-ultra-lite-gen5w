@@ -1,6 +1,6 @@
-# CarPlay Ultra-Lite K5 1.0.0-rc.8 — prepared testing release
+# CarPlay Ultra-Lite K5 1.0.0-rc.8 — vehicle testing release
 
-**Development preparation only.** Target DL322 USA 260507, Gen5W_M, Android 4.4.2/API 19, HMG-API >=1.1.0-rc.8. RC7 remains the published baseline until the release is explicitly authorized. Host regression passed on 18101ed; subsequent packaging changes require the signed workflow. Perform interaction while parked; use a passenger for any road navigation observations.
+**Experimental vehicle testing build.** Target DL322 USA 260507, Gen5W_M, Android 4.4.2/API 19, HMG-API >=1.1.0-rc.8. Retain RC7 as the rollback baseline. Install RC8 only once the signed bundle is published. Host regression passed on 18101ed; subsequent packaging changes require the signed workflow. Perform interaction while parked; use a passenger for any road navigation observations.
 
 ## Full changelog since RC7
 
@@ -28,7 +28,7 @@
 ### Companion bundle
 - WCP 2.2.1-rc.4 (23c1983): retain working wireless projection, shared identity and Now Playing; documentation/rollback updates. STBT 1.0.0-rc.1 (2533e82): lifecycle/subscription recovery, parser improvements and opt-in Waze recovery; no claim Waze works.
 - PPS 1.0.0 (150962a), Comfort 1.1.8-cpul.rc.1 (2724ac5), firmware dumper RC4 development (f786403), CPUL Check. Dumper retains incremental navigation/iAP2 targets and adds opt-in CPUL log export.
-- Seven packages, common permanent signing key, signature verification and checksums; normal non-draft release marked Latest when authorized. No signed RC8 bundle exists yet.
+- Seven packages, common permanent signing key, signature verification and checksums; normal non-draft release marked Latest after successful signed packaging.
 
 ## Install, settings and rollback
 Keep RC7 and known-good companion ZIPs and record saved settings. Verify author identity and checksum; old test-key packages may require removal/apply before replacement. Keep known-good HMG-API and wireless Wi-Fi configuration. Remove original Phone Projection TBT before installing the renamed fork. Disable WCP cluster/HUD TBT, apply/restart; leave wireless bridge, audio, shared identity and Now Playing on. Never run two navigation publishers. Start with CPUL integration, Ultra and Sidebars on; UI Sync, forced wallpaper, SXM, immediate seat feedback and parked video off. STBT Waze experiment off. Start PPS at 100%. Do not change unrelated settings during a comparison. Restore baseline on failure; if necessary remove experimental packages and reinstall known-good signed packages.

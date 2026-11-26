@@ -1,6 +1,6 @@
 # Changelog
 
-## K5 1.0.0-rc.8 (prepared; not released)
+## K5 1.0.0-rc.8 (vehicle testing)
 
 ### Radio and audio
 - Native IRadioService FM seek replaces injected keys; retain source/session checks. Route volume to confirmed FM/SXM audio streams.
@@ -26,7 +26,7 @@
 ### Companion bundle
 - WCP 2.2.1-rc.4 (23c1983): retain working wireless projection, shared identity and Now Playing; documentation/rollback updates. STBT 1.0.0-rc.1 (2533e82): lifecycle/subscription recovery, parser improvements and opt-in Waze recovery; no claim Waze works.
 - PPS 1.0.0 (150962a), Comfort 1.1.8-cpul.rc.1 (2724ac5), firmware dumper RC4 development (f786403), CPUL Check. Dumper retains incremental navigation/iAP2 targets and adds opt-in CPUL log export.
-- Seven packages, common permanent signing key, signature verification and checksums; normal non-draft release marked Latest when authorized. No signed RC8 bundle exists yet.
+- Seven packages, common permanent signing key, signature verification and checksums; normal non-draft release marked Latest after successful signed packaging.
 
 Full [RC8 test guide](docs/rc8-testing.md). Historical upstream Ioniq releases follow.
 
