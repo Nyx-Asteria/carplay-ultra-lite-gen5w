@@ -14,6 +14,7 @@ final class SessionLogging {
     private final SessionLogWriter writer;
     private final String metadata;
     private long generation=-1;
+    private final java.util.ArrayDeque<String> preSession=new java.util.ArrayDeque<String>();
 
     SessionLogging(ModContext mod, File files, String firmware) {
         this.mod=mod;
@@ -43,11 +44,18 @@ final class SessionLogging {
         if(generation>=0)finish("superseded by new session");
         policy.reset(); generation=id;
         if(writer!=null)writer.start(id,metadata);
+        while(!preSession.isEmpty())log(preSession.removeFirst());
     }
     synchronized void finish(String reason) {
         if(generation<0)return;
         if(writer!=null)writer.finish(generation,reason,policy.suppressed());
         generation=-1;
+    }
+    synchronized void projection(String message) {
+        if(generation<0) {
+            if(preSession.size()>=32)preSession.removeFirst();
+            preSession.addLast(message);
+        } else log(message);
     }
     synchronized void log(String message) {
         Category category=category(message);
@@ -61,6 +69,8 @@ final class SessionLogging {
         String s=message.toLowerCase(Locale.US);
         if(s.startsWith("[vs-packet]"))return Category.VS_RAW;
         if(s.startsWith("[projection-packet]"))return Category.PROJECTION_RAW;
+        if(s.startsWith("[projection-theme]"))return Category.THEMES;
+        if(s.startsWith("[projection-video]"))return Category.AIRPLAY;
         if(s.startsWith("[radio-sxm]"))return Category.SXM;
         if(s.startsWith("[radio"))return Category.RADIO;
         if(s.startsWith("[audio")||s.startsWith("[media"))return Category.AUDIO;
@@ -72,7 +82,7 @@ final class SessionLogging {
     static Level level(String message,Category category) {
         String s=message.toLowerCase(Locale.US);
         if(s.contains("failed")||s.contains("didn't authenticate")||s.contains("implausible package"))return Level.ERROR;
-        if(s.contains("timed out")||s.contains("timeout")||s.contains("unavailable")||s.contains("refused")||s.contains("queue full")||s.contains("listener stopped"))return Level.WARN;
+        if(s.contains("unsupported stream")||s.contains("timed out")||s.contains("timeout")||s.contains("unavailable")||s.contains("refused")||s.contains("queue full")||s.contains("listener stopped"))return Level.WARN;
         if(category==Category.VS_RAW||category==Category.PROJECTION_RAW||s.startsWith("sync phone:")||s.startsWith("sync car:"))return Level.TRACE;
         if(s.startsWith("vs phone follows")||s.startsWith("vs phone reads ")||s.startsWith("[seat-fan] subscribed")||
            s.startsWith("[radio-api]")||s.startsWith("[radio-sxm] catalog accessor")||s.startsWith("[radio-probe]")||s.startsWith("[video] message #")||
