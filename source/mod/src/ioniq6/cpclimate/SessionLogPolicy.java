@@ -1,0 +1,66 @@
+package ioniq6.cpclimate;
+
+import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.regex.Pattern;
+
+/** Host-testable policy. Never pass secret-bearing protocol bodies to this interface. */
+final class SessionLogPolicy {
+    enum Level { ERROR, WARN, INFO, DEBUG, TRACE }
+    enum Category { CORE, CLIMATE, RADIO, SXM, AUDIO, THEMES, AIRPLAY, VS_RAW, PROJECTION_RAW }
+    private static final int MAX_KEYS = 256;
+    private static final int MAX_MESSAGE = 2048;
+    private static final long WINDOW_MS = 10000;
+    private static final Pattern SECRET = Pattern.compile("(?i)(authorization|cookie|password|passwd|secret|token|psk|session[ _-]?key|pairing[ _-]?(?:id|identifier)|device[ _-]?(?:id|identifier)|serial[ _-]?number|private[ _-]?key|https?://|mac[ _-]?address|bluetooth[ _-]?address)");
+    private final EnumSet<Category> diagnostics;
+    private final LinkedHashMap<String, Long> seen = new LinkedHashMap<String, Long>(32, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
+            return size() > MAX_KEYS;
+        }
+    };
+    private long suppressed;
+
+    SessionLogPolicy(EnumSet<Category> diagnostics) {
+        this.diagnostics = diagnostics.clone();
+    }
+
+    boolean enabled(Level level, Category category) {
+        if (level == Level.ERROR || level == Level.WARN) return true;
+        if (category == Category.VS_RAW || category == Category.PROJECTION_RAW)
+            return diagnostics.contains(category);
+        return level == Level.INFO || diagnostics.contains(category);
+    }
+
+    /** Conservative whole-message withholding instead of attempting to parse arbitrary credentials. */
+    static String sanitize(String message) {
+        if (message == null) return "[null]";
+        if (SECRET.matcher(message).find()) return "[sensitive message withheld]";
+        String safe = message.replace('\r', ' ').replace('\n', ' ').replace('\t', ' ');
+        return safe.length() > MAX_MESSAGE ? safe.substring(0, MAX_MESSAGE) + " [truncated]" : safe;
+    }
+
+    /** Metadata only: do not decode, stringify or persist packet bodies. */
+    static String packet(String lane, int kind, int type, int bytes) {
+        return lane + " kind=" + kind + " type=" + type + " bytes=" + bytes;
+    }
+
+    synchronized String accept(Level level, Category category, String message, long elapsedMs) {
+        if (!enabled(level, category)) { suppressed++; return null; }
+        String safe = sanitize(message);
+        // Errors and warnings always survive repetition filtering.
+        if (level != Level.ERROR && level != Level.WARN) {
+            String key = level.name() + '/' + category.name() + '/' + safe;
+            Long last = seen.get(key);
+            if (last != null && elapsedMs >= last && elapsedMs - last < WINDOW_MS) {
+                suppressed++;
+                return null;
+            }
+            seen.put(key, elapsedMs);
+        }
+        return safe;
+    }
+
+    synchronized long suppressed() { return suppressed; }
+    synchronized void reset() { seen.clear(); suppressed = 0; }
+}
