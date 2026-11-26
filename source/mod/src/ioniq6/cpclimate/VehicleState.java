@@ -76,6 +76,7 @@ final class VehicleState {
     private final OpackCodec.Raw accessories;
     static volatile VehiclePage vehiclePage;
     static volatile boolean climateEnabled = true;
+    static volatile boolean seatFanImmediateFeedback;
     interface Controls { void pressed(String name, Object value); }
     static volatile Controls mediaControls;
 
@@ -1050,7 +1051,7 @@ final class VehicleState {
             results.put(iid, WRITTEN);
             // LIVI hides a notification history entry here; M3 keeps no history, so nothing to hide
             Object before = values.put(iid, v);
-            if (!(car != null && seatFanValue(iid)) && !same(before, v) && followed.contains(iid)) changed.put(iid, v);
+            if (!(car != null && seatFanValue(iid) && !seatFanImmediateFeedback) && !same(before, v) && followed.contains(iid)) changed.put(iid, v);
         }
         VehiclePage page = vehiclePage;
         if (page != null) {

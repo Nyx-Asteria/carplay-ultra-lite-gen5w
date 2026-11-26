@@ -10,6 +10,14 @@
       "apply": "restart"
     },
     {
+      "key": "seat_fan_immediate_feedback",
+      "type": "toggle",
+      "default": false,
+      "title": "Seat Ventilation Immediate Feedback (Experimental)",
+      "description": "Echo requested ventilation characteristics immediately, then reconcile with confirmed vehicle feedback. Off waits for BCM confirmation. Requires K5 Vehicle Integration.",
+      "apply": "restart"
+    },
+    {
       "key": "ultra_theme",
       "type": "toggle",
       "default": true,

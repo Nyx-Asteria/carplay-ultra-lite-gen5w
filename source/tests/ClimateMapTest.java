@@ -425,6 +425,15 @@ public class ClimateMapTest {
             Map<Long,Object> actual = new java.util.LinkedHashMap<Long,Object>();
             actual.put(pair[0], 0L); actual.put(pair[1], false);
             fs.fromCar(actual);
+            Map<Long,Object> partial = new java.util.LinkedHashMap<Long,Object>();
+            partial.put(pair[0], 3L);
+            check("SeatFan partial feedback withheld " + pair[0], fs.fromCar(partial).isEmpty());
+            partial.put(pair[1], "true");
+            check("SeatFan ill-typed feedback withheld " + pair[0], fs.fromCar(partial).isEmpty());
+            partial.put(pair[0], 4L); partial.put(pair[1], true);
+            check("SeatFan out-of-range feedback withheld " + pair[0], fs.fromCar(partial).isEmpty());
+            check("SeatFan malformed feedback cannot overwrite cached level " + pair[0],
+                    Long.valueOf(0).equals(fs.values.get(pair[0])));
             for (long level : new long[]{3,2,1,0}) {
                 List<VehicleState.Out> pending = fs.handle(VehicleState.HIGH,
                         VehicleState.wrap(VehicleState.dict("command", "writeRequest", "transactionID", 11L,
@@ -464,6 +473,21 @@ public class ClimateMapTest {
                         Long.valueOf(0).equals(rv.get(pair[0])) && Boolean.FALSE.equals(rv.get(pair[1])));
             }
         }
+        VehicleState.seatFanImmediateFeedback = true;
+        VehicleState es = new VehicleState(new VsChannel.Log() { public void log(String m) {} });
+        es.car = new VehicleState.Car() { public void phoneWrote(Map<Long,Object> w, Map<Long,Object> state) {} };
+        long fl = ClimateMap.DRIVER_VENT_LEVEL, fo = ClimateMap.DRIVER_VENT_ON;
+        es.handle(VehicleState.HIGH, VehicleState.wrap(VehicleState.dict("command","registerRequest",
+                "transactionID",20L,"values",java.util.Arrays.asList(fl,fo))));
+        Map<Long,Object> feedback = new java.util.LinkedHashMap<Long,Object>();
+        feedback.put(fl,0L); feedback.put(fo,false); es.fromCar(feedback);
+        List<VehicleState.Out> immediate = es.handle(VehicleState.HIGH, VehicleState.wrap(VehicleState.dict(
+                "command","writeRequest","transactionID",21L,"values",VehicleState.dict(fl,3L,fo,true))));
+        check("experimental SeatFan immediate echo", immediate.size()==2);
+        check("experimental SeatFan stale feedback held", es.fromCar(feedback).isEmpty());
+        feedback.put(fl,3L); feedback.put(fo,true);
+        check("experimental SeatFan still sends confirmed feedback", es.fromCar(feedback).size()==1);
+        VehicleState.seatFanImmediateFeedback = false;
         System.out.println(fails == 0 ? "ALL OK" : fails + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }
