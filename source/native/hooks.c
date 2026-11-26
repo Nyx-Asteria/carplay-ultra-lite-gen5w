@@ -1037,6 +1037,18 @@ static void video_sender_start(void *session);   /* below, with the video stage 
 
 __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stream, CF reply, long type) {
     if (!stream || !reply) return 0;
+    /* LIVI distinguishes screen receivers by type, not by rewriting UUIDs
+     * in SETUP. Observe any optional display identifiers without changing
+     * the native receiver's main-screen routing. */
+    if (ui_sync_mode() && (type == STREAM_MAIN_SCREEN || type == STREAM_ALT_SCREEN)) {
+        CF u = get(stream, &K_uuid), d = get(stream, &K_displayUUID);
+        const char *us = is(u, T_CFStringGetTypeID)
+            ? FN(T_CFStringGetCStringPtr, const char *(*)(CF, unsigned))(u, UTF8) : 0;
+        const char *ds = is(d, T_CFStringGetTypeID)
+            ? FN(T_CFStringGetCStringPtr, const char *(*)(CF, unsigned))(d, UTF8) : 0;
+        LOG("cp-climate: theme screen SETUP type %d uuid=%s displayUUID=%s\n",
+            (int)type, us ? us : "(absent/unavailable)", ds ? ds : "(absent/unavailable)");
+    }
     if (type == STREAM_ALT_SCREEN) return ultra_mode() ? alt_stream(reply) : 0;
     if (type != STREAM_DATA) {
         if (ui_sync_mode()) LOG("cp-climate: theme stream audit: native path type %d\n", (int)type);
