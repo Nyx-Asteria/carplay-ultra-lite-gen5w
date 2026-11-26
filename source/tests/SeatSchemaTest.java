@@ -23,6 +23,15 @@ public final class SeatSchemaTest {
         update.put(1042L,3L);update.put(1043L,true);
         String trace=VehicleState.seatNotificationDiagnostic(update);
         check(trace.contains("1042:Long=3")&&trace.contains("1043:Boolean=true"));
+        boolean oldHeat=VehicleState.seatHeatImmediateFeedback, oldFan=VehicleState.seatFanImmediateFeedback;
+        try {
+            VehicleState.seatHeatImmediateFeedback=true; VehicleState.seatFanImmediateFeedback=false;
+            check(VehicleState.immediateSeatFeedback(ClimateMap.DRIVER_SEAT_LEVEL));
+            check(!VehicleState.immediateSeatFeedback(ClimateMap.DRIVER_VENT_LEVEL));
+            VehicleState.seatHeatImmediateFeedback=false; VehicleState.seatFanImmediateFeedback=true;
+            check(!VehicleState.immediateSeatFeedback(ClimateMap.PASSENGER_SEAT_ON));
+            check(VehicleState.immediateSeatFeedback(ClimateMap.PASSENGER_VENT_ON));
+        } finally {VehicleState.seatHeatImmediateFeedback=oldHeat;VehicleState.seatFanImmediateFeedback=oldFan;}
         System.out.println("SeatSchemaTest passed");
     }
 }
