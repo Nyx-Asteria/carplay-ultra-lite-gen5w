@@ -15,6 +15,10 @@ final class SessionLogWriter {
     static final int MAX_QUEUE = 2048;
     private static final long ERROR_RESERVE = 512 * 1024;
     private final File root;
+    private final SessionUsbExport exporter;
+    private long nextExport;
+    private volatile String exportFailure;
+    String exportFailure() { return exportFailure; }
     private final ArrayBlockingQueue<Event> queue = new ArrayBlockingQueue<Event>(MAX_QUEUE);
     private final AtomicLong lost = new AtomicLong();
     private final Thread worker;
@@ -34,8 +38,10 @@ final class SessionLogWriter {
             this.kind=kind; this.time=time; this.generation=generation; this.text=text; this.important=important;
         }
     }
-    SessionLogWriter(File root) {
+    SessionLogWriter(File root) { this(root,null); }
+    SessionLogWriter(File root, SessionUsbExport exporter) {
         this.root=root;
+        this.exporter=exporter;
         worker=new Thread(new Runnable(){ public void run(){ loop(); } }, "cpul-session-log");
         worker.setDaemon(true);
         worker.start();
@@ -81,6 +87,7 @@ final class SessionLogWriter {
         try {
             ensureDir(root);
             recover(root);
+            tryExport();
             prune();
             while(!closed || !queue.isEmpty()) {
                 Event e=queue.poll(250,TimeUnit.MILLISECONDS);
@@ -98,6 +105,7 @@ final class SessionLogWriter {
                     }
                 }
                 long now=androidIndependentMonotonic();
+                if(directory==null && queue.isEmpty() && now>=nextExport) tryExport();
                 if(now-last>=5000) {
                     try { sync(); } catch(IOException ex){ failure=ex.toString(); abandon(); }
                     last=now;
@@ -145,7 +153,14 @@ final class SessionLogWriter {
         } finally { out.close(); }
         if(!folder.renameTo(new File(root,currentId))) throw new IOException("session finalization rename failed");
         directory=null;
+        tryExport();
         prune();
+    }
+    private void tryExport() {
+        if(exporter==null) return;
+        nextExport=androidIndependentMonotonic()+15000;
+        try { exporter.pending(root); exportFailure=null; }
+        catch(Exception e) { exportFailure=e.getClass().getSimpleName(); }
     }
     private void abandon() {
         try { if(normal!=null) normal.close(); } catch(IOException ignored){}
@@ -175,8 +190,8 @@ final class SessionLogWriter {
         if(files==null) return;
         List<File> sessions=new ArrayList<File>();
         long size=0;
-        for(File f:files) if(f.isDirectory() && !f.getName().endsWith(".open")) { sessions.add(f); size+=size(f); }
-        Collections.sort(sessions,new Comparator<File>(){public int compare(File a,File b){return a.getName().compareTo(b.getName());}});
+        for(File f:files) if(f.isDirectory() && SessionUsbExport.sessionName(f.getName())) { sessions.add(f); size+=size(f); }
+        Collections.sort(sessions,new Comparator<File>(){public int compare(File a,File b){boolean ae=new File(a,".exported").isFile(), be=new File(b,".exported").isFile(); if(ae!=be)return ae?-1:1; return a.getName().compareTo(b.getName());}});
         // Reserve one full session while a writer may be active.
         while(sessions.size()>=MAX_SESSIONS || size>MAX_TOTAL-MAX_SESSION) {
             File f=sessions.remove(0); long n=size(f); delete(f); size-=n;
