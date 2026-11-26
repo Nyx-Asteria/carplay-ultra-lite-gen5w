@@ -54,6 +54,41 @@ final class SxmCatalogBridge {
                 }
             });
             m.log("[radio-sxm] decoded catalog observer installed");
+            final android.os.HandlerThread worker = new android.os.HandlerThread("cpul-sxm-art");
+            worker.start();
+            final android.os.Handler handler = new android.os.Handler(worker.getLooper());
+            Hooks.findAndHookMethod(listener, "onChannelArtReceived", int.class, int.class, int.class, String.class, new MethodHook() {
+                @Override protected void afterHookedMethod(Param p) {
+                    if (!m.enabled() || !m.settingBoolean("k5_integration", true) || !m.settingBoolean("sxm_schema_test", false)) return;
+                    final int channelId = ((Number)p.args[0]).intValue();
+                    final String filename = p.args[3] instanceof String ? (String)p.args[3] : "";
+                    final long received = android.os.SystemClock.elapsedRealtime();
+                    if (channelId < 0 || filename.isEmpty() || filename.length() > 512) return;
+                    handler.post(new Runnable() { public void run() {
+                        try {
+                            java.io.File root = new java.io.File("/data/data/com.hkmc.media.sxm65h/sms_hb/channelart").getCanonicalFile();
+                            java.io.File file = new java.io.File(filename);
+                            if (!file.isAbsolute()) file = new java.io.File(root, filename);
+                            file = file.getCanonicalFile();
+                            if (!root.equals(file.getParentFile()) || !file.isFile() || file.length() > 131072 || file.length() < 8) return;
+                            java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+                            java.io.InputStream in = new java.io.FileInputStream(file);
+                            try {
+                                byte[] buffer = new byte[4096]; int n;
+                                while ((n = in.read(buffer)) != -1) {
+                                    if (bytes.size() + n > 131072) return;
+                                    bytes.write(buffer, 0, n);
+                                }
+                            } finally { in.close(); }
+                            byte[] image = bytes.toByteArray();
+                            if (!K5Radio.supportedArtwork(image) || android.os.SystemClock.elapsedRealtime() - received > 2000) return;
+                            context.sendBroadcast(new Intent(ACTION).setPackage(CpClimate.DIPO)
+                                    .putExtra("received", received).putExtra("artChannel", channelId)
+                                    .putExtra("artwork", image), "android.permission.DEVICE_POWER");
+                        } catch (Throwable t) { m.log("[radio-sxm] artwork unavailable: " + t.getClass().getSimpleName()); }
+                    }});
+                }
+            });
         } catch (Throwable t) { m.log("[radio-sxm] catalog observer unavailable: " + t.getClass().getSimpleName()); }
     }
     private static Field field(Class<?> c, String name) throws Exception {

@@ -301,7 +301,11 @@ final class K5Radio {
                 try { refreshSxmCatalog(values, channel); }
                 catch (Throwable t) { log.log("[radio-sxm] catalog unavailable: " + t.getClass().getSimpleName()); }
             }
-            if (!sxmAvailable || !sxmActive) { return; }
+            if (!sxmAvailable || !sxmActive) { currentSxmChannel = -1; sxmArt = null; return; }
+            if (currentSxmChannel != channel) { sxmArt = null; currentSxmChannel = channel; }
+            SxmArt art = sxmArt;
+            if (art != null && art.channel == channel && art.generation == CpClimate.sessionGeneration)
+                values.put(4358L, art.bytes);
             values.put(4133L, Integer.toString(channel));
             values.put(4354L, "SXM");
             values.put(4355L, "SiriusXM");
@@ -336,6 +340,16 @@ final class K5Radio {
     }
 
     private volatile SxmSnapshot fullSxm;
+    private volatile SxmArt sxmArt;
+    private volatile int currentSxmChannel = -1;
+    private static final class SxmArt {
+        final int channel;
+        final long generation;
+        final byte[] bytes;
+        SxmArt(int channel, long generation, byte[] bytes) {
+            this.channel = channel; this.generation = generation; this.bytes = bytes;
+        }
+    }
     private static final class SxmSnapshot {
         final long generation;
         final int[] ids;
@@ -351,6 +365,13 @@ final class K5Radio {
                     if (!enabled() || !CpClimate.sessionActive || !VehicleState.sxmSchemaTest) return;
                     long age = android.os.SystemClock.elapsedRealtime() - i.getLongExtra("received", -1);
                     if (age < 0 || age > 2000) return;
+                    if (i.hasExtra("artChannel")) {
+                        int id = i.getIntExtra("artChannel", -1);
+                        byte[] bytes = i.getByteArrayExtra("artwork");
+                        if (sxmActive && id >= 0 && id == currentSxmChannel && supportedArtwork(bytes))
+                            sxmArt = new SxmArt(id, CpClimate.sessionGeneration, bytes);
+                        return;
+                    }
                     int[] ids = i.getIntArrayExtra("ids");
                     String[] names = i.getStringArrayExtra("names"), titles = i.getStringArrayExtra("titles"), artists = i.getStringArrayExtra("artists");
                     if (ids == null || ids.length > 512 || names == null || titles == null || artists == null
