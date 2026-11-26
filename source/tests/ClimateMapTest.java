@@ -488,6 +488,28 @@ public class ClimateMapTest {
         feedback.put(fl,3L); feedback.put(fo,true);
         check("experimental SeatFan still sends confirmed feedback", es.fromCar(feedback).size()==1);
         VehicleState.seatFanImmediateFeedback = false;
+        // Exercise the real wire handler and captured OEM command arbitration in both directions.
+        for (long[] ids4 : new long[][]{
+            {ClimateMap.DRIVER_SEAT_LEVEL,ClimateMap.DRIVER_SEAT_ON,ClimateMap.DRIVER_VENT_LEVEL,ClimateMap.DRIVER_VENT_ON},
+            {ClimateMap.PASSENGER_SEAT_LEVEL,ClimateMap.PASSENGER_SEAT_ON,ClimateMap.PASSENGER_VENT_LEVEL,ClimateMap.PASSENGER_VENT_ON}}) {
+            final List<ClimateMap.Command> dispatched=new java.util.ArrayList<ClimateMap.Command>();
+            VehicleState ts=new VehicleState(new VsChannel.Log(){public void log(String m){}});
+            ts.car=new VehicleState.Car(){public void phoneWrote(Map<Long,Object> w,Map<Long,Object> state){dispatched.addAll(ClimateMap.commands(w,state));}};
+            long hl=ids4[0],ho=ids4[1],vl=ids4[2],vo=ids4[3];
+            ts.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","registerRequest","transactionID",30L,"values",java.util.Arrays.asList(hl,ho,vl,vo))));
+            Map<Long,Object> bcm=new java.util.LinkedHashMap<Long,Object>();
+            bcm.put(hl,2L);bcm.put(ho,true);bcm.put(vl,0L);bcm.put(vo,false);ts.fromCar(bcm);
+            ts.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest","transactionID",31L,"values",VehicleState.dict(hl,0L,ho,false,vl,3L,vo,true))));
+            check("heat to ventilation dispatches one command "+hl,dispatched.size()==1&&dispatched.get(0).b==5);
+            check("pending ventilation does not overwrite published level "+vl,Long.valueOf(0).equals(ts.values.get(vl)));
+            bcm.put(hl,0L);bcm.put(ho,false);bcm.put(vl,3L);bcm.put(vo,true);ts.fromCar(bcm);
+            check("confirmed ventilation published "+vl,Long.valueOf(3).equals(ts.values.get(vl)));
+            dispatched.clear();
+            ts.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest","transactionID",32L,"values",VehicleState.dict(vl,0L,vo,false,hl,2L,ho,true))));
+            check("ventilation to heat dispatches one command "+hl,dispatched.size()==1&&dispatched.get(0).b==7);
+            bcm.put(hl,2L);bcm.put(ho,true);bcm.put(vl,0L);bcm.put(vo,false);ts.fromCar(bcm);
+            check("confirmed heat and ventilation off "+hl,Long.valueOf(2).equals(ts.values.get(hl))&&Long.valueOf(0).equals(ts.values.get(vl)));
+        }
         System.out.println(fails == 0 ? "ALL OK" : fails + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }
