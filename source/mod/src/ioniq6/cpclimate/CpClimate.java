@@ -152,6 +152,7 @@ public final class CpClimate extends ModEntry {
             m.log("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
             boolean uiSync = themedIds && m.settingBoolean("ultra_ui_sync", false);                               // the theme's layouts, palettes and wallpapers
             writeFlag(dir, "cpc-uisync", uiSync, "uiSync (CarPlay theme layouts and palettes)");
+            writeFlag(dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
             writeFeatures(dir, features ? "livi_all" : "off");
             writeFlag(dir, "cpc-xfeat", enhanced, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them

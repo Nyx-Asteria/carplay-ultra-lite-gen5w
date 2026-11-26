@@ -957,6 +957,24 @@ __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) 
         LOG("cp-climate: SETUP: the phone offers vehicleStateProtocol %d, altScreen %d, viewAreas %d, uiSync %d, iAPChannel %d (Ultra experiment %s, iAPChannel experiment %s, uiSync experiment %s)\n",
             found, alt, areas, sync, iap, ultra ? "on" : "off", iapx ? "on" : "off", syncx ? "on" : "off");
     if (!found) {
+        /* Opt-in narrow experiment: retain every stock feature and append only
+         * explicitly offered uiSync. Never advertise VSP when absent. */
+        if (CPC_FEATURES && syncx && sync && read_number(DIR "cpc-sync-independent") == 1) {
+            CF old = get(reply, &K_enabledFeatures);
+            if (old && !is(old, T_CFArrayGetTypeID)) return;
+            CF merged = new_array();
+            if (!merged) return;
+            int have = 0;
+            if (old) for (CFIndex i=0,n=count(old);i<n;i++) {
+                CF f=at(old,i);
+                append(merged,f);
+                have |= equal(f,&K_uiSync);
+            }
+            if (!have) append(merged,&K_uiSync);
+            put(reply,&K_enabledFeatures,merged);
+            LOG("cp-climate: SETUP independent uiSync enabled; stock features preserved, VSP not offered\n");
+            return;
+        }
         LOG("cp-climate: SETUP without vehicleStateProtocol from the phone: reply unchanged\n");
         return;
     }

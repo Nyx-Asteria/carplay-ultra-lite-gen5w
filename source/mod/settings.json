@@ -50,6 +50,14 @@
       "apply": "restart"
     },
     {
+      "key": "ultra_independent_sync",
+      "type": "toggle",
+      "default": false,
+      "title": "Independent UI Sync Negotiation (Experimental)",
+      "description": "Allows offered UI Sync even when vehicleStateProtocol is not offered, preserving the stock enabled features. Requires UI Synchronization and Ultra Sidebars. Off retains legacy negotiation.",
+      "apply": "restart"
+    },
+    {
       "key": "ultra_force_wallpaper",
       "type": "toggle",
       "default": false,
