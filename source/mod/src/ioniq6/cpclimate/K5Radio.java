@@ -296,10 +296,10 @@ final class K5Radio {
             values.put(4131L, !sxmAvailable);
             if (sxmAvailable) {
                 if (sxmActive) requestSxmCatalog();
-                try { refreshSxmCatalog(values); }
+                try { refreshSxmCatalog(values, channel); }
                 catch (Throwable t) { log.log("[radio-sxm] catalog unavailable: " + t.getClass().getSimpleName()); }
             }
-            if (!sxmAvailable || !sxmActive) { sxmMetadataChannel = -1; return; }
+            if (!sxmAvailable || !sxmActive) { return; }
             values.put(4133L, Integer.toString(channel));
             values.put(4354L, "SXM");
             values.put(4355L, "SiriusXM");
@@ -333,10 +333,8 @@ final class K5Radio {
         } catch (Throwable t) { log.log("[radio-sxm] catalog request unavailable: " + t.getClass().getSimpleName()); }
     }
 
-    private long sxmMetadataPoll;
-    private int sxmMetadataChannel = -1;
-    private long sxmMetadataGeneration = -1;
-    private String sxmTitle = "", sxmArtist = "", sxmName = "";
+    private int sxmCatalogChannel = -1;
+    private final java.util.Map<Integer,String[]> sxmMetadata = new java.util.HashMap<Integer,String[]>();
     private volatile java.util.Set<Integer> sxmKnownIds = java.util.Collections.emptySet();
     private volatile long sxmKnownGeneration = -1;
     private long sxmCatalogPoll;
@@ -344,10 +342,12 @@ final class K5Radio {
 
     // The verified Smart Favorites API supplies a bounded initial catalog.
     // IDs are opaque OEM identifiers, never synthesized from channel numbers.
-    private void refreshSxmCatalog(java.util.Map<Long,Object> values) throws Exception {
+    private void refreshSxmCatalog(java.util.Map<Long,Object> values, int channelId) throws Exception {
         long now = android.os.SystemClock.elapsedRealtime();
         long generation = CpClimate.sessionGeneration;
-        if (generation != sxmKnownGeneration || now - sxmCatalogPoll >= 10000) {
+        if (generation != sxmKnownGeneration || channelId != sxmCatalogChannel || now - sxmCatalogPoll >= 10000) {
+            sxmCatalogChannel = channelId;
+            sxmMetadata.clear();
             sxmCatalogPoll = now;
             sxmKnownGeneration = -1;
             sxmKnownIds = java.util.Collections.emptySet();
@@ -372,6 +372,7 @@ final class K5Radio {
                 Object raw = id.get(entry);
                 if (!(raw instanceof Number)) continue;
                 int channel = ((Number)raw).intValue();
+                if (channel >= 0) sxmMetadata.put(channel, new String[] {channelText(type, entry, "mChannelLongName"), channelText(type, entry, "mTitle"), channelText(type, entry, "mArtist")});
                 if (channel < 0 || !channelFlag(subscribed.get(entry), true)
                         || !channelFlag(skipped.get(entry), false) || known.contains(channel)) continue;
                 // The DL322 binder exposes isChannelLocked(int): int.
@@ -396,41 +397,12 @@ final class K5Radio {
     }
 
     private void refreshSxmFavoriteMetadata(java.util.Map<Long,Object> values, int channel) {
-        long now = android.os.SystemClock.elapsedRealtime();
-        long generation = CpClimate.sessionGeneration;
-        if (channel != sxmMetadataChannel || generation != sxmMetadataGeneration
-                || now - sxmMetadataPoll >= 10000) {
-            sxmMetadataChannel = channel;
-            sxmMetadataGeneration = generation;
-            sxmMetadataPoll = now;
-            sxmTitle = ""; sxmArtist = ""; sxmName = "";
-            try {
-                int category = readInt(sxmTuner, SXM_IFACE, "getSmartFavoritesCategoryID");
-                if (category >= 0) {
-                    Object records = Class.forName(SXM_IFACE).getMethod("getCategoryChannels", int.class)
-                            .invoke(sxmTuner, category);
-                    Class<?> type = Class.forName("com.hkmc.media.sxm65h.Channel");
-                    if (records != null && records.getClass().isArray()
-                            && records.getClass().getComponentType() == type) {
-                        for (int i = 0; i < Math.min(100, java.lang.reflect.Array.getLength(records)); i++) {
-                            Object entry = java.lang.reflect.Array.get(records, i);
-                            if (entry == null) continue;
-                            java.lang.reflect.Field id = type.getDeclaredField("mChannelID");
-                            id.setAccessible(true);
-                            Object raw = id.get(entry);
-                            if (!(raw instanceof Number) || ((Number)raw).intValue() != channel) continue;
-                            sxmName = channelText(type, entry, "mChannelLongName");
-                            sxmTitle = channelText(type, entry, "mTitle");
-                            sxmArtist = channelText(type, entry, "mArtist");
-                            break;
-                        }
-                    }
-                }
-            } catch (Throwable t) { log.log("[radio-sxm] favorite metadata unavailable: " + t.getClass().getSimpleName()); }
-        }
-        if (!sxmTitle.isEmpty()) values.put(4355L, sxmTitle);
-        else if (!sxmName.isEmpty()) values.put(4355L, sxmName);
-        if (!sxmArtist.isEmpty()) values.put(4356L, sxmArtist);
+        if (sxmKnownGeneration != CpClimate.sessionGeneration) return;
+        String[] metadata = sxmMetadata.get(channel);
+        if (metadata == null) return;
+        if (!metadata[1].isEmpty()) values.put(4355L, metadata[1]);
+        else if (!metadata[0].isEmpty()) values.put(4355L, metadata[0]);
+        if (!metadata[2].isEmpty()) values.put(4356L, metadata[2]);
     }
     // OEM channel records have been observed with numeric 0/1 flags.
     // Accept boolean representations too; unknown values are not authorization.
