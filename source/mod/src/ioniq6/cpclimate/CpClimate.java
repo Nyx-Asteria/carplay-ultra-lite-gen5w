@@ -241,6 +241,16 @@ public final class CpClimate extends ModEntry {
                             if (radio == null || !(value instanceof java.util.Map)) return;
                             java.util.Map<?,?> params = (java.util.Map<?,?>) value;
                             Object source = params.get("sourceIdentifier");
+                            // Apple CAFMedia exposes multicastIndex, but the wire key and
+                            // index base are not established. Observe explicit numeric fields
+                            // only; retain the existing primary-frequency tuning behavior.
+                            for (String key : new String[]{"multicastIndex","multicast"}) {
+                                if (params.containsKey(key)) {
+                                    Long index=OpackCodec.asLong(params.get(key));
+                                    log.log("[radio] multicast parameter "+key+"="+(index==null?"non-integer":index)
+                                            +"; native multicast mapping not enabled");
+                                }
+                            }
                             if ("SXM".equals(source)) {
                                 if (!"tuneToIdentifier".equals(name) || !(params.get("identifier") instanceof String)
                                         || !radio.tuneSxm((String)params.get("identifier")))
