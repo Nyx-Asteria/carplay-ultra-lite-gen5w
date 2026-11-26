@@ -612,11 +612,12 @@ public final class Video {
         } else if ("property".equals(type) || "getProperty".equals(type)) {
             Object key = m.get("key") != null ? m.get("key") : m.get("property");
             if (key != null) r.put("key", key);
-            boolean ready = player != null && player.getPlaybackState() == Player.STATE_READY;
+            PlaybackReport report=playbackReport();
+            boolean ready=report.ready;
             if ("hasEnabledAudio".equals(key)) r.put("value", !noSound);
             else if ("muted".equals(key)) r.put("value", noSound || (player != null && player.getVolume() == 0f));
-            else if ("seekableTimeRanges".equals(key) && ready) r.put("value", Collections.singletonList(range(0, durationMs())));
-            else if ("loadedTimeRanges".equals(key) && ready) r.put("value", Collections.singletonList(range(0, player.getBufferedPosition())));
+            else if ("seekableTimeRanges".equals(key) && ready) r.put("value", report.seekable ? Collections.singletonList(range(0, report.duration)) : Collections.emptyList());
+            else if ("loadedTimeRanges".equals(key) && ready) r.put("value", Collections.singletonList(range(0, report.buffered)));
             r.put("kind", "response");
             r.put("type", "property");
         } else {
@@ -627,47 +628,53 @@ public final class Video {
         return r;
     }
 
+    // Both compatibility envelopes describe the same player. Preserve their
+    // distinct wire units while avoiding contradictory rate/readiness values.
+    static PlaybackReport playbackReport() {
+        boolean valid=player!=null&&player.getPlayerError()==null;
+        int state=valid?player.getPlaybackState():Player.STATE_IDLE;
+        return new PlaybackReport(valid,state==Player.STATE_READY,state==Player.STATE_ENDED,
+                valid&&player.getPlayWhenReady(),valid&&player.isPlaying(),
+                valid&&player.isCurrentMediaItemSeekable(),valid?player.getCurrentPosition():0,
+                valid?durationMs():0,valid?player.getBufferedPosition():0);
+    }
+
     static Map<String, Object> info() {
         Map<String, Object> info = new LinkedHashMap<String, Object>();
         if (itemUuid != null) info.put("item", dict("uuid", itemUuid));
-        boolean ready = player != null && (player.getPlaybackState() == Player.STATE_READY || player.getPlaybackState() == Player.STATE_ENDED);
-        boolean playing = player != null && player.isPlaying();
-        // the rate the phone asked for, also while loading or buffering (rate 0 there made the phone send setRate 0)
-        boolean wanted = player != null && player.getPlayWhenReady() && player.getPlayerError() == null;
-        info.put("rate", wanted ? 1.0 : 0.0);
+        PlaybackReport report=playbackReport();
+        boolean ready=report.ready;
+        info.put("rate", report.rate);
         info.put("readyToPlay", ready);
-        info.put("playbackLikelyToKeepUp", ready && player.getPlaybackState() == Player.STATE_READY);
+        info.put("playbackLikelyToKeepUp", report.keepUp);
         if (ready) {
-            long d = durationMs();
-            info.put("position", cmTime(player.getCurrentPosition()));
-            info.put("duration", cmTime(d));
-            info.put("seekableTimeRanges", Collections.singletonList(range(0, d)));
-            info.put("loadedTimeRanges", Collections.singletonList(range(0, player.getBufferedPosition())));
+            info.put("position", cmTime(report.position));
+            info.put("duration", cmTime(report.duration));
+            info.put("seekableTimeRanges", report.seekable ? Collections.singletonList(range(0, report.duration)) : Collections.emptyList());
+            info.put("loadedTimeRanges", Collections.singletonList(range(0, report.buffered)));
         }
         info.put("droppedVideoFrames", 0L);
         info.put("totalVideoFrames", 0L);
         info.put("decodedFrameCount", 0L);
-        info.put("playbackState", !ready ? "loading" : playing ? "playing" : "paused");
+        info.put("playbackState", report.state);
         info.put("interstitialInfo", new LinkedHashMap<String, Object>());
         return info;
     }
 
     static Map<String, Object> liviPlaybackInfo() {
         Map<String, Object> out = new LinkedHashMap<String, Object>();
-        boolean valid = player != null && player.getPlayerError() == null;
-        boolean ready = valid && (player.getPlaybackState() == Player.STATE_READY || player.getPlaybackState() == Player.STATE_ENDED);
-        long pos = valid ? Math.max(0, player.getCurrentPosition()) : 0;
-        long duration = valid ? durationMs() : 0;
-        long buffered = valid ? Math.max(pos, player.getBufferedPosition()) : pos;
+        PlaybackReport report=playbackReport();
+        boolean ready=report.ready;
+        long pos=report.position, duration=report.duration, buffered=report.buffered;
         out.put("duration", duration / 1000.0);
         out.put("position", pos / 1000.0);
-        out.put("rate", valid && player.isPlaying() ? 1.0 : 0.0);
+        out.put("rate", report.rate);
         out.put("readyToPlay", ready);
         out.put("playbackBufferEmpty", buffered <= pos && !ready);
         out.put("playbackBufferFull", duration > 0 && buffered >= duration);
-        out.put("playbackLikelyToKeepUp", ready);
+        out.put("playbackLikelyToKeepUp", report.keepUp);
         out.put("loadedTimeRanges", Collections.singletonList(dict("start", 0.0, "duration", buffered / 1000.0)));
-        out.put("seekableTimeRanges", valid && player.isCurrentMediaItemSeekable() && duration > 0
+        out.put("seekableTimeRanges", report.seekable
                 ? Collections.singletonList(dict("start", 0.0, "duration", duration / 1000.0))
                 : Collections.emptyList());
         if (itemUuid != null) out.put("uuid", itemUuid);
