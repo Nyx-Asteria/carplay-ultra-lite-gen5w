@@ -406,10 +406,14 @@ final class K5Radio {
             sxmKnownGeneration = -1;
             sxmKnownIds = java.util.Collections.emptySet();
             sxmItems = java.util.Collections.emptyList();
-            int category = readInt(sxmTuner, SXM_IFACE, "getSmartFavoritesCategoryID");
-            if (category < 0) return;
-            Object records = Class.forName(SXM_IFACE).getMethod("getCategoryChannels", int.class)
-                    .invoke(sxmTuner, category);
+            Object records = null;
+            try {
+                int category = readInt(sxmTuner, SXM_IFACE, "getSmartFavoritesCategoryID");
+                if (category >= 0) records = Class.forName(SXM_IFACE).getMethod("getCategoryChannels", int.class)
+                        .invoke(sxmTuner, category);
+            } catch (Exception e) {
+                log.log("[radio-sxm] Smart Favorites unavailable: " + e.getClass().getSimpleName());
+            }
             // Discover read-only catalog accessors without invoking unknown methods.
             if (sxmDiscoveryGeneration != generation) {
                 sxmDiscoveryGeneration = generation;
@@ -424,7 +428,8 @@ final class K5Radio {
             }
             Class<?> type = Class.forName("com.hkmc.media.sxm65h.Channel");
             if (records == null || !records.getClass().isArray()
-                    || records.getClass().getComponentType() != type) return;
+                    || records.getClass().getComponentType() != type)
+                records = java.lang.reflect.Array.newInstance(type, 0);
             java.lang.reflect.Field id = type.getDeclaredField("mChannelID");
             id.setAccessible(true);
             java.lang.reflect.Field subscribed = type.getDeclaredField("mIsSubscribed");
