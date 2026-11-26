@@ -26,6 +26,9 @@ final class SessionLogWriter {
     private volatile boolean closed;
     private File directory;
     private FileOutputStream normal, errors;
+    private final EnumMap<SessionLogPolicy.Category,FileOutputStream> diagnostics = new EnumMap<SessionLogPolicy.Category,FileOutputStream>(SessionLogPolicy.Category.class);
+    private final EnumSet<SessionLogPolicy.Category> enabledDiagnostics;
+    private long diagnosticBytes;
     private long start, written, errorBytes, suppressed, generation;
     private String currentId;
 
@@ -34,13 +37,16 @@ final class SessionLogWriter {
         final long time, generation;
         final String text;
         final boolean important;
+        SessionLogPolicy.Category category;
         Event(int kind, long time, long generation, String text, boolean important) {
             this.kind=kind; this.time=time; this.generation=generation; this.text=text; this.important=important;
         }
     }
     SessionLogWriter(File root) { this(root,null); }
-    SessionLogWriter(File root, SessionUsbExport exporter) {
+    SessionLogWriter(File root, SessionUsbExport exporter) { this(root,exporter,EnumSet.noneOf(SessionLogPolicy.Category.class)); }
+    SessionLogWriter(File root, SessionUsbExport exporter, EnumSet<SessionLogPolicy.Category> enabledDiagnostics) {
         this.root=root;
+        this.enabledDiagnostics=enabledDiagnostics.clone();
         this.exporter=exporter;
         worker=new Thread(new Runnable(){ public void run(){ loop(); } }, "cpul-session-log");
         worker.setDaemon(true);
@@ -52,8 +58,10 @@ final class SessionLogWriter {
     }
     void record(long generation, SessionLogPolicy.Level level, SessionLogPolicy.Category category, String safe) {
         if (safe == null) return;
-        offer(new Event(0,System.currentTimeMillis(),generation,level+" "+category+" "+SessionLogPolicy.sanitize(safe),
-            level==SessionLogPolicy.Level.ERROR || level==SessionLogPolicy.Level.WARN));
+        Event e=new Event(0,System.currentTimeMillis(),generation,level+" "+category+" "+SessionLogPolicy.sanitize(safe),
+            level==SessionLogPolicy.Level.ERROR || level==SessionLogPolicy.Level.WARN);
+        e.category=category;
+        offer(e);
     }
     void finish(long generation, String reason, long suppressed) {
         offer(new Event(2,System.currentTimeMillis(),generation,SessionLogPolicy.sanitize(reason)+"; policy_suppressed="+suppressed,true));
@@ -118,7 +126,7 @@ final class SessionLogWriter {
     private static long androidIndependentMonotonic(){ return System.nanoTime()/1000000L; }
     private void begin(Event e) throws IOException {
         prune();
-        start=e.time; generation=e.generation; written=0; errorBytes=0; suppressed=0;
+        start=e.time; generation=e.generation; written=0; errorBytes=0; diagnosticBytes=0; suppressed=0;
         currentId=new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss",Locale.US).format(new Date(start))
             +"_session-"+generation+"_"+UUID.randomUUID().toString();
         directory=new File(root,currentId+".open");
@@ -131,20 +139,33 @@ final class SessionLogWriter {
     }
     private void append(Event e) throws IOException {
         byte[] b=(e.time+" "+e.text+"\n").getBytes("UTF-8");
-        if(written+b.length <= MAX_SESSION-ERROR_RESERVE-8192) { normal.write(b); written+=b.length; }
+        if(written+diagnosticBytes+b.length <= MAX_SESSION-ERROR_RESERVE-8192) { normal.write(b); written+=b.length; }
         else suppressed++;
         if(e.important && errorBytes+b.length<=ERROR_RESERVE) { errors.write(b); errorBytes+=b.length; }
         else if(e.important) suppressed++;
+        if(e.category!=null && enabledDiagnostics.contains(e.category)) {
+            if(written+diagnosticBytes+b.length <= MAX_SESSION-ERROR_RESERVE-8192) {
+                FileOutputStream stream=diagnostics.get(e.category);
+                if(stream==null) {
+                    File d=new File(directory,"diagnostics"); ensureDir(d);
+                    stream=new FileOutputStream(new File(d,e.category.name().toLowerCase(Locale.US)+".log"));
+                    diagnostics.put(e.category,stream);
+                }
+                stream.write(b); diagnosticBytes+=b.length;
+            } else suppressed++;
+        }
     }
     private void sync() throws IOException {
         if(normal!=null) { normal.flush(); normal.getFD().sync(); }
         if(errors!=null) { errors.flush(); errors.getFD().sync(); }
+        for(FileOutputStream stream:diagnostics.values()){stream.flush();stream.getFD().sync();}
     }
     private void complete(long end,String reason) throws IOException {
         File folder=directory;
         append(new Event(0,end,generation,"INFO CORE session finalized: "+reason,false));
         sync();
         normal.close(); normal=null; errors.close(); errors=null;
+        closeDiagnostics();
         FileOutputStream out=new FileOutputStream(new File(folder,"summary.txt"),true);
         try {
             out.write(("end_ms="+end+"\nduration_ms="+Math.max(0,end-start)+"\ntermination="+reason+
@@ -162,7 +183,12 @@ final class SessionLogWriter {
         try { exporter.pending(root); exportFailure=null; }
         catch(Exception e) { exportFailure=e.getClass().getSimpleName(); }
     }
+    private void closeDiagnostics() {
+        for(FileOutputStream stream:diagnostics.values())try{stream.close();}catch(IOException ignored){}
+        diagnostics.clear();
+    }
     private void abandon() {
+        closeDiagnostics();
         try { if(normal!=null) normal.close(); } catch(IOException ignored){}
         try { if(errors!=null) errors.close(); } catch(IOException ignored){}
         normal=null; errors=null; directory=null;

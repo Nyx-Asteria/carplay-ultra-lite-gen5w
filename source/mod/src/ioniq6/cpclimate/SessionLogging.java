@@ -36,7 +36,7 @@ final class SessionLogging {
         metadata=settings.toString();
         policy=new SessionLogPolicy(categories);
         writer=enabled?new SessionLogWriter(new File(files,"cpul-session-logs"),
-            usb?new SessionUsbExport(new SessionUsbDestination()):null):null;
+            usb?new SessionUsbExport(new SessionUsbDestination()):null,categories):null;
     }
     synchronized void start(long id) {
         if(generation==id)return;
@@ -75,7 +75,7 @@ final class SessionLogging {
         if(s.contains("timed out")||s.contains("timeout")||s.contains("unavailable")||s.contains("refused")||s.contains("queue full")||s.contains("listener stopped"))return Level.WARN;
         if(category==Category.VS_RAW||category==Category.PROJECTION_RAW||s.startsWith("sync phone:")||s.startsWith("sync car:"))return Level.TRACE;
         if(s.startsWith("vs phone follows")||s.startsWith("vs phone reads ")||s.startsWith("[seat-fan] subscribed")||
-           s.startsWith("[radio-api]")||s.startsWith("[radio-probe]")||s.startsWith("[video] message #")||
+           s.startsWith("[radio-api]")||s.startsWith("[radio-sxm] catalog accessor")||s.startsWith("[radio-probe]")||s.startsWith("[video] message #")||
            s.startsWith("[video] video: answer ")||s.startsWith("video: answer "))return Level.DEBUG;
         return Level.INFO;
     }

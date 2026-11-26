@@ -108,8 +108,10 @@ final class K5Radio {
                     byte[] image = i.getByteArrayExtra("artwork");
                     if (image != null && logoMatchesFrequency(i.getStringExtra("file"), khz)) {
                         if (supportedArtwork(image)) {
+                            StationArtwork previous=stationArtwork;
                             stationArtwork = new StationArtwork(khz, CpClimate.sessionGeneration, image);
-                            log.log("[radio-meta] station logo received " + khz + " kHz bytes=" + image.length);
+                            if(previous==null || previous.khz!=khz || previous.generation!=CpClimate.sessionGeneration || !java.util.Arrays.equals(previous.bytes,image))
+                                log.log("[radio-meta] station logo received " + khz + " kHz bytes=" + image.length);
                         } else log.log("[radio-meta] unsupported station logo encoding bytes=" + image.length);
                     }
                 }
@@ -401,6 +403,8 @@ final class K5Radio {
 
     // The verified Smart Favorites API supplies a bounded initial catalog.
     // IDs are opaque OEM identifiers, never synthesized from channel numbers.
+    private long loggedSxmGeneration=-1;
+    private java.util.Set<Integer> loggedSxmIds=java.util.Collections.emptySet();
     private void refreshSxmCatalog(java.util.Map<Long,Object> values, int channelId) throws Exception {
         long now = android.os.SystemClock.elapsedRealtime();
         long generation = CpClimate.sessionGeneration;
@@ -489,7 +493,11 @@ final class K5Radio {
             sxmItems = items;
             sxmKnownIds = java.util.Collections.unmodifiableSet(known);
             sxmKnownGeneration = generation;
-            log.log("[radio-sxm] favorite catalog size=" + items.size());
+            if(loggedSxmGeneration!=generation || !loggedSxmIds.equals(known)) {
+                loggedSxmGeneration=generation;
+                loggedSxmIds=new java.util.HashSet<Integer>(known);
+                log.log("[radio-sxm] favorite catalog size=" + items.size());
+            }
         }
         values.put(4134L, sxmItems);
     }
