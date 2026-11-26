@@ -344,15 +344,14 @@ final class K5Radio {
         } catch (Throwable t) { sxmTuner=null; sxmAvailable=false; currentSxmChannel=-1; sxmArt=null; values.put(4131L,true); }
     }
 
-    private long sxmRequestGeneration = -1;
-    private long sxmRequestTime = -1;
+    private final SxmCatalogRequest sxmCatalogRequest = new SxmCatalogRequest();
     // These exact void binder methods request asynchronous catalog updates.
     // Do not change category filters, tune, or request bulk artwork here.
     private void requestSxmCatalog() {
         long generation = CpClimate.sessionGeneration;
         long now = android.os.SystemClock.elapsedRealtime();
-        if (sxmRequestGeneration == generation || (sxmRequestTime >= 0 && now - sxmRequestTime < 30000)) return;
-        sxmRequestTime = now;
+        SxmSnapshot snapshot=fullSxm;
+        if (!sxmCatalogRequest.begin(generation,now,snapshot!=null&&snapshot.generation==generation&&snapshot.ids.length>0)) return;
         try {
             Class<?> iface = Class.forName(SXM_IFACE);
             java.lang.reflect.Method categories = iface.getMethod("requestAllAvailableCategories");
@@ -362,7 +361,6 @@ final class K5Radio {
             categories.invoke(sxmTuner);
             if (!probeActive(generation) || !sxmActive) return;
             channels.invoke(sxmTuner);
-            sxmRequestGeneration = generation;
             log.log("[radio-sxm] requested OEM category and channel catalog; awaiting asynchronous updates");
         } catch (Throwable t) { log.log("[radio-sxm] catalog request unavailable: " + t.getClass().getSimpleName()); }
     }
@@ -404,6 +402,13 @@ final class K5Radio {
                     String[] names = i.getStringArrayExtra("names"), titles = i.getStringArrayExtra("titles"), artists = i.getStringArrayExtra("artists");
                     if (ids == null || ids.length > 512 || names == null || titles == null || artists == null
                             || names.length != ids.length || titles.length != ids.length || artists.length != ids.length) return;
+                    // A transient empty response must not erase a previously usable catalog.
+                    // Live lock/subscription/skip checks still govern every tuning command.
+                    SxmSnapshot previous=fullSxm;
+                    if(ids.length==0 && previous!=null && previous.generation==CpClimate.sessionGeneration && previous.ids.length>0){
+                        log.log("[radio-sxm] empty catalog response; withholding replacement");
+                        return;
+                    }
                     fullSxm = new SxmSnapshot(CpClimate.sessionGeneration, ids, names, titles, artists);
                     log.log("[radio-sxm] full OEM catalog received count=" + ids.length);
                 }
