@@ -83,12 +83,22 @@ final class CarAudio extends Thread {
     private final int txSoundSetting = CarApi.code(IFACE, "getSoundSetting", "(I)I");
     private long lastBosePoll = -1, lastBoseGeneration = -1;
     private String lastBose = "";
-    private volatile String boseReading = VehiclePage.NONE;
-    private volatile long boseGeneration = -1, boseReadAt = -1;
+    private volatile BoseSample boseSample;
+    private static final class BoseSample {
+        final long generation, readAt;
+        final int stream, availability, setting;
+        BoseSample(long generation,long readAt,int stream,int availability,int setting){
+            this.generation=generation;this.readAt=readAt;this.stream=stream;
+            this.availability=availability;this.setting=setting;
+        }
+    }
     private int lastBoseStream = -1;
     String boseStatus() {
-        long age = android.os.SystemClock.elapsedRealtime() - boseReadAt;
-        return active() && boseGeneration == CpClimate.sessionGeneration && age >= 0 && age <= 10000 ? boseReading : VehiclePage.NONE;
+        BoseSample sample=boseSample;
+        if(sample==null||!active())return VehiclePage.NONE;
+        long age=android.os.SystemClock.elapsedRealtime()-sample.readAt;
+        return sample.generation==CpClimate.sessionGeneration && sample.stream==mainStream && age>=0 && age<=10000
+                ? "Availability "+sample.availability+" / Setting "+sample.setting : VehiclePage.NONE;
     }
     private void probeBose(long generation, int stream) {
         if (txSoundAvailability < 0 || txSoundSetting < 0) return;
@@ -102,16 +112,14 @@ final class CarAudio extends Thread {
             int availability = callSoundRead(txSoundAvailability);
             int setting = callSoundRead(txSoundSetting);
             String sample = "stream=" + stream + " availability=" + availability + " setting=" + setting;
-            boseReading = "Availability " + availability + " / Setting " + setting;
-            boseGeneration = generation;
-            boseReadAt = android.os.SystemClock.elapsedRealtime();
+            if(!active()||generation!=CpClimate.sessionGeneration){boseSample=null;return;}
+            boseSample=new BoseSample(generation,android.os.SystemClock.elapsedRealtime(),stream,availability,setting);
             if (!sample.equals(lastBose)) {
                 lastBose = sample;
                 out.log("[audio-bose] Centerpoint " + sample);
             }
         } catch (Throwable t) {
-            boseReading = VehiclePage.NONE;
-            boseGeneration = -1;
+            boseSample=null;
             String sample = "unavailable: " + t.getClass().getSimpleName();
             if (!sample.equals(lastBose)) { lastBose = sample; out.log("[audio-bose] " + sample); }
         }
@@ -254,7 +262,7 @@ final class CarAudio extends Thread {
                     woken = false;
                 }
                 VehicleState vs = state[0];
-                if (!active() || vs == null || !(lanes[0].isOpen() || lanes[1].isOpen())) { shown = null; observedGeneration = -1; synchronized (this) { observed.clear(); } sends.clear(); VolumePanel.publishReady(panelContext, false); continue; }
+                if (!active() || vs == null || !(lanes[0].isOpen() || lanes[1].isOpen())) { shown = null; observedGeneration = -1; boseSample=null; lastBoseGeneration=-1; synchronized (this) { observed.clear(); } sends.clear(); VolumePanel.publishReady(panelContext, false); continue; }
                 long generation = CpClimate.sessionGeneration;
                 Map<Long, Object> fresh = new LinkedHashMap<Long, Object>();
                 StringBuilder seen = new StringBuilder();
