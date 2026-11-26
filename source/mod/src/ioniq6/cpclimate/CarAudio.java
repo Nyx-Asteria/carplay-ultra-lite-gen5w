@@ -130,7 +130,7 @@ final class CarAudio extends Thread {
     // navigation, call, or alert streams for the main media slider.
     private int mediaStream() throws Exception {
         if (txCurrent < 0 || txMode < 0) return 14;
-        int mode = call(txMode), stream = call(txCurrent);
+        int mode = readInt(txMode), stream = readInt(txCurrent);
         if (mode == 2 && stream == 38) return 38;
         if (mode == 4 && stream == 41) return 41;
         return 14;
@@ -219,6 +219,7 @@ final class CarAudio extends Thread {
                     try {
                         if (!active() || s[2] != CpClimate.sessionGeneration || shown == null || shown != state[0]) continue;
                         if (s[0] < 0) {
+                            if(!hasObserved(VehicleState.MUTE))continue;
                             call(s[1] == 1 ? txMute : txUnmute);
                             muted = s[1] == 1;
                             out.log("[audio] " + (muted ? "muted" : "un-muted") + " for the phone");
@@ -228,6 +229,7 @@ final class CarAudio extends Thread {
                         synchronized (wanted) {
                             if (wanted[(int) s[0]] != s[1]) continue;
                         }
+                        if(!hasObserved(LINKS[(int)s[0]][0]))continue;
                         int stream = (int) s[3];
                         if (s[0] == 0 && stream != mediaStream()) {
                             out.log("[audio] media source changed; stale volume write discarded");
@@ -270,12 +272,12 @@ final class CarAudio extends Thread {
                 probeBose(generation, main);
                 seen.append("main=").append(main).append(' ');
                 for (long[] link : LINKS) {
-                    int level = call(txGet, link[0] == VehicleState.VOLUME ? main : (int) link[1], 0);
+                    int level = readInt(txGet, link[0] == VehicleState.VOLUME ? main : (int) link[1], 0);
                     if (level < 0 || level > MAX_LEVEL) continue;   // a stream this car doesn't have, or another scale
                     fresh.put(link[0], percent(level));
                     seen.append(link[1]).append('=').append(level).append(' ');
                 }
-                if (txUserMute >= 0) { boolean mute = call(txUserMute) != 0; fresh.put(VehicleState.MUTE, mute); seen.append("mute=").append(mute); }
+                if (txUserMute >= 0) { boolean mute = readInt(txUserMute) != 0; fresh.put(VehicleState.MUTE, mute); seen.append("mute=").append(mute); }
                 if (!seen.toString().equals(last)) {
                     last = seen.toString();
                     out.log("[audio] " + last);
@@ -291,6 +293,13 @@ final class CarAudio extends Thread {
             } catch (InterruptedException e) {
                 return;
             } catch (Throwable t) {
+                // Do not accept writes or suppress the OEM panel using an
+                // observation that could no longer be verified.
+                shown=null;
+                observedGeneration=-1;
+                synchronized(this){observed.clear();}
+                sends.clear();
+                VolumePanel.publishReady(panelContext,false);
                 if (failures++ < 5) out.log("[audio] read failed: " + t);
             }
         }
@@ -298,15 +307,20 @@ final class CarAudio extends Thread {
 
     // Do not interpret an empty binder reply as a valid zero-valued sound setting.
     private int callSoundRead(int code) throws Exception {
+        return readInt(code,BOSE_CP);
+    }
+
+    private int readInt(int code,int... args) throws Exception {
+        if(code<0)throw new IllegalStateException("audio getter unavailable");
         IBinder binder = CarClimate.service(SERVICE);
         if (binder == null) throw new IllegalStateException("audio service missing");
         Parcel data = Parcel.obtain(), reply = Parcel.obtain();
         try {
             data.writeInterfaceToken(IFACE);
-            data.writeInt(BOSE_CP);
-            if (!binder.transact(code, data, reply, 0)) throw new IllegalStateException("sound read rejected");
+            for(int arg:args)data.writeInt(arg);
+            if (!binder.transact(code, data, reply, 0)) throw new IllegalStateException("audio read rejected");
             reply.readException();
-            if (reply.dataAvail() < 4) throw new IllegalStateException("sound read empty");
+            if (reply.dataAvail() < 4) throw new IllegalStateException("audio read empty");
             return reply.readInt();
         } finally { data.recycle(); reply.recycle(); }
     }

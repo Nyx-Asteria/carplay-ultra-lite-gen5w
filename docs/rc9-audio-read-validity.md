@@ -1,0 +1,3 @@
+# RC9 audio read validity
+
+All integer-valued audio reads now require a nonempty Binder reply. An empty reply must not be interpreted as zero volume or unmuted. Void write methods retain their existing handling. Read failure invalidates the write observation and withdraws stock volume panel suppression immediately; recovery uses a new successful sample. Queued writes recheck the relevant observed characteristic. Existing source routing and scale are unchanged. RC10 verify stock panel fallback during service failure/recovery and normal volume/mute across CarPlay, FM and SXM. No Bose write added.
