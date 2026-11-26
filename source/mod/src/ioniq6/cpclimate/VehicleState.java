@@ -992,6 +992,14 @@ final class VehicleState {
     private List<Out> write(int lane, Map<Object, Object> written, Object transaction) {
         Map<Object, Object> results = new LinkedHashMap<Object, Object>();
         Map<Object, Object> changed = new LinkedHashMap<Object, Object>();
+        // Seat arbitration must see the opposite mode before optimistic phone writes.
+        Map<Long,Object> seatBefore = new TreeMap<Long,Object>();
+        for (long iid : new long[]{ClimateMap.DRIVER_SEAT_LEVEL, ClimateMap.DRIVER_SEAT_ON,
+                ClimateMap.PASSENGER_SEAT_LEVEL, ClimateMap.PASSENGER_SEAT_ON,
+                ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.DRIVER_VENT_ON,
+                ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON}) {
+            if (values.containsKey(iid)) seatBefore.put(iid, values.get(iid));
+        }
         for (Map.Entry<Object, Object> e : written.entrySet()) {
             Long iid = OpackCodec.asLong(e.getKey());
             if (iid == null) continue;
@@ -1042,7 +1050,9 @@ final class VehicleState {
                 sent.put(iid, e.getValue());
                 heldSince.put(iid, now);
             }
-            c.phoneWrote(sent, new TreeMap<Long, Object>(values));
+            Map<Long,Object> commandState = new TreeMap<Long,Object>(values);
+            commandState.putAll(seatBefore);
+            c.phoneWrote(sent, commandState);
         }
         List<Out> answers = new ArrayList<Out>();
         answers.add(new Out(lane, wrap(dict("command", "writeResponse", "transactionID", transaction, "errors", results))));
