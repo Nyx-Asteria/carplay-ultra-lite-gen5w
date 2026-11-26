@@ -403,6 +403,22 @@ public class ClimateMapTest {
         fs.car = new VehicleState.Car() { public void phoneWrote(Map<Long,Object> w, Map<Long,Object> state) { } };
         long[][] pairs = {{ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.DRIVER_VENT_ON},
                           {ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON}};
+        // A reused IID would make otherwise valid notifications ambiguous.
+        Map<Long,Object> extraValues = new java.util.TreeMap<Long,Object>();
+        Object expanded = OpackCodec.decode(VehicleState.withExtras(VsData.bytes(VsData.ACCESSORIES), extraValues));
+        java.util.Set<Long> ids = new java.util.HashSet<Long>();
+        boolean unique = true;
+        for (Object accessory : (List<?>) expanded) {
+            Map<?,?> am = (Map<?,?>) accessory;
+            unique &= ids.add(OpackCodec.asLong(am.get("iid")));
+            for (Object service : (List<?>) am.get("services")) {
+                Map<?,?> sm = (Map<?,?>) service;
+                unique &= ids.add(OpackCodec.asLong(sm.get("iid")));
+                for (Object characteristic : (List<?>) sm.get("characteristics"))
+                    unique &= ids.add(OpackCodec.asLong(((Map<?,?>) characteristic).get("iid")));
+            }
+        }
+        check("expanded seat accessory IIDs are globally unique", unique);
         for (long[] pair : pairs) {
             fs.handle(VehicleState.HIGH, VehicleState.wrap(VehicleState.dict("command", "registerRequest",
                     "transactionID", 10L, "values", java.util.Arrays.asList(pair[0], pair[1]))));
