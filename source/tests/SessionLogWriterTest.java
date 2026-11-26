@@ -13,11 +13,12 @@ public final class SessionLogWriterTest {
         try{
             File unfinished=new File(root,"old.open");check(unfinished.mkdir());
             SessionLogWriter.writeText(new File(unfinished,"session.log"),"old data");
-            SessionLogWriter w=new SessionLogWriter(root);
+            SessionLogWriter w=new SessionLogWriter(root,null,java.util.EnumSet.of(RADIO));
             w.start(7,"firmware=test");
             w.record(7,INFO,CORE,"connected");
             w.record(6,INFO,CORE,"wrong generation");
             w.record(7,ERROR,RADIO,"failed");
+            w.record(7,INFO,THEMES,"[theme-sync] negotiated traffic panels=[Cluster_Display]");
             w.finish(7,"unknown",3);
             w.shutdown();check(w.await(10000));check(w.failure()==null);
             check(read(new File(root,"old/summary.txt")).contains("recovered unfinished session"));
@@ -26,6 +27,9 @@ public final class SessionLogWriterTest {
             check(read(new File(session,"session.log")).contains("connected"));
             check(!read(new File(session,"session.log")).contains("wrong generation"));
             check(read(new File(session,"errors.log")).contains("failed"));
+            check(read(new File(session,"diagnostics/radio.log")).contains("failed"));
+            check(!new File(session,"diagnostics/themes.log").exists());
+            check(read(new File(session,"summary.txt")).contains("theme_panels="));
             check(read(new File(session,"summary.txt")).contains("policy_suppressed=3"));
             System.out.println("SessionLogWriterTest passed");
         }finally{SessionLogWriter.delete(root);}

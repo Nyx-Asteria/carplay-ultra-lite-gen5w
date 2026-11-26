@@ -30,6 +30,7 @@ final class SessionLogWriter {
     private final EnumSet<SessionLogPolicy.Category> enabledDiagnostics;
     private long diagnosticBytes;
     private long start, written, errorBytes, suppressed, generation;
+    private final LinkedHashMap<String,String> milestones=new LinkedHashMap<String,String>();
     private String currentId;
 
     private static final class Event {
@@ -126,6 +127,7 @@ final class SessionLogWriter {
     private static long androidIndependentMonotonic(){ return System.nanoTime()/1000000L; }
     private void begin(Event e) throws IOException {
         prune();
+        milestones.clear();
         start=e.time; generation=e.generation; written=0; errorBytes=0; diagnosticBytes=0; suppressed=0;
         currentId=new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss",Locale.US).format(new Date(start))
             +"_session-"+generation+"_"+UUID.randomUUID().toString();
@@ -138,13 +140,14 @@ final class SessionLogWriter {
         sync();
     }
     private void append(Event e) throws IOException {
+        summarize(e);
         byte[] b=(e.time+" "+e.text+"\n").getBytes("UTF-8");
-        if(written+diagnosticBytes+b.length <= MAX_SESSION-ERROR_RESERVE-8192) { normal.write(b); written+=b.length; }
+        if(written+diagnosticBytes+b.length <= MAX_SESSION-ERROR_RESERVE-65536) { normal.write(b); written+=b.length; }
         else suppressed++;
         if(e.important && errorBytes+b.length<=ERROR_RESERVE) { errors.write(b); errorBytes+=b.length; }
         else if(e.important) suppressed++;
         if(e.category!=null && enabledDiagnostics.contains(e.category)) {
-            if(written+diagnosticBytes+b.length <= MAX_SESSION-ERROR_RESERVE-8192) {
+            if(written+diagnosticBytes+b.length <= MAX_SESSION-ERROR_RESERVE-65536) {
                 FileOutputStream stream=diagnostics.get(e.category);
                 if(stream==null) {
                     File d=new File(directory,"diagnostics"); ensureDir(d);
@@ -154,6 +157,20 @@ final class SessionLogWriter {
                 stream.write(b); diagnosticBytes+=b.length;
             } else suppressed++;
         }
+    }
+    private void summarize(Event e) {
+        if(e.category==null)return;
+        String s=e.text;
+        String key=null;
+        if(s.contains("[theme-sync] negotiated traffic panels="))key="theme_panels";
+        else if(s.contains("[theme-sync] first message for Center_Display"))key="center_negotiated";
+        else if(s.contains("[theme-sync] first message for Cluster_Display"))key="cluster_negotiated";
+        else if(s.contains("first picture shown")||s.contains("firstFrame=true"))key="video_first_frame";
+        else if(s.contains("player ready"))key="video_ready";
+        else if(s.contains("[radio-source]"))key="last_radio_source";
+        else if(s.contains("activation timed out"))key="last_activation_timeout";
+        else if(e.important)key="last_"+e.category.name().toLowerCase(Locale.US)+"_warning";
+        if(key!=null)milestones.put(key,e.time+" "+s);
     }
     private void sync() throws IOException {
         if(normal!=null) { normal.flush(); normal.getFD().sync(); }
@@ -170,6 +187,7 @@ final class SessionLogWriter {
         try {
             out.write(("end_ms="+end+"\nduration_ms="+Math.max(0,end-start)+"\ntermination="+reason+
                 "\nqueue_dropped="+lost.getAndSet(0)+"\nsize_dropped="+suppressed+"\n").getBytes("UTF-8"));
+            for(Map.Entry<String,String> item:milestones.entrySet())out.write((item.getKey()+"="+item.getValue()+"\n").getBytes("UTF-8"));
             out.getFD().sync();
         } finally { out.close(); }
         if(!folder.renameTo(new File(root,currentId))) throw new IOException("session finalization rename failed");
