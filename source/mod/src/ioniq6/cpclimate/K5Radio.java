@@ -560,9 +560,15 @@ final class K5Radio {
                     if (tuner == null || readInt(audio, CarAudio.IFACE, "getAudioMode") != 4
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 41) return;
                     java.lang.reflect.Method tune = Class.forName(SXM_IFACE).getMethod("tuneDirect", int.class, boolean.class);
-                    if (readIntWithChannel(tuner, "isChannelSubscribed", channel) != 1
-                            || readIntWithChannel(tuner, "isChannelSkipped", channel) != 0
-                            || !sxmUnlocked(tuner, channel) || tune.getReturnType() != int.class || !probeActive(generation)
+                    int subscribed = readIntWithChannel(tuner, "isChannelSubscribed", channel);
+                    int skipped = readIntWithChannel(tuner, "isChannelSkipped", channel);
+                    boolean unlocked = sxmUnlocked(tuner, channel);
+                    if (subscribed != 1 || skipped != 0 || !unlocked) {
+                        log.log("[radio-sxm] tune refused ID=" + channel + " subscribed=" + subscribed
+                                + " skipped=" + skipped + " unlocked=" + unlocked);
+                        return;
+                    }
+                    if (tune.getReturnType() != int.class || !probeActive(generation)
                             || request != tuneRequest.get()) return;
                     Object result = tune.invoke(tuner, channel, false);
                     log.log("[radio-sxm] native tune ID=" + channel + " result=" + result + "; awaiting channel feedback");
