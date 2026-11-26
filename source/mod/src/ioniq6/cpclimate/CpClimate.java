@@ -325,7 +325,9 @@ public final class CpClimate extends ModEntry {
             if (uiSync) {
                 boolean forceWallpaper = m.settingBoolean("ultra_force_wallpaper", false);
                 m.log("[theme] center Wallpaper layout request=" + forceWallpaper);
-                new UiSyncChannel(dir, log, UiSync.layout("Modular"), forceWallpaper).start();
+                boolean phoneManagedCluster=m.settingBoolean("ultra_phone_managed_cluster",false);
+                m.log("[theme] cluster layout policy="+(phoneManagedCluster?"phone-managed":"legacy Modular/saved"));
+                new UiSyncChannel(dir, log, phoneManagedCluster?null:UiSync.layout("Modular"), forceWallpaper).start();
             }
         }
         MethodHook copy = new MethodHook() {
