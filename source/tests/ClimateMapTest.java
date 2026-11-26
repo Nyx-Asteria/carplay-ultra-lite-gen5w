@@ -494,7 +494,7 @@ public class ClimateMapTest {
             {ClimateMap.PASSENGER_SEAT_LEVEL,ClimateMap.PASSENGER_SEAT_ON,ClimateMap.PASSENGER_VENT_LEVEL,ClimateMap.PASSENGER_VENT_ON}}) {
             final List<ClimateMap.Command> dispatched=new java.util.ArrayList<ClimateMap.Command>();
             VehicleState ts=new VehicleState(new VsChannel.Log(){public void log(String m){}});
-            ts.car=new VehicleState.Car(){public void phoneWrote(Map<Long,Object> w,Map<Long,Object> state){dispatched.addAll(ClimateMap.commands(w,state));}};
+            ts.car=new VehicleState.Car(){public void phoneWrote(Map<Long,Object> w,Map<Long,Object> state){dispatched.addAll(ClimateMap.commands(w,state,2));}};
             long hl=ids4[0],ho=ids4[1],vl=ids4[2],vo=ids4[3];
             ts.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","registerRequest","transactionID",30L,"values",java.util.Arrays.asList(hl,ho,vl,vo))));
             Map<Long,Object> bcm=new java.util.LinkedHashMap<Long,Object>();
