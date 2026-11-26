@@ -53,6 +53,8 @@ jobs:
           javac --release 8 -cp "$CP" -d out/tests source/tests/ParkedStateTest.java
           java -cp "out/tests:$CP" ioniq6.cpclimate.ParkedStateTest
           javac --release 8 -cp "$CP" -d out/tests source/tests/SeatSchemaTest.java
+          javac --release 8 -cp "$CP" -d out/tests source/tests/RadioActivationTraceTest.java
+          java -cp "out/tests:$CP" ioniq6.cpclimate.RadioActivationTraceTest
           java -cp "out/tests:$CP" ioniq6.cpclimate.SeatSchemaTest
           javac --release 8 -cp "$CP" -d out/tests source/tests/ClimateMapTest.java
           java -cp "out/tests:$CP" ioniq6.cpclimate.ClimateMapTest

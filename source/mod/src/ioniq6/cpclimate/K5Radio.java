@@ -231,6 +231,7 @@ final class K5Radio {
             int mode = readInt(fmAudio, CarAudio.IFACE, "getAudioMode");
             int stream = readInt(fmAudio, CarAudio.IFACE, "getCurStreamType");
             // RC4 observed FM mode 2 / stream 38, AM mode 1 / stream 39.
+            activationLog(activationTrace.sample(CpClimate.sessionGeneration,tuneRequest.get(),mode,stream,android.os.SystemClock.elapsedRealtime()));
             fmActive = khz > 0 && mode == 2 && stream == 38;
             sxmActive = mode == 4 && stream == 41;
             refreshSxm(values);
@@ -675,6 +676,8 @@ final class K5Radio {
      * ModeConstants.ModeType FM1=2. Foreground behavior requires parked validation. */
     // A tune with explicit FM source may activate FM first. Only the latest
     // pending request is retained; it expires and cannot cross sessions.
+    private final RadioActivationTrace activationTrace=new RadioActivationTrace();
+    private void activationLog(String event){if(event!=null)log.log("[radio-source] "+event);}
     private final java.util.concurrent.atomic.AtomicLong tuneRequest = new java.util.concurrent.atomic.AtomicLong();
     void cancelPendingTune() { tuneRequest.incrementAndGet(); }
     boolean selectAndTuneFm(final long khz) {
@@ -723,7 +726,9 @@ final class K5Radio {
                                 if (change.getReturnType() != boolean.class) return;
                                 Object manager = type.getConstructor(Context.class).newInstance(context);
                                 if (!probeActive(generation) || request != tuneRequest.get()) return;
+                                activationLog(activationTrace.begin(generation,request,targetMode,android.os.SystemClock.elapsedRealtime()));
                                 Object accepted = change.invoke(manager, Integer.valueOf(targetMode));
+                                activationLog(activationTrace.result(generation,request,Boolean.TRUE.equals(accepted),android.os.SystemClock.elapsedRealtime()));
                                 log.log("[radio] OEM mode " + targetMode + " request accepted=" + accepted);
                             } catch (Throwable t) {
                                 log.log("[radio] mode selection failed: " + t.getClass().getSimpleName());
