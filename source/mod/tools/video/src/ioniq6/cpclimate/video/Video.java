@@ -562,7 +562,11 @@ public final class Video {
             if (!noSound && e.errorCode >= 5000 && e.errorCode < 6000) { audioFallback("player audio output error " + e.getErrorCodeName()); if (fallbackPending) return; }
             int code = e.errorCode >= 2000 && e.errorCode < 3000 ? ERROR_NETWORK
                     : e.errorCode >= 4000 && e.errorCode < 5000 ? ERROR_DECODER : ERROR_INCOMPATIBLE_ASSET;
-            if (e.errorCode >= 6000 && e.errorCode < 7000) code = ERROR_INCOMPATIBLE_ASSET;   // DRM (FairPlay)
+            if (e.errorCode >= 6000 && e.errorCode < 7000) {
+                code = ERROR_INCOMPATIBLE_ASSET;
+                log("[video-drm] protected playback failed: " + e.getErrorCodeName()
+                        + "; test an unprotected local video separately");
+            }
             send(error(code));
             updateStatus();
         }
