@@ -295,6 +295,7 @@ final class K5Radio {
             sxmAvailable = sxmTuner != null && channel >= 0;
             values.put(4131L, !sxmAvailable);
             if (sxmAvailable) {
+                if (sxmActive) requestSxmCatalog();
                 try { refreshSxmCatalog(values); }
                 catch (Throwable t) { log.log("[radio-sxm] catalog unavailable: " + t.getClass().getSimpleName()); }
             }
@@ -307,6 +308,29 @@ final class K5Radio {
             // Publish text only when the OEM channel record matches exactly.
             refreshSxmFavoriteMetadata(values, channel);
         } catch (Throwable t) { sxmTuner = null; }
+    }
+
+    private long sxmRequestGeneration = -1;
+    private long sxmRequestTime = -1;
+    // These exact void binder methods request asynchronous catalog updates.
+    // Do not change category filters, tune, or request bulk artwork here.
+    private void requestSxmCatalog() {
+        long generation = CpClimate.sessionGeneration;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (sxmRequestGeneration == generation || (sxmRequestTime >= 0 && now - sxmRequestTime < 30000)) return;
+        sxmRequestGeneration = generation;
+        sxmRequestTime = now;
+        try {
+            Class<?> iface = Class.forName(SXM_IFACE);
+            java.lang.reflect.Method categories = iface.getMethod("requestAllAvailableCategories");
+            java.lang.reflect.Method channels = iface.getMethod("requestAllAvailableChannels");
+            if (categories.getReturnType() != void.class || channels.getReturnType() != void.class
+                    || !probeActive(generation) || !sxmActive || !VehicleState.sxmSchemaTest) return;
+            categories.invoke(sxmTuner);
+            if (!probeActive(generation) || !sxmActive) return;
+            channels.invoke(sxmTuner);
+            log.log("[radio-sxm] requested OEM category and channel catalog; awaiting asynchronous updates");
+        } catch (Throwable t) { log.log("[radio-sxm] catalog request unavailable: " + t.getClass().getSimpleName()); }
     }
 
     private long sxmMetadataPoll;
