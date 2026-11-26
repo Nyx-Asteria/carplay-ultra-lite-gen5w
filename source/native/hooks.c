@@ -1038,8 +1038,16 @@ static void video_sender_start(void *session);   /* below, with the video stage 
 __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stream, CF reply, long type) {
     if (!stream || !reply) return 0;
     if (type == STREAM_ALT_SCREEN) return ultra_mode() ? alt_stream(reply) : 0;
-    if (type != STREAM_DATA) return 0;
+    if (type != STREAM_DATA) {
+        if (ui_sync_mode()) LOG("cp-climate: theme stream audit: native path type %d\n", (int)type);
+        return 0;
+    }
     CF kind = get(stream, &K_clientTypeUUID);
+    if (ui_sync_mode()) {
+        const char *uuid = is(kind, T_CFStringGetTypeID)
+            ? FN(T_CFStringGetCStringPtr, const char *(*)(CF, unsigned))(kind, UTF8) : 0;
+        LOG("cp-climate: theme stream audit: type 130 clientTypeUUID %s\n", uuid ? uuid : "(unavailable)");
+    }
     if (kind && (extra_features() & 1) && (equal(kind, &K_vpData) || equal(kind, &K_vpSettings) || equal(kind, &K_vpOverlay))) {
         int which = equal(kind, &K_vpData) ? 0 : equal(kind, &K_vpSettings) ? 1 : 2;
         CF d = new_dict();
@@ -1056,7 +1064,10 @@ __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stre
     }
     int lane = !kind ? -1 : equal(kind, &K_vsNormal) ? 0 : equal(kind, &K_vsHigh) ? 1
         : equal(kind, &K_iapStream) && iap_mode() ? 2 : equal(kind, &K_syncStream) && ui_sync_mode() ? 3 : -1;
-    if (lane < 0) return 0;
+    if (lane < 0) {
+        if (ui_sync_mode()) LOG("cp-climate: theme stream audit: type 130 not claimed; native path\n");
+        return 0;
+    }
     int err = 0;
     unsigned long long seed = (unsigned long long)FN(T_CFDictionaryGetInt64, long long (*)(CF, CF, int *))(stream, &K_seed, &err);
     unsigned char rd[32], wr[32];
