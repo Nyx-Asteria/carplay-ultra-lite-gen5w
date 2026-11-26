@@ -92,13 +92,14 @@ final class K5Radio {
         try {
             context.registerReceiver(new android.content.BroadcastReceiver() {
                 @Override public void onReceive(Context c, Intent i) {
-                    if (!enabled() || !CpClimate.sessionActive) return;
+                    if (!enabled() || !CpClimate.sessionActive || !fmActive) return;
                     long khz = i.getLongExtra("frequency", -1);
                     long received = i.getLongExtra("received", -1);
                     long now = android.os.SystemClock.elapsedRealtime();
                     String name = i.getStringExtra("name");
                     if (khz < 87500 || khz > 108000 || received < 0 || now < received
                             || now - received > 2000) return;
+                    if (khz != lastFmFrequency) return;
                     if (name != null && name.length() <= 256) {
                         stationName = new StationName(khz, CpClimate.sessionGeneration, received, name);
                     }
@@ -114,7 +115,7 @@ final class K5Radio {
             }, new android.content.IntentFilter(METADATA_ACTION), "android.permission.DEVICE_POWER", main);
         } catch (Throwable t) { log.log("[radio-meta] receiver unavailable: " + t.getClass().getSimpleName()); }
     }
-    private long lastFmFrequency = -1;
+    private volatile long lastFmFrequency = -1;
     private volatile String probeStatus = "Ready";
     private volatile boolean fmActive, sxmActive, sxmAvailable;
     private Object sxmTuner;
