@@ -74,7 +74,10 @@ final class SessionLogWriter {
         offer(e);
     }
     void finish(long generation, String reason, long suppressed) {
-        offer(new Event(2,System.currentTimeMillis(),generation,SessionLogPolicy.sanitize(reason)+"; policy_suppressed="+suppressed,true));
+        finishAt(generation,reason,suppressed,System.currentTimeMillis());
+    }
+    void finishAt(long generation,String reason,long suppressed,long endMillis) {
+        offer(new Event(2,endMillis,generation,SessionLogPolicy.sanitize(reason)+"; policy_suppressed="+suppressed,true));
     }
     // Reserve capacity for lifecycle and error events. On overload evict ordinary messages first.
     private synchronized void offer(Event e) {
