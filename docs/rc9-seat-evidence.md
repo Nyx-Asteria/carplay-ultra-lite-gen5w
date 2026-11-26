@@ -1,0 +1,5 @@
+# RC9 Stage 1 — iOS 27 seat evidence
+
+Source: supplied ios27-carplay-metadata archive, CarAccessoryFramework.refs.txt and symbols.txt (build 24A446). The declarations establish CAFSeatFan uses CAFUInt8Characteristic and CAFUInt8Range; CAFSeatHeatingCooling uses CAFInt32Characteristic and CAFInt32Range. Both expose Boolean on and autoMode and String vehicleLayoutKey. Both declare CAFPositionedRequired and characteristic update callbacks with fromGroupUpdate. These declarations do not establish numeric wire identifiers, required presence of autoMode, notification envelope, or exact grouping rules. Current K5 seatFan schema advertises format 1 and range 0..3, matching the unsigned type at the semantic level. Do not change service identifiers or add unsupported auto mode based solely on these declarations.
+
+Baseline: preserve immediate heating feedback (default true), keep ventilation feedback experiment independent (default false). Collect characteristic value Java type, subscription and queued notification status for each seat write. BCM remains authoritative. No OEM dispatch changes in this commit.

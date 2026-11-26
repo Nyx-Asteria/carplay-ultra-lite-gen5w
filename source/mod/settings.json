@@ -10,6 +10,14 @@
       "apply": "restart"
     },
     {
+      "key": "seat_heat_immediate_feedback",
+      "type": "toggle",
+      "default": true,
+      "title": "Seat Heating Immediate Feedback",
+      "description": "Echo requested heating state immediately before BCM reconciliation. Enabled preserves existing heating behavior. Disable only for diagnosis.",
+      "apply": "restart"
+    },
+    {
       "key": "seat_fan_immediate_feedback",
       "type": "toggle",
       "default": false,

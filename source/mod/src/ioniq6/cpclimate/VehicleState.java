@@ -77,6 +77,7 @@ final class VehicleState {
     static volatile VehiclePage vehiclePage;
     static volatile boolean climateEnabled = true;
     static volatile boolean seatFanImmediateFeedback;
+    static volatile boolean seatHeatImmediateFeedback = true;
     interface Controls { void pressed(String name, Object value); }
     static volatile Controls mediaControls;
 
@@ -1051,7 +1052,9 @@ final class VehicleState {
             results.put(iid, WRITTEN);
             // LIVI hides a notification history entry here; M3 keeps no history, so nothing to hide
             Object before = values.put(iid, v);
-            if (!(car != null && seatFanValue(iid) && !seatFanImmediateFeedback) && !same(before, v) && followed.contains(iid)) changed.put(iid, v);
+            boolean immediate = car == null || !frontSeatValue(iid) || (seatFanValue(iid) ? seatFanImmediateFeedback : seatHeatImmediateFeedback);
+            if (immediate && !same(before, v) && followed.contains(iid)) changed.put(iid, v);
+            if (frontSeatValue(iid)) out.log("[seat-feedback] write iid=" + iid + " valueType=" + (v == null ? "null" : v.getClass().getSimpleName()) + " immediate=" + immediate + " subscribed=" + followed.contains(iid) + " queued=" + changed.containsKey(iid));
         }
         VehiclePage page = vehiclePage;
         if (page != null) {

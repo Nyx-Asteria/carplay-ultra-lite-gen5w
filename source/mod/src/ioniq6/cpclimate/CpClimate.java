@@ -190,7 +190,8 @@ public final class CpClimate extends ModEntry {
             // the extra seat and wheel controls (off): rear seat heat, front seat ventilation, steering wheel heater
             VehicleState.extras = ClimateMap.extras = climate;
             VehicleState.seatFanImmediateFeedback = climate && m.settingBoolean("seat_fan_immediate_feedback", false);
-            m.log("[seat-fan] immediate feedback experiment=" + VehicleState.seatFanImmediateFeedback);
+            VehicleState.seatHeatImmediateFeedback = m.settingBoolean("seat_heat_immediate_feedback", true);
+            m.log("[seat-fan] immediate feedback experiment=" + VehicleState.seatFanImmediateFeedback + "; heating immediate=" + VehicleState.seatHeatImmediateFeedback);
             VehicleState.climateEnabled = climate;
             // A: ventilation as separate SeatFan services; B: as the seats' own cooling levels, plus a rear zone
             // the driver card has room for three buttons: AUTO, vent position, seat (2026-11-10: more were drawn on top
