@@ -64,6 +64,7 @@ final class UiSync {
     static final Layout CENTER = new Layout("Wallpaper", "9E19BC4E-5251-5821-A0BA-26479A79F722", "blue", null, null);
     private java.io.File preferences;
     private final java.util.Properties saved = new java.util.Properties();
+    private static final Object PREFERENCE_LOCK=new Object();
     private final boolean centerEnabled;
     boolean legacyCenterLayout;
     UiSync() { this(null, false); }
@@ -101,6 +102,11 @@ final class UiSync {
         Layout l = byId(id);
         if (l == null || !("Cluster_Display".equals(display) && l != CENTER ||
                 centerEnabled && "Center_Display".equals(display) && l == CENTER)) return;
+        synchronized(PREFERENCE_LOCK){
+        if(preferences!=null)try{
+            java.io.FileInputStream in=new java.io.FileInputStream(preferences);
+            try{saved.load(in);}finally{in.close();}
+        }catch(java.io.IOException ignored){}
         if (selectLayout) saved.setProperty(display + ".layout", id);
         if (offered(l, palette)) saved.setProperty(display + ".palette." + id, palette);
         if (preferences == null) return;
@@ -110,6 +116,7 @@ final class UiSync {
             try { saved.store(out, "CPUL layout preferences"); out.getFD().sync(); } finally { out.close(); }
             if (!tmp.renameTo(preferences)) tmp.delete();
         } catch (java.io.IOException ignored) { tmp.delete(); }
+        }
     }
 
     long session, nextTx, lastRx, version;

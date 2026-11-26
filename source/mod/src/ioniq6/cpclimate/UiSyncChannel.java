@@ -59,12 +59,19 @@ final class UiSyncChannel extends Thread {
         }
     }
 
+    static String panelId(byte[] body){
+        try{
+            Object decoded=OpackCodec.decode(body);
+            if(!(decoded instanceof java.util.Map))return null;
+            Object display=((java.util.Map<?,?>)decoded).get("displayUUID");
+            return "Center_Display".equals(display)||"Cluster_Display".equals(display)?(String)display:null;
+        }catch(RuntimeException ignored){return null;}
+    }
+
     void serve(Socket sock) {
         // Sequence numbers and reset state belong to this authenticated connection.
         // A reconnect must not reset an older connection's handshake.
-        final UiSync sync = new UiSync(new File(dir, "cpc-theme-preferences.properties"), true);
-        sync.wanted = this.sync.wanted;
-        sync.legacyCenterLayout = this.sync.legacyCenterLayout;
+        final java.util.Map<String,UiSync> panels=new java.util.HashMap<String,UiSync>();
         out.log("SYNC connection opened");
         int logged = 0, packages = 0;
         java.util.Set<String> seenPanels = new java.util.HashSet<String>();
@@ -80,9 +87,6 @@ final class UiSyncChannel extends Thread {
             ChaChaPoly cipher = new ChaChaPoly(rd, wr);
             InputStream in = sock.getInputStream();
             VsChannel.Writer w = new VsChannel.Writer(sock, sock.getOutputStream(), cipher);
-            synchronized (sync) {
-                sync.reopen();
-            }
             byte[] sealed = new byte[64 * 1024];
             int have = 0;
             ByteArrayOutputStream plain = new ByteArrayOutputStream();
@@ -116,6 +120,22 @@ final class UiSyncChannel extends Thread {
                         byte[] body = java.util.Arrays.copyOfRange(p, at + VsChannel.HEADER, at + size);
                         List<byte[]> answers;
                         List<String> picked;
+                        String panelId=panelId(body);
+                        if(panelId==null){
+                            // Preserve the existing handling for frames lacking a recognized display.
+                            panelId="legacy";
+                        }
+                        UiSync sync=panels.get(panelId);
+                        if(sync==null){
+                            // Distinct display identities may negotiate on one connection.
+                            // Use the existing preference file for each display to avoid
+                            // changing its on-disk format; merge on writes in UiSync.
+                            sync=new UiSync(new File(dir,"cpc-theme-preferences.properties"),true);
+                            sync.wanted=this.sync.wanted;
+                            sync.legacyCenterLayout=this.sync.legacyCenterLayout;
+                            sync.reopen();
+                            panels.put(panelId,sync);
+                        }
                         synchronized (sync) {
                             try {
                                 answers = sync.handle(body);
