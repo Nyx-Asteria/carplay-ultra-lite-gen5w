@@ -571,27 +571,29 @@ final class K5Radio {
         final long generation = CpClimate.sessionGeneration;
         if (!VehicleState.sxmSchemaTest || !sxmAvailable || !probeActive(generation)
                 || sxmKnownGeneration != generation || !sxmKnownIds.contains(channel)) return false;
-        final long request = tuneRequest.incrementAndGet();
-        if (sxmActive) { queueSxmTune(channel, generation, request); return true; }
-        if (!selectRadioMode(request, 13)) return false;
+        final long station=stationRequest.incrementAndGet();
+        long pending=pendingSource(13,generation);
+        final long request=pending>=0?pending:tuneRequest.incrementAndGet();
+        if (sxmActive) { queueSxmTune(channel, generation, request, station); return true; }
+        if (pending<0&&!selectRadioMode(request, 13)) return false;
         final long deadline = android.os.SystemClock.elapsedRealtime() + 7000;
         main.postDelayed(new Runnable() {
             public void run() {
-                if (!probeActive(generation) || request != tuneRequest.get()) return;
+                if (!probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()) return;
                 if (android.os.SystemClock.elapsedRealtime() >= deadline) {
                     log.log("[radio-sxm] activation timed out; tune discarded"); return;
                 }
-                if (sxmActive) { queueSxmTune(channel, generation, request); return; }
+                if (sxmActive) { queueSxmTune(channel, generation, request, station); return; }
                 main.postDelayed(this, 250);
             }
         }, 250);
         return true;
     }
-    private void queueSxmTune(final int channel, final long generation, final long request) {
+    private void queueSxmTune(final int channel, final long generation, final long request, final long station) {
         fmCommands.execute(new Runnable() {
             public void run() {
                 try {
-                    if (!probeActive(generation) || request != tuneRequest.get()
+                    if (!probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()
                             || !VehicleState.sxmSchemaTest || sxmKnownGeneration != generation
                             || !sxmKnownIds.contains(channel)) return;
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
@@ -608,7 +610,7 @@ final class K5Radio {
                         return;
                     }
                     if (tune.getReturnType() != int.class || !probeActive(generation)
-                            || request != tuneRequest.get()) return;
+                            || request != tuneRequest.get() || station!=stationRequest.get()) return;
                     Object result = tune.invoke(tuner, channel, false);
                     log.log("[radio-sxm] native tune ID=" + channel + " result=" + result + "; awaiting channel feedback");
                 } catch (Throwable t) { log.log("[radio-sxm] tune failed: " + t.getClass().getSimpleName()); }
@@ -659,27 +661,27 @@ final class K5Radio {
      * RadioNA WrapperUtil identifies the boolean as isFMStep50KHz; the
      * two-argument MicomRadioManager overload supplies PI/PTy zero. */
     boolean tuneFm(final long khz) {
-        return tuneFm(khz,tuneRequest.incrementAndGet());
+        return tuneFm(khz,tuneRequest.incrementAndGet(),stationRequest.incrementAndGet());
     }
-    private boolean tuneFm(final long khz, final long request) {
+    private boolean tuneFm(final long khz, final long request, final long station) {
         if (khz < 87900 || khz > 107900 || (khz - 87900) % 200 != 0
                 || !enabled() || !CpClimate.sessionActive || !fmActive) return false;
         final long generation = CpClimate.sessionGeneration;
         fmCommands.execute(new Runnable() {
             public void run() {
-                if (!probeActive(generation) || request != tuneRequest.get()) return;
+                if (!probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()) return;
                 try {
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
                     Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
-                    if (tuner == null || !probeActive(generation) || request != tuneRequest.get()) return;
+                    if (tuner == null || !probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()) return;
                     java.lang.reflect.Method method = Class.forName(RADIO_IFACE).getMethod(
                             "directTune", int.class, boolean.class, int.class, int.class);
-                    if (method.getReturnType() != boolean.class || !probeActive(generation) || request != tuneRequest.get()
+                    if (method.getReturnType() != boolean.class || !probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()
                             || readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38
-                            || request != tuneRequest.get()) return;
+                            || request != tuneRequest.get() || station!=stationRequest.get()) return;
                     Object result = method.invoke(tuner, (int)(khz / 10), false, 0, 0);
                     log.log("[radio] FM tune " + khz + " kHz accepted=" + result);
                 } catch (Throwable t) { log.log("[radio] FM tune failed: " + t.getClass().getSimpleName()); }
@@ -697,6 +699,12 @@ final class K5Radio {
     private void activationLog(String event){if(event!=null)log.log("[radio-source] "+event);}
     private final java.util.concurrent.atomic.AtomicLong tuneRequest = new java.util.concurrent.atomic.AtomicLong();
     private final RadioSourceRequest sourceRequest=new RadioSourceRequest();
+    private final java.util.concurrent.atomic.AtomicLong stationRequest=new java.util.concurrent.atomic.AtomicLong();
+    // Reuse a pending mode request, but let a newer station selection supersede its tune.
+    private long pendingSource(int target,long generation) {
+        long request=tuneRequest.get();
+        return sourceRequest.matches(generation,request,target,android.os.SystemClock.elapsedRealtime())?request:-1;
+    }
     synchronized void cancelPendingTune() { tuneRequest.incrementAndGet(); sourceRequest.clear(); }
     private boolean selectExplicitSource(int target,boolean owns) {
         long generation=CpClimate.sessionGeneration, now=android.os.SystemClock.elapsedRealtime();
@@ -713,18 +721,20 @@ final class K5Radio {
         if (khz < 87900 || khz > 107900 || (khz - 87900) % 200 != 0
                 || !enabled() || !CpClimate.sessionActive) return false;
         final long generation = CpClimate.sessionGeneration;
-        final long request = tuneRequest.incrementAndGet();
-        if (fmActive) return tuneFm(khz, request);
-        if (!selectFm(request)) return false;
+        final long station=stationRequest.incrementAndGet();
+        long pending=pendingSource(2,generation);
+        final long request=pending>=0?pending:tuneRequest.incrementAndGet();
+        if (fmActive) return tuneFm(khz, request, station);
+        if (pending<0&&!selectFm(request)) return false;
         final long deadline = android.os.SystemClock.elapsedRealtime() + 5000;
         main.postDelayed(new Runnable() {
             public void run() {
-                if (!probeActive(generation) || request != tuneRequest.get()) return;
+                if (!probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()) return;
                 if (android.os.SystemClock.elapsedRealtime() >= deadline) {
                     log.log("[radio] FM activation timed out; pending tune discarded");
                     return;
                 }
-                if (fmActive) { tuneFm(khz, request); return; }
+                if (fmActive) { tuneFm(khz, request, station); return; }
                 main.postDelayed(this, 250);
             }
         }, 250);
