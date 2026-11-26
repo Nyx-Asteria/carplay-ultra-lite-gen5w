@@ -61,6 +61,7 @@ final class VehicleState {
     /** when the session that made this state started (the second lane joins within VsChannel.SESSION_PAIRING_MS) */
     volatile long startedAt;
     private final Map<Long, Long> heldSince = new HashMap<Long, Long>();
+    private final Map<Long, Object> actualSeats = new HashMap<Long, Object>();
     // (1.1.2-1.1.5 held back the echo of cooling writes, testing a drawing-delay theory; 2026-11-11 a level set
     // from the car's own screen showed the same extra dot, so it was an offset, and the held echo made the button
     // flash a stale level. Cooling writes are echoed at once again, as heating's always were.)
@@ -888,6 +889,10 @@ final class VehicleState {
         long now = System.currentTimeMillis();
         // SeatFan needs an authoritative paired level/power update after a phone write,
         // even when the BCM confirms the same level already cached by write().
+        for (Map.Entry<Long,Object> e : reported.entrySet()) {
+            if (frontSeatValue(e.getKey()) && e.getValue() != ClimateMap.BLANK)
+                actualSeats.put(e.getKey(), e.getValue());
+        }
         Set<Long> handledFans = new HashSet<Long>();
         for (long[] pair : SEAT_FAN_PAIRS) {
             Long levelAt = heldSince.get(pair[0]), onAt = heldSince.get(pair[1]);
@@ -906,7 +911,7 @@ final class VehicleState {
             }
             out.log("[seat-fan] BCM " + (confirmed ? "confirmed" : "corrected")
                     + " level=" + reported.get(pair[0]) + " on=" + reported.get(pair[1])
-                    + " iid=" + pair[0] + " (paired feedback)");
+                    + " iid=" + pair[0] + " subscribed=" + followed.contains(pair[0]) + "/" + followed.contains(pair[1]) + " (paired feedback)");
         }
         for (Map.Entry<Long, Object> e : reported.entrySet()) {
             if (handledFans.contains(e.getKey())) continue;
@@ -952,6 +957,7 @@ final class VehicleState {
             Long iid = OpackCodec.asLong(o);
             if (iid == null) continue;
             followed.add(iid);
+            if (seatFanValue(iid)) out.log("[seat-fan] subscribed iid=" + iid + " cached=" + values.get(iid) + " BCM=" + actualSeats.get(iid));
             if (values.containsKey(iid)) held.put(iid, values.get(iid));
             else missing.put(iid, NO_VALUE);
             if (names.containsKey(iid)) named.add(names.get(iid));
@@ -984,6 +990,10 @@ final class VehicleState {
         {ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.DRIVER_VENT_ON},
         {ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON}
     };
+    private static boolean frontSeatValue(long iid) {
+        return iid == ClimateMap.DRIVER_SEAT_LEVEL || iid == ClimateMap.DRIVER_SEAT_ON
+                || iid == ClimateMap.PASSENGER_SEAT_LEVEL || iid == ClimateMap.PASSENGER_SEAT_ON || seatFanValue(iid);
+    }
     private static boolean seatFanValue(long iid) {
         for (long[] pair : SEAT_FAN_PAIRS) if (iid == pair[0] || iid == pair[1]) return true;
         return false;
@@ -1052,6 +1062,7 @@ final class VehicleState {
             }
             Map<Long,Object> commandState = new TreeMap<Long,Object>(values);
             commandState.putAll(seatBefore);
+            commandState.putAll(actualSeats);
             c.phoneWrote(sent, commandState);
         }
         List<Out> answers = new ArrayList<Out>();
