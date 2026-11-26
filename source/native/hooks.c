@@ -372,7 +372,38 @@ static int add_view_area(CF info, int pct, int edge, int extras, int wide) {
     CF displays = get(info, &K_displays);
     if (!is(displays, T_CFArrayGetTypeID) || count(displays) < 1) return 0;
     CF first = at(displays, 0);
-    if (!is(first, T_CFDictionaryGetTypeID) || get(first, &K_viewAreas)) return 0;
+    if (!is(first, T_CFDictionaryGetTypeID)) return 0;
+    /* A stock/PPS view area must not prevent the separate Ultra display
+     * metadata from being advertised. Preserve geometry and scaling here. */
+    if (get(first, &K_viewAreas)) {
+        if (!extras) return 0;
+        CF out = new_array(), copy = new_dict();
+        if (!out || !copy) {
+            if (out) release(out);
+            if (copy) release(copy);
+            return 0;
+        }
+        FN(T_CFDictionaryApplyFunction, void (*)(CF, void (*)(CF, CF, void *), void *))(first, copy_entry, (void *)copy);
+        int err = 0;
+        long long f = FN(T_CFDictionaryGetInt64, long long (*)(CF, CF, int *))(first, &K_features_d, &err);
+        set_int(copy, &K_features_d, (err ? 0 : f) | DISPLAY_FEATURE_KNOBS);
+        if (!get(copy, &K_uiAppMode)) set_int(copy, &K_uiAppMode, APPEARANCE_DARK);
+        if (!get(copy, &K_uiAppSetting)) set_int(copy, &K_uiAppSetting, APPEARANCE_AUTOMATIC);
+        if (!get(copy, &K_mapAppMode)) set_int(copy, &K_mapAppMode, APPEARANCE_DARK);
+        if (!get(copy, &K_mapAppSetting)) set_int(copy, &K_mapAppSetting, APPEARANCE_AUTOMATIC);
+        if (!get(copy, &K_adjacentViewAreas)) put(copy, &K_adjacentViewAreas, new_array());
+        CF no = boolean(bplist_false);
+        if (no) {
+            if (!get(copy, &K_cornerMasks)) set(copy, &K_cornerMasks, no);
+            release(no);
+        }
+        append(out, copy);
+        release(copy);
+        for (CFIndex i = 1; i < count(displays); i++) append(out, at(displays, i));
+        put(info, &K_displays, out);
+        LOG("cp-climate: Ultra display metadata supplemented; existing viewAreas preserved\n");
+        return 0;
+    }
     CF out = new_array();
     if (!out) return 0;
     CFIndex n = count(displays);
