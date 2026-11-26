@@ -245,6 +245,15 @@ final class CarClimate extends Thread implements VehicleState.Car {
     /** sends a command; false if nothing needed sending */
     boolean send(ClimateMap.Command c) throws Exception {
         if (!allowed(c)) { out.log("CAR test switch withheld " + c); return false; }
+        if (c.kind == ClimateMap.SEAT && !CpClimate.sessionActive) return false;
+        if (c.kind == ClimateMap.SEAT) {
+            IBinder bodyService = service(BCM);
+            int before = bodyService == null ? -1 : bodyInt(bodyService,
+                    c.a == ClimateMap.SET_DRIVER_SEAT ? txDriverSeat : txPassengerSeat);
+            out.log("[seat-dispatch] side=" + (c.a == ClimateMap.SET_DRIVER_SEAT ? "driver" : "passenger")
+                    + " transaction=" + (c.a == ClimateMap.SET_DRIVER_SEAT ? txSetDriverSeat : txSetPassengerSeat)
+                    + " before=" + before + " requested=" + c.b);
+        }
         if (c.kind == ClimateMap.REAR) return pressRear(c.a);
         if (c.kind == ClimateMap.AMBIENT) return writeAmbient(c.a, c.b, c.c);
         if (c.kind == ClimateMap.WHEEL) return setWheel(c.a == 1);
