@@ -31,6 +31,36 @@ final class K5Radio {
     static final String METADATA_ACTION = "ioniq6.cpclimate.RADIO_METADATA";
     private volatile StationName stationName;
     private volatile StationArtwork stationArtwork;
+    private final Object tagLock = new Object();
+    private long tagFrequency = -1, tagGeneration = -1;
+    private final String[] hdTags = {"", "", ""};
+    private void clearTags() {
+        synchronized (tagLock) {
+            tagFrequency = -1;
+            tagGeneration = -1;
+            java.util.Arrays.fill(hdTags, "");
+        }
+    }
+    private void receiveTag(long khz, int tag, String value) {
+        if (tag < 0 || tag > 2 || value == null || value.length() > 256) return;
+        synchronized (tagLock) {
+            long generation = CpClimate.sessionGeneration;
+            if (tagFrequency != khz || tagGeneration != generation) {
+                java.util.Arrays.fill(hdTags, "");
+                tagFrequency = khz;
+                tagGeneration = generation;
+            }
+            hdTags[tag] = value.trim();
+        }
+    }
+    private void publishTags(java.util.Map<Long,Object> values, long khz) {
+        synchronized (tagLock) {
+            if (tagFrequency != khz || tagGeneration != CpClimate.sessionGeneration) return;
+            if (!hdTags[0].isEmpty()) values.put(4355L, hdTags[0]);
+            values.put(4356L, hdTags[1]);
+            values.put(4357L, hdTags[2]);
+        }
+    }
     private static final byte[] EMPTY_ARTWORK = new byte[0];
     private static final class StationArtwork {
         final long khz, generation;
@@ -72,6 +102,7 @@ final class K5Radio {
                     if (name != null && name.length() <= 256) {
                         stationName = new StationName(khz, CpClimate.sessionGeneration, received, name);
                     }
+                    receiveTag(khz, i.getIntExtra("tag", -1), i.getStringExtra("text"));
                     byte[] image = i.getByteArrayExtra("artwork");
                     if (image != null && logoMatchesFrequency(i.getStringExtra("file"), khz)) {
                         if (supportedArtwork(image)) {
@@ -185,13 +216,14 @@ final class K5Radio {
             fmActive = khz > 0 && mode == 2 && stream == 38;
             sxmActive = mode == 4 && stream == 41;
             refreshSxm(values);
-            if (!fmActive) { stationName = null; stationArtwork = null; lastFmFrequency = -1; }
+            if (!fmActive) { stationName = null; stationArtwork = null; clearTags(); lastFmFrequency = -1; }
             if (fmActive) {
                 if (lastFmFrequency != khz) {
                     StationName previous = stationName;
                     if (previous != null && previous.khz != khz) stationName = null;
                     StationArtwork art = stationArtwork;
                     if (art != null && art.khz != khz) stationArtwork = null;
+                    synchronized (tagLock) { if (tagFrequency != khz) clearTags(); }
                     lastFmFrequency = khz;
                 }
                 values.put(4117L, khz);
@@ -201,6 +233,7 @@ final class K5Radio {
                 if (current != null && current.khz == khz && current.generation == CpClimate.sessionGeneration
                         && !current.name.isEmpty()) title = current.name;
                 values.put(4355L, title);
+                publishTags(values, khz);
                 StationArtwork art = stationArtwork;
                 if (art != null && art.khz == khz && art.generation == CpClimate.sessionGeneration)
                     values.put(4358L, art.bytes);

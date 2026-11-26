@@ -158,6 +158,32 @@ final class VolumePanel {
                 }
             });
             m.log("[radio-meta] live station-logo hook installed");
+            Hooks.findAndHookMethod(radio, "onHDRadioID3TagChanged", int.class, int.class, String.class, new MethodHook() {
+                @Override protected void afterHookedMethod(Param p) {
+                    try {
+                        if (!m.enabled() || !m.settingBoolean("k5_integration", true)) return;
+                        final Object service = p.thisObject;
+                        final int program = ((Number)p.args[0]).intValue();
+                        final int tag = ((Number)p.args[1]).intValue();
+                        final String value = p.args[2] instanceof String ? (String)p.args[2] : "";
+                        // HDRadioConstants from DL322 automotive.odex: title=0, artist=1, album=2.
+                        // Until HD subchannel selection is mapped, accept primary program only.
+                        if (program != 1 || tag < 0 || tag > 2 || value.length() > 256) return;
+                        final long received = android.os.SystemClock.elapsedRealtime();
+                        handler.post(new Runnable() { public void run() {
+                            try {
+                                if (android.os.SystemClock.elapsedRealtime() - received > 500) return;
+                                long khz = K5Radio.fmKhz(((Integer)frequency.invoke(service)).intValue());
+                                if (khz <= 0) return;
+                                context.sendBroadcast(new Intent(K5Radio.METADATA_ACTION).setPackage("com.daudio.app.dipo")
+                                        .putExtra("frequency", khz).putExtra("tag", tag)
+                                        .putExtra("text", value).putExtra("received", received), PERMISSION);
+                            } catch (Throwable ignored) {}
+                        }});
+                    } catch (Throwable ignored) {}
+                }
+            });
+            m.log("[radio-meta] live HD ID3 hook installed");
         } catch (Throwable t) { m.log("[radio-meta] live SIS unavailable: " + t.getClass().getSimpleName()); }
     }
 
