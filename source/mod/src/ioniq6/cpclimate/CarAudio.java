@@ -76,6 +76,34 @@ final class CarAudio extends Thread {
      * stream was 33, which has no level (getVolume -1), and the knob's level is not DiPOMUSIC's.
      */
     private volatile int mainStream = 14;
+    // DL322 OEM SoundSettingsType.BOSE_CPMODE. Read-only until the
+    // availability and state enumerations are verified on the vehicle.
+    private static final int BOSE_CP = 48;
+    private final int txSoundAvailability = CarApi.code(IFACE, "getSoundAvailability", "(I)I");
+    private final int txSoundSetting = CarApi.code(IFACE, "getSoundSetting", "(I)I");
+    private long lastBosePoll = -1, lastBoseGeneration = -1;
+    private String lastBose = "";
+    private void probeBose(long generation, int stream) {
+        if (txSoundAvailability < 0 || txSoundSetting < 0) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (generation == lastBoseGeneration && now - lastBosePoll < 5000) return;
+        if (generation != lastBoseGeneration) lastBose = "";
+        lastBoseGeneration = generation;
+        lastBosePoll = now;
+        try {
+            int availability = call(txSoundAvailability, BOSE_CP);
+            int setting = call(txSoundSetting, BOSE_CP);
+            String sample = "stream=" + stream + " availability=" + availability + " setting=" + setting;
+            if (!sample.equals(lastBose)) {
+                lastBose = sample;
+                out.log("[audio-bose] Centerpoint " + sample);
+            }
+        } catch (Throwable t) {
+            String sample = "unavailable: " + t.getClass().getSimpleName();
+            if (!sample.equals(lastBose)) { lastBose = sample; out.log("[audio-bose] " + sample); }
+        }
+    }
+
 
     // Only route to native sources verified on DL322; never follow transient
     // navigation, call, or alert streams for the main media slider.
@@ -218,6 +246,7 @@ final class CarAudio extends Thread {
                 Map<Long, Object> fresh = new LinkedHashMap<Long, Object>();
                 StringBuilder seen = new StringBuilder();
                 int main = mediaStream();
+                probeBose(generation, main);
                 seen.append("main=").append(main).append(' ');
                 for (long[] link : LINKS) {
                     int level = call(txGet, link[0] == VehicleState.VOLUME ? main : (int) link[1], 0);
