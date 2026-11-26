@@ -564,7 +564,7 @@ final class K5Radio {
 
     // DL322 ODEX debug parameter names: tuneDirect(int channelID, boolean override).
     // Never request override; accept only IDs returned by the OEM catalog.
-    boolean tuneSxm(String identifier) {
+    synchronized boolean tuneSxm(String identifier) {
         final int channel;
         try { channel = Integer.parseInt(identifier); }
         catch (NumberFormatException e) { return false; }
@@ -617,9 +617,9 @@ final class K5Radio {
     }
 
     boolean sxmSelected() { return sxmActive; }
-    boolean selectSxm() {
-        if (!VehicleState.sxmSchemaTest || !sxmAvailable) return false;
-        return selectRadioMode(tuneRequest.incrementAndGet(), 13);
+    synchronized boolean selectSxm() {
+        if (!VehicleState.sxmSchemaTest || !sxmAvailable || !enabled() || !CpClimate.sessionActive) return false;
+        return selectExplicitSource(13,sxmActive);
     }
 
     /** Queue a seek only for the already-active FM tuner; never route a radio seek to the phone.
@@ -696,8 +696,20 @@ final class K5Radio {
     private final RadioActivationTrace activationTrace=new RadioActivationTrace();
     private void activationLog(String event){if(event!=null)log.log("[radio-source] "+event);}
     private final java.util.concurrent.atomic.AtomicLong tuneRequest = new java.util.concurrent.atomic.AtomicLong();
-    void cancelPendingTune() { tuneRequest.incrementAndGet(); }
-    boolean selectAndTuneFm(final long khz) {
+    private final RadioSourceRequest sourceRequest=new RadioSourceRequest();
+    synchronized void cancelPendingTune() { tuneRequest.incrementAndGet(); sourceRequest.clear(); }
+    private boolean selectExplicitSource(int target,boolean owns) {
+        long generation=CpClimate.sessionGeneration, now=android.os.SystemClock.elapsedRealtime();
+        if(sourceRequest.matches(generation,tuneRequest.get(),target,now)) {
+            log.log("[radio-source] duplicate selection coalesced target="+target);
+            return true;
+        }
+        long request=tuneRequest.incrementAndGet();
+        sourceRequest.clear();
+        if(owns)return true;
+        return selectRadioMode(request,target);
+    }
+    synchronized boolean selectAndTuneFm(final long khz) {
         if (khz < 87900 || khz > 107900 || (khz - 87900) % 200 != 0
                 || !enabled() || !CpClimate.sessionActive) return false;
         final long generation = CpClimate.sessionGeneration;
@@ -719,13 +731,17 @@ final class K5Radio {
         return true;
     }
 
-    boolean selectFm() { return selectFm(tuneRequest.incrementAndGet()); }
+    synchronized boolean selectFm() {
+        if(!enabled()||!CpClimate.sessionActive)return false;
+        return selectExplicitSource(2,fmActive);
+    }
 
     private boolean selectFm(final long request) { return selectRadioMode(request, 2); }
 
     private boolean selectRadioMode(final long request, final int targetMode) {
         if (!enabled() || !CpClimate.sessionActive) return false;
         final long generation = CpClimate.sessionGeneration;
+        sourceRequest.begin(generation,request,targetMode,android.os.SystemClock.elapsedRealtime());
         fmCommands.execute(new Runnable() {
             public void run() {
                 if (!probeActive(generation) || request != tuneRequest.get()) return;
@@ -746,8 +762,10 @@ final class K5Radio {
                                 activationLog(activationTrace.begin(generation,request,targetMode,android.os.SystemClock.elapsedRealtime()));
                                 Object accepted = change.invoke(manager, Integer.valueOf(targetMode));
                                 activationLog(activationTrace.result(generation,request,Boolean.TRUE.equals(accepted),android.os.SystemClock.elapsedRealtime()));
+                                if(!Boolean.TRUE.equals(accepted))sourceRequest.clearIf(generation,request);
                                 log.log("[radio] OEM mode " + targetMode + " request accepted=" + accepted);
                             } catch (Throwable t) {
+                                sourceRequest.clearIf(generation,request);
                                 log.log("[radio] mode selection failed: " + t.getClass().getSimpleName());
                             }
                         }
