@@ -213,7 +213,14 @@ final class K5Radio {
         values.put(4358L, EMPTY_ARTWORK);
         values.put(4359L, 0L);
         values.put(4117L, ClimateMap.BLANK);
-        if (!enabled() || !CpClimate.sessionActive) { fmActive = false; sxmActive = false; sxmAvailable = false; lastListPoll = 0; fmItems = java.util.Collections.emptyList(); return values; }
+        if (!enabled() || !CpClimate.sessionActive) {
+            fmActive = false; sxmActive = false; sxmAvailable = false;
+            stationName = null; stationArtwork = null; clearTags(); lastFmFrequency = -1;
+            sxmArt = null; currentSxmChannel = -1; fullSxm = null;
+            sxmKnownGeneration = -1; sxmKnownIds = java.util.Collections.emptySet();
+            lastListPoll = 0; fmItems = java.util.Collections.emptyList();
+            return values;
+        }
         try {
             if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) { fmActive = false; sxmActive = false; sxmAvailable = false; return values; }
             if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
@@ -303,6 +310,7 @@ final class K5Radio {
             }
             if (!sxmAvailable || !sxmActive) { currentSxmChannel = -1; sxmArt = null; return; }
             if (currentSxmChannel != channel) { sxmArt = null; currentSxmChannel = channel; }
+            if (sxmArt != null && sxmArt.generation != CpClimate.sessionGeneration) sxmArt = null;
             SxmArt art = sxmArt;
             if (art != null && art.channel == channel && art.generation == CpClimate.sessionGeneration)
                 values.put(4358L, art.bytes);
