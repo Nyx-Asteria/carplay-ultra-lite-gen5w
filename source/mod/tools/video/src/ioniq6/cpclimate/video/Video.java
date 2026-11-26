@@ -307,11 +307,11 @@ public final class Video {
         Object item = m.get("item");
         if (!(item instanceof Map)) return;
         Map<?, ?> it = (Map<?, ?>) item;
-        itemUuid = it.get("uuid");
+        Object nextUuid=it.get("uuid");
         Object loc = it.get("Content-Location");
         String url = loc instanceof String ? (String) loc : null;
         if (url == null || !(url.startsWith("http://") || url.startsWith("https://"))) {
-            log("video: item " + itemUuid + " isn't http(s) (" + (url == null ? "no URL" : url.substring(0, Math.min(12, url.length()))) + "), can't play it");
+            log("video: item " + nextUuid + " isn't http(s) (" + (url == null ? "no URL" : url.substring(0, Math.min(12, url.length()))) + "), can't play it");
             send(error(ERROR_INCOMPATIBLE_ASSET));
             return;
         }
@@ -353,6 +353,7 @@ public final class Video {
         MediaSource source = progressive ? new ProgressiveMediaSource.Factory(data).createMediaSource(media)
                 : new HlsMediaSource.Factory(data).setAllowChunklessPreparation(true).createMediaSource(media);
         release();
+        itemUuid=nextUuid;
         com.google.android.exoplayer2.DefaultRenderersFactory renderers = new Renderers(context);
         // Limit memory pressure on the K5; allow an initial frame sooner while retaining a longer rebuffer threshold.
         com.google.android.exoplayer2.DefaultLoadControl load = new com.google.android.exoplayer2.DefaultLoadControl.Builder()
@@ -426,9 +427,14 @@ public final class Video {
 
         @Override
         public void onRenderedFirstFrame(EventTime t, Object output, long renderTimeMs) {
+            if(player==null||!parkAllowed())return;
+            boolean initial=!firstFrame;
             firstFrame = true;
             if (videoShutter != null) videoShutter.setVisibility(View.GONE);
-            log("video: first picture shown");
+            if(initial){
+                PlaybackReport report=playbackReport();
+                log("video: first picture shown; rate="+report.rate+" ready="+report.ready+" position_ms="+report.position);
+            }
         }
 
         @Override
@@ -875,9 +881,13 @@ public final class Video {
         firstFrame = false;
         if (videoShutter != null) videoShutter.setVisibility(View.VISIBLE);
         if (player != null) {
-            player.removeListener(listener);
-            player.release();
-            player = null;
+            // Detach analytics before releasing codecs and network loaders.
+            // The shared listener must not receive teardown events for an old item.
+            ExoPlayer old=player;
+            player=null;
+            old.removeListener(listener);
+            old.removeAnalyticsListener(steps);
+            old.release();
         }
     }
 
