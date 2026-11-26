@@ -157,7 +157,7 @@ final class VsChannel extends Thread {
 
     void serve(Socket sock) {
         String who = String.valueOf(sock.getRemoteSocketAddress());
-        out.log("VS" + lane + " connection from " + who);
+        out.log("VS" + lane + " connection opened");
         int logged = 0;
         try {
             byte[] keys = readKeys();

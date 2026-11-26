@@ -65,7 +65,7 @@ final class UiSyncChannel extends Thread {
         final UiSync sync = new UiSync(new File(dir, "cpc-theme-preferences.properties"), true);
         sync.wanted = this.sync.wanted;
         sync.legacyCenterLayout = this.sync.legacyCenterLayout;
-        out.log("SYNC connection from " + sock.getRemoteSocketAddress());
+        out.log("SYNC connection opened");
         int logged = 0, packages = 0;
         java.util.Set<String> seenPanels = new java.util.HashSet<String>();
         try {

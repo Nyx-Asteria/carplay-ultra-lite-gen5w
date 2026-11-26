@@ -93,7 +93,7 @@ final class SessionLogging {
         if(s.startsWith("[audio")||s.startsWith("[media"))return Category.AUDIO;
         if(s.startsWith("sync")||s.startsWith("[theme"))return Category.THEMES;
         if(s.startsWith("video")||s.startsWith("[video"))return Category.AIRPLAY;
-        if(s.startsWith("[seat")||s.startsWith("[climate")||s.startsWith("[wheel")||s.startsWith("vs phone")||s.startsWith("vs car"))return Category.CLIMATE;
+        if(s.startsWith("car ")||s.startsWith("ambient ")||s.startsWith("[seat")||s.startsWith("[climate")||s.startsWith("[wheel")||s.startsWith("vs phone")||s.startsWith("vs car"))return Category.CLIMATE;
         return Category.CORE;
     }
     static Level level(String message,Category category) {
@@ -101,7 +101,7 @@ final class SessionLogging {
         if(s.contains("failed")||s.contains("didn't authenticate")||s.contains("implausible package"))return Level.ERROR;
         if(s.contains("unsupported stream")||s.contains("timed out")||s.contains("timeout")||s.contains("unavailable")||s.contains("refused")||s.contains("queue full")||s.contains("listener stopped"))return Level.WARN;
         if(category==Category.VS_RAW||category==Category.PROJECTION_RAW||s.startsWith("sync phone:")||s.startsWith("sync car:"))return Level.TRACE;
-        if(s.startsWith("vs phone follows")||s.startsWith("vs phone reads ")||s.startsWith("[seat-fan] subscribed")||
+        if(s.startsWith("car reader and sender started")||s.startsWith("vs phone follows")||s.startsWith("vs phone reads ")||s.startsWith("[seat-fan] subscribed")||
            s.startsWith("[radio-api]")||s.startsWith("[radio-sxm] catalog accessor")||s.startsWith("[radio-probe]")||s.startsWith("[video] message #")||
            s.startsWith("[video] video: answer ")||s.startsWith("video: answer "))return Level.DEBUG;
         return Level.INFO;
