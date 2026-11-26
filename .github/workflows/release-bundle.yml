@@ -175,7 +175,15 @@ jobs:
           # Standalone TBT owns navigation publishing when WCP TBT is disabled.
           # Build the pinned fork using its own policy regressions and our permanent author key.
           TBT_AJ="$ANDROID_HOME/platforms/android-19/android.jar"
-          test -f "$TBT_AJ" || sdkmanager "platforms;android-19"
+          if [ ! -f "$TBT_AJ" ]; then
+            SDKMANAGER=$(command -v sdkmanager || true)
+            if [ -z "$SDKMANAGER" ]; then
+              SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" "$ANDROID_HOME/tools" -type f -name sdkmanager 2>/dev/null | sort -V | tail -1 || true)
+            fi
+            test -n "$SDKMANAGER" && test -x "$SDKMANAGER"
+            "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platforms;android-19"
+          fi
+          test -f "$TBT_AJ"
           (
             cd .tbt
             mkdir -p out/policy
