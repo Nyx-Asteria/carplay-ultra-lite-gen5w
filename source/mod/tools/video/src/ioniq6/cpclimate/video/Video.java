@@ -230,6 +230,11 @@ public final class Video {
         return Boolean.TRUE.equals(callCore("ioniq6.cpclimate.CpClimate", "videoAllowed", new Class<?>[0]));
     }
 
+    static long sessionGeneration() {
+        Object value=callCore("ioniq6.cpclimate.CpClimate","videoSessionGeneration",new Class<?>[0]);
+        return value instanceof Number?((Number)value).longValue():-1;
+    }
+
     public static void onParkLost(final String reason) {
         if (main == null) return;
         main.post(new Runnable() { public void run() {
@@ -244,10 +249,12 @@ public final class Video {
     /** a playback message from the phone (insertPlayQueueItem, setRate, seek, playbackInfo, ...) */
     public static void onMessage(final long sid, final Map<?, ?> m) {
         if (main == null) return;
+        final long generation=sessionGeneration();
         main.post(new Runnable() {
             @Override
             public void run() {
                 try {
+                    if(generation<0||generation!=sessionGeneration())return;
                     if (!parkAllowed()) { stop("Park or session unavailable"); return; }
                     handle(sid, m);
                 } catch (Throwable t) {
@@ -260,9 +267,11 @@ public final class Video {
     /** the phone asked the car to show the video (requestUI videoplayback:) */
     public static void onShowRequested() {
         if (main == null) return;
+        final long generation=sessionGeneration();
         main.post(new Runnable() {
             @Override
             public void run() {
+                if(generation<0||generation!=sessionGeneration())return;
                 if (!parkAllowed()) { stop("Park or session unavailable"); return; }
                 show();
             }
@@ -289,7 +298,10 @@ public final class Video {
         } else if ("stop".equals(type) || "removePlayQueueItem".equals(type)) {
             stop("phone: " + type);
         }
-        if ("request".equals(m.get("kind"))) send(answer(m));
+        if ("request".equals(m.get("kind"))) {
+            Map<String,Object> response=answer(m);
+            if(parkAllowed())callCore("ioniq6.cpclimate.VideoMessages","engineSend",new Class<?>[]{long.class,Map.class},sid,response);
+        }
     }
 
     static void insert(Map<?, ?> m) {
@@ -872,6 +884,7 @@ public final class Video {
         release();
         if (shown) hide(why);
         itemUuid = null;
+        streamId = -1;
         currentUrl = null;
         rateReceived = false;
         requestedPlaying = false;

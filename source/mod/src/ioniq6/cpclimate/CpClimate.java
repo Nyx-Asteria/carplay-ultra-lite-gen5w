@@ -62,6 +62,7 @@ public final class CpClimate extends ModEntry {
     static volatile long sessionGeneration;
     static volatile boolean sessionActive;
     static CarPlayMedia media;
+    public static long videoSessionGeneration() { return sessionGeneration; }
     public static boolean videoAllowed() { return VideoUi.enabled && sessionActive && ParkedVideo.allowed(); }
 
     /** files/cpc-vspi.bplist: VehicleState.vspi for the native /info hook (removed if it can't be built) */
