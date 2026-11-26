@@ -179,6 +179,18 @@ public class ClimateMapTest {
             Map<Long,Object> batch = new java.util.LinkedHashMap<Long,Object>();
             batch.put(hl, 2L); batch.put(vl, 2L);
             check("ambiguous dual activation ignored " + side, ClimateMap.commands(batch, batch, 2).isEmpty());
+            Map<Long,Object> prior = new java.util.LinkedHashMap<Long,Object>();
+            prior.put(hl, 3L); prior.put(ho, true); prior.put(vl, 0L); prior.put(vo, false);
+            batch.clear();
+            batch.put(hl, 2L); batch.put(ho, true); batch.put(vl, 3L); batch.put(vo, false);
+            List<ClimateMap.Command> retained = ClimateMap.commands(batch, prior, 2);
+            check("inactive fan retained maximum does not block heat " + side,
+                    retained.size() == 1 && retained.get(0).a == code && retained.get(0).b == 7);
+            batch.clear();
+            batch.put(hl, 3L); batch.put(ho, false); batch.put(vl, 2L); batch.put(vo, true);
+            retained = ClimateMap.commands(batch, prior, 2);
+            check("inactive heat retained level does not block ventilation " + side,
+                    retained.size() == 1 && retained.get(0).a == code && retained.get(0).b == 4);
         }
         VehicleState.coolingLayout = true;
         VehicleState.wheelHeater = true;
