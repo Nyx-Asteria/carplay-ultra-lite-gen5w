@@ -36,7 +36,10 @@ final class SessionLogPolicy {
     static String sanitize(String message) {
         if (message == null) return "[null]";
         if (SECRET.matcher(message).find()) return "[sensitive message withheld]";
-        String safe = message.replaceAll("(?i)\\\\b(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\\\\b", "[address withheld]").replaceAll("(?<![0-9])(?:[0-9]{1,3}\\\\.){3}[0-9]{1,3}(?![0-9])", "[address withheld]").replace('\r', ' ').replace('\n', ' ').replace('\t', ' ');
+        String safe = message.replaceAll("(?i)(?<![0-9a-f])(?:[0-9a-f]{2}:){5}[0-9a-f]{2}(?![0-9a-f])", "[address withheld]")
+            .replaceAll("(?i)(?<![0-9a-z:])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{0,4}::(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{0,4})(?:%[0-9a-z_.-]+)?(?![0-9a-z:])", "[address withheld]")
+            .replaceAll("(?<![0-9])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?![0-9])", "[address withheld]")
+            .replace('\r', ' ').replace('\n', ' ').replace('\t', ' ');
         return safe.length() > MAX_MESSAGE ? safe.substring(0, MAX_MESSAGE) + " [truncated]" : safe;
     }
 

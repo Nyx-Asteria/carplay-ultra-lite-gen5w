@@ -67,8 +67,11 @@ final class SessionLogWriter {
         offer(new Event(1,System.currentTimeMillis(),generation,SessionLogPolicy.sanitize(metadata),true));
     }
     void record(long generation, SessionLogPolicy.Level level, SessionLogPolicy.Category category, String safe) {
+        recordAt(generation,level,category,safe,System.currentTimeMillis());
+    }
+    void recordAt(long generation, SessionLogPolicy.Level level, SessionLogPolicy.Category category, String safe,long at) {
         if (safe == null) return;
-        Event e=new Event(0,System.currentTimeMillis(),generation,level+" "+category+" "+SessionLogPolicy.sanitize(safe),
+        Event e=new Event(0,at,generation,level+" "+category+" "+SessionLogPolicy.sanitize(safe),
             level==SessionLogPolicy.Level.ERROR || level==SessionLogPolicy.Level.WARN);
         e.category=category;
         offer(e);

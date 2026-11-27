@@ -48,12 +48,16 @@ jobs:
           AJ=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
           sh "$SDK/bin/build-mod.sh" source/mod out/core out/work
           CP="$PWD/out/work/classes:$AJ:$SDK/lib/hmgapi-runtime.jar:$SDK/lib/hmgapi-runtime-stubs.jar"
-          javac --release 8 -cp "$CP" -d out/tests source/tests/SessionLogPolicyTest.java source/tests/SessionLogWriterTest.java source/tests/SessionUsbExportTest.java source/tests/ProjectionLogCaptureTest.java
-          for T in SessionLogPolicyTest SessionLogWriterTest SessionUsbExportTest ProjectionLogCaptureTest; do
+          javac --release 8 -cp "$CP" -d out/tests source/tests/SessionLogPolicyTest.java source/tests/SessionLogWriterTest.java source/tests/SessionUsbExportTest.java source/tests/ProjectionLogCaptureTest.java source/tests/PreSessionEventsTest.java
+          for T in SessionLogPolicyTest SessionLogWriterTest SessionUsbExportTest ProjectionLogCaptureTest PreSessionEventsTest; do
             java -cp "out/tests:$CP" "ioniq6.cpclimate.$T"
           done
           javac --release 8 -cp "$CP" -d out/tests source/tests/ParkedStateTest.java
           java -cp "out/tests:$CP" ioniq6.cpclimate.ParkedStateTest
+          javac --release 8 -cp "$CP" -d out/tests source/tests/PassengerTempTraceTest.java
+          java -cp "out/tests:$CP" ioniq6.cpclimate.PassengerTempTraceTest
+          javac --release 8 -cp "$CP" -d out/tests source/tests/SeatCommandTraceTest.java
+          java -cp "out/tests:$CP" ioniq6.cpclimate.SeatCommandTraceTest
           javac --release 8 -cp "$CP" -d out/tests source/tests/SeatSchemaTest.java
           javac --release 8 -cp "$CP" -d out/tests source/tests/RadioActivationTraceTest.java
           java -cp "out/tests:$CP" ioniq6.cpclimate.RadioActivationTraceTest
