@@ -50,3 +50,5 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [x] AirPlay player-specific listeners and generation-bound audio fallback; CI pending.
 
 - [x] Preserve safe display registration and screen SETUP identities in native/session diagnostics; no arbitrary peer UUIDs (CI pending).
+
+- [x] HMG-API vehicle shortcut: RC10 manifest confirms MAIN without LAUNCHER; explicit hmgapi.app.MainActivity fallback, resolve before launch. Nemesis entry point still needs evidence; vehicle verification pending.
