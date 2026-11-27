@@ -5,3 +5,14 @@ source/mod/tools/video/libs/
 # check.sh output
 source/check/report/
 source/check/cp-climate-check.jar
+
+# Local build and test output
+/out/
+/.hmgapi/
+/.comfort/
+/.collector/
+/.wireless/
+/.pps/
+/.tbt/
+__pycache__/
+*.pyc
