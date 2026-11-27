@@ -32,6 +32,7 @@ java -cp out/tests ioniq6.cpclimate.video.VideoSessionPolicyTest
 run_core_test RuntimeEnvironmentTest
 
 run_core_test ThemeOwnershipTest
+run_core_test NativeProfileTest
 
 run_core_test VehiclePageStateTest
 
