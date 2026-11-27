@@ -8,6 +8,46 @@
       "title": "Climate integration",
       "description": "Enable K5 climate display and commands, including both front heated and ventilated seats. Restart required.",
       "apply": "restart"
+    },
+    {
+      "key": "vehicle_page",
+      "type": "toggle",
+      "default": true,
+      "title": "K5 vehicle information and shortcuts",
+      "description": "Vehicle app readings and installed head-unit app shortcuts. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "parked_video",
+      "type": "toggle",
+      "default": true,
+      "title": "Parked AirPlay video",
+      "description": "Allow video only during an active CarPlay session with fresh Park feedback. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "volume_link",
+      "type": "toggle",
+      "default": true,
+      "title": "Volume synchronization",
+      "description": "Synchronize supported CarPlay audio streams with the head unit. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "media_controls",
+      "type": "toggle",
+      "default": true,
+      "title": "Media controls",
+      "description": "Forward explicit play, pause and track commands. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "ultra_theme",
+      "type": "toggle",
+      "default": true,
+      "title": "Ultra theme",
+      "description": "Experimental shared CarPlay theme and virtual display profile. Restart required.",
+      "apply": "restart"
     }
   ]
 }

@@ -154,6 +154,7 @@ final class VideoUi {
 
     /** the phone wants to show a video: borrow the screen for it, as LIVI does; the engine shows it, else back after RETURN_MS */
     static void onVideoRequested() {
+        if (!CpClimate.videoAllowed()) { log("[video] request denied: fresh Park and active session required"); VideoMessages.stopEngine("Park not confirmed"); return; }
         log("video: the phone asked for " + URL + " (kept from DiPO); borrowing the screen for " + BORROW_ID);
         final Object service = carPlay;
         if (service == null) return;

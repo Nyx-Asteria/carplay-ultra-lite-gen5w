@@ -44,7 +44,7 @@ final class VideoMessages extends Thread {
     // ---- the video engine (tools/video, merged into hooks.jar by build.sh; absent in a plain build) ----
 
     static volatile VideoMessages instance;
-    static volatile Method engineMessage, engineShow;
+    static volatile Method engineMessage, engineShow, engineStop;
 
     /** loads the engine if this build has it: Video.init(context); false if not */
     static boolean startEngine(Object context) {
@@ -53,6 +53,7 @@ final class VideoMessages extends Thread {
             v.getMethod("init", android.content.Context.class).invoke(null, context);
             engineMessage = v.getMethod("onMessage", long.class, Map.class);
             engineShow = v.getMethod("onShowRequested");
+            engineStop = v.getMethod("onParkLost", String.class);
             return true;
         } catch (ClassNotFoundException e) {
             return false;
@@ -61,6 +62,11 @@ final class VideoMessages extends Thread {
             if (o != null) o.log("video: engine not started: " + t);
             return false;
         }
+    }
+
+    static void stopEngine(String reason) {
+        try { if (engineStop != null) engineStop.invoke(null, reason); }
+        catch (Throwable t) { engineLog("[video] stop failed: " + t.getClass().getSimpleName()); }
     }
 
     /** the engine's answer or notification to the phone */
@@ -91,8 +97,9 @@ final class VideoMessages extends Thread {
                     Map<?, ?> m = message(buf, n);
                     // playbackInfo comes every second: logged for the first few, then every 30th
                     boolean info = m != null && "playbackInfo".equals(m.get("type"));
-                    if (!info || count < 10 || count % 30 == 0) out.log(describe(buf, n, count));
+                    if (!info || count < 10 || count % 30 == 0) out.log("[video] message #" + count + " type=" + (m == null ? "invalid" : m.get("type")));
                     if (m != null) {
+                        if (!CpClimate.videoAllowed()) continue;
                         Method e = engineMessage;
                         if (e != null) e.invoke(null, sid(buf), m);
                         else answer(sid(buf), m);

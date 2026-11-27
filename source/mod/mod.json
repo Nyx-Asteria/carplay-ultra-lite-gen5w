@@ -22,9 +22,7 @@
     "entry": "ioniq6.cpclimate.CpClimate",
     "points": {
       "dipo.carplay.session_started": "observe",
-      "dipo.carplay.session_finalized": "observe",
-      "dipo.carplay.iap_message": "observe",
-      "dipo.carplay.native_iap_send": "change"
+      "dipo.carplay.session_finalized": "observe"
     },
     "native": {
       "libCarPlayCore.so": [

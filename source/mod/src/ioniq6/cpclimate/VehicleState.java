@@ -73,6 +73,10 @@ final class VehicleState {
     private final Map<Long, String> names = new HashMap<Long, String>();
     private final Map<Long, String> controls = new HashMap<Long, String>();
     private final OpackCodec.Raw accessories;
+    static volatile VehiclePage vehiclePage;
+    static volatile boolean climateEnabled = true;
+    interface Controls { void pressed(String name, Object value); }
+    static volatile Controls mediaControls;
 
     /** the vehicle variant the phone resolves a CarPlay theme's assets by (setting vehicle_variant), "" for LIVI's stock description */
     static volatile String variant = "";
@@ -573,6 +577,35 @@ final class VehicleState {
             }
         }
         if (extras && coolingLayout && coolingMin != -3) out.log("VS front seat cooling published from " + coolingMin + " (test)");
+        VehiclePage page = vehiclePage;
+        if (page != null) {
+            byte[] installed = page.install(acc, values, names, writable, shared);
+            if (installed != null) { acc = installed; out.log("[vehicle] page schema installed"); }
+            else out.log("[vehicle] automaker accessory missing");
+        }
+        if (!climateEnabled) {
+            Object decoded = OpackCodec.decode(acc);
+            if (decoded instanceof List) {
+                java.util.Iterator<?> it = ((List<?>) decoded).iterator();
+                while (it.hasNext()) {
+                    Object obj = it.next();
+                    if (!(obj instanceof Map)) continue;
+                    Long id = OpackCodec.asLong(((Map<?,?>) obj).get("iid"));
+                    if (id == null || (id != 512L && id != 1024L)) continue;
+                    Object services = ((Map<?,?>) obj).get("services");
+                    if (services instanceof List) for (Object svc : (List<?>) services) {
+                        Object chars = ((Map<?,?>) svc).get("characteristics");
+                        if (chars instanceof List) for (Object c : (List<?>) chars) {
+                            Long iid = OpackCodec.asLong(((Map<?,?>) c).get("iid"));
+                            if (iid != null) { values.remove(iid); writable.remove(iid); shared.remove(iid); names.remove(iid); }
+                        }
+                    }
+                    it.remove();
+                }
+                acc = OpackCodec.encode(decoded);
+            }
+            out.log("[climate] disabled; climate and seat accessories omitted");
+        }
         byte[] versioned = withVersions(VsData.bytes(VsData.ACCESSORIES), acc);
         if (versioned != null) {
             acc = versioned;
@@ -791,6 +824,27 @@ final class VehicleState {
             Object before = values.put(iid, v);
             if (!same(before, v) && followed.contains(iid)) changed.put(iid, v);
         }
+        VehiclePage page = vehiclePage;
+        if (page != null) {
+            Map<Long, Object> pageWrites = new LinkedHashMap<Long, Object>();
+            for (Map.Entry<Object, Object> e : written.entrySet()) {
+                Long iid = OpackCodec.asLong(e.getKey());
+                if (iid != null && writable.contains(iid) && page.owns(iid)) pageWrites.put(iid, e.getValue());
+            }
+            for (Map.Entry<Long, Object> e : page.phoneWrote(pageWrites).entrySet()) {
+                values.put(e.getKey(), e.getValue());
+                if (followed.contains(e.getKey())) changed.put(e.getKey(), e.getValue());
+            }
+        }
+        CarAudio audio = CarAudio.instance;
+        if (audio != null) {
+            Map<Long,Object> audioWrites = new LinkedHashMap<Long,Object>();
+            for (Map.Entry<Object,Object> e : written.entrySet()) {
+                Long iid = OpackCodec.asLong(e.getKey());
+                if (iid != null && writable.contains(iid)) audioWrites.put(iid, e.getValue());
+            }
+            audio.phoneWrote(audioWrites);
+        }
         Car c = car;
         if (c == null) {
             settle(written, changed);
@@ -800,7 +854,7 @@ final class VehicleState {
             long now = System.currentTimeMillis();
             for (Map.Entry<Object, Object> e : written.entrySet()) {
                 Long iid = OpackCodec.asLong(e.getKey());
-                if (iid == null || !writable.contains(iid)) continue;
+                if (iid == null || !writable.contains(iid) || (page != null && page.owns(iid))) continue;
                 sent.put(iid, e.getValue());
                 heldSince.put(iid, now);
             }
@@ -826,6 +880,8 @@ final class VehicleState {
             }
             // LIVI's radio controls; the car has no radio hooked up, so they are only logged
             out.log("VS phone pressed " + name + " " + shown(e.getValue()));
+            Controls media = mediaControls;
+            if (media != null) media.pressed(name, e.getValue());
             answered.put(e.getKey(), null);
         }
         Map<Object, Object> answer = dict("command", "controlResponse", "transactionID", transaction);

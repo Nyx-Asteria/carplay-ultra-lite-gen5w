@@ -15,13 +15,22 @@ final class ThemeContribution {
     private Object registered;
     private Method remove;
 
+    boolean available(ModContext mod) {
+        try {
+            Object service = mod.use(PROVIDER, SERVICE);
+            if (service == null) { mod.log("[theme] provider not published"); return false; }
+            Class<?> api = Class.forName(API, false, service.getClass().getClassLoader());
+            return api.isInstance(service) && api.getField("API_VERSION").getInt(null) == 2;
+        } catch (Throwable t) { mod.error("[theme] capability probe failed", t); return false; }
+    }
+
     synchronized boolean register(ModContext mod) {
         if (registered != null) return true;
         try {
             Object service = mod.use(PROVIDER, SERVICE);
-            if (service == null) return false;
+            if (service == null) { mod.log("[theme] shared identity service unavailable"); return false; }
             Class<?> api = Class.forName(API, false, service.getClass().getClassLoader());
-            if (!api.isInstance(service) || api.getField("API_VERSION").getInt(null) != 2) return false;
+            if (!api.isInstance(service) || api.getField("API_VERSION").getInt(null) != 2) { mod.log("[theme] incompatible shared identity API"); return false; }
             Class<?> theme = Class.forName(API + "$ThemeIdentity", false, api.getClassLoader());
             Object value = theme.getConstructor(String.class, long.class, String.class)
                     .newInstance("44C9FA31EC", 985L, "19.0");
@@ -46,6 +55,7 @@ final class ThemeContribution {
             remove.invoke(registered, mod.id);
             registered = null;
             remove = null;
+            mod.log("[theme] contribution withdrawn");
             return true;
         } catch (Exception e) {
             mod.error("Ultra theme withdrawal failed", e);
