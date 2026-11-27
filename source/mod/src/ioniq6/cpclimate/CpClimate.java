@@ -246,16 +246,9 @@ public final class CpClimate extends ModEntry {
                     uiSync=false;
                 }
             }
-            // Evaluate every flag even after a failure so stale settings are cleared where possible.
-            boolean profileReady=NativeProfile.writeWide(m,dir,wide);
-            profileReady &= NativeProfile.writeUltra(m,dir,themedIds?2:cluster?1:0);
-            profileReady &= NativeProfile.writeFlag(m,dir,"cpc-uisync",uiSync,"uiSync (CarPlay theme layouts and palettes)");
-            profileReady &= NativeProfile.writeFlag(m,dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
+            boolean profileReady=NativeProfile.writeDisplayProfile(m,dir,wide,themedIds?2:cluster?1:0,
+                    uiSync,m.settingBoolean("ultra_independent_sync",false));
             if(!profileReady) {
-                NativeProfile.writeWide(m,dir,"0");
-                NativeProfile.writeUltra(m,dir,0);
-                NativeProfile.writeFlag(m,dir,"cpc-uisync",false,"uiSync");
-                NativeProfile.writeFlag(m,dir,"cpc-sync-independent",false,"independent uiSync");
                 runtimeLog("[native] display profile persistence failed; patch withheld");
                 return;
             }
