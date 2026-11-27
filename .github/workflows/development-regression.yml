@@ -1,7 +1,7 @@
 name: Development regression
 on:
   push:
-    branches: [k5-compatibility]
+    branches: [k5-compatibility, rc11]
     paths:
       - 'source/mod/src/**'
       - 'source/mod/tools/video/**'
