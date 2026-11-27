@@ -379,7 +379,8 @@ final class CarClimate extends Thread implements VehicleState.Car {
         while (true) {
             try {
                 Thread.sleep(PERIOD_MS);
-                VehicleState vs = state[0];
+                VehicleState vs;
+                synchronized (state) { vs=state[0]; }
                 if (vs == null || !(lanes[0].isOpen() || lanes[1].isOpen())) continue;
                 long generation = CpClimate.sessionGeneration;
                 ClimateMap.Reading r = read();
@@ -397,7 +398,8 @@ final class CarClimate extends Thread implements VehicleState.Car {
                     out.log("CAR " + describe(r));
                     last = seen;
                 }
-                lanes[1].deliver(vs.fromCar(values));
+                if(generation!=CpClimate.sessionGeneration)continue;
+                lanes[1].deliverOwned(vs,vs.fromCar(values));
                 failures = 0;
             } catch (Throwable t) {
                 datc = null;

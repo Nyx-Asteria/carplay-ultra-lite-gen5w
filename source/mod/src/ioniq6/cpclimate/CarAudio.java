@@ -277,7 +277,8 @@ final class CarAudio extends Thread {
                     if (!woken) wake.wait(PERIOD_MS);
                     woken = false;
                 }
-                VehicleState vs = state[0];
+                VehicleState vs;
+                synchronized (state) { vs=state[0]; }
                 if (!active() || vs == null || !(lanes[0].isOpen() || lanes[1].isOpen())) { shown = null; observedGeneration = -1; boseSample=null; lastBoseGeneration=-1; synchronized (this) { observed.clear(); } sends.clear(); VolumePanel.publishReady(panelContext, false); continue; }
                 long generation = CpClimate.sessionGeneration;
                 Map<Long, Object> fresh = new LinkedHashMap<Long, Object>();
@@ -297,7 +298,14 @@ final class CarAudio extends Thread {
                     out.log("[audio] " + last);
                 }
                 if (!active() || generation != CpClimate.sessionGeneration || vs != state[0]) continue;
-                lanes[1].deliver(vs.fromCar(fresh));
+                if (!lanes[1].deliverOwned(vs,vs.fromCar(fresh)) || !active()
+                        || generation!=CpClimate.sessionGeneration) {
+                    shown=null;
+                    observedGeneration=-1;
+                    synchronized(this){observed.clear();}
+                    VolumePanel.publishReady(panelContext,false);
+                    continue;
+                }
                 synchronized (this) { observed.clear(); observed.addAll(fresh.keySet()); }
                 mainStream = main;
                 observedGeneration = generation;
