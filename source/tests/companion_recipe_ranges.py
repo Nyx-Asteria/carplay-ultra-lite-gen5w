@@ -31,20 +31,22 @@ def overlap(a,b):
 def conflicts(a,b):
     av,aw = a
     bv,bw = b
-    return [(x,y) for left,right in ((aw,bv),(bw,av),(aw,bw))
+    return [(x,y) for left,right in ((av,bv),(aw,bv),(bw,av),(aw,bw))
             for x in left for y in right if overlap(x,y)]
 
 def main():
     assert overlap((0,4,'branch'),(3,5,'verify'))
     assert not overlap((0,4,'branch'),(4,8,'verify'))
     assert conflicts(([(0,8,'verify')],[(2,6,'patch')]), ([(4,12,'verify')],[(8,9,'patch')]))
+    # RC10 NativePatch reserves entire verify regions, even unmodified bytes.
+    assert conflicts(([(0,8,'verify')],[(0,1,'patch')]), ([(6,12,'verify')],[(11,12,'patch')]))
     cpul = parse(sys.argv[1])
     for path in sys.argv[2:]:
         wcp = parse(path)
         hits = conflicts(cpul,wcp)
         if hits:
             raise SystemExit(f'{path}: cross-recipe collision {hits}')
-        print(f'{path}: no stock-offset write/verify or write/write collision')
+        print(f'{path}: no stock-offset verification or write collision')
 
 if __name__ == '__main__':
     main()
