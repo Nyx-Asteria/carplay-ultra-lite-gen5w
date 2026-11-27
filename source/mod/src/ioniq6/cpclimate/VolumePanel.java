@@ -286,13 +286,13 @@ final class VolumePanel {
                     try {
                         long now = android.os.SystemClock.elapsedRealtime();
                         if (!VolumePanelPolicy.eligible(mod.enabled(), mod.settingBoolean("k5_integration", true),
-                                true, readyUntil, now)) return;
+                                mod.settingBoolean("suppress_stock_volume", true), readyUntil, now)) return;
                         Object dipo = context.getSystemService("dipo");
                         if (dipo == null) return;
                         Object stat = Points.call(null, "framework.dipo_manager.current_stat", dipo);
                         boolean connected = stat instanceof Number && ((Number)stat).intValue() == 1;
                         if (!VolumePanelPolicy.suppress(mod.enabled(), mod.settingBoolean("k5_integration", true),
-                                true, readyUntil,
+                                mod.settingBoolean("suppress_stock_volume", true), readyUntil,
                                 android.os.SystemClock.elapsedRealtime(), connected, foreground(context))) return;
                         p.setResult(null);
                         if (now - lastNotice > 2000) {
@@ -340,7 +340,7 @@ final class VolumePanel {
     }
     static synchronized void onStockKey(final Context c, final CarAudio audio) {
         final ModContext mod = CpClimate.mod;
-        if (mod == null || !mod.enabled() || !mod.settingBoolean("k5_integration", true) || !audio.panelReady()) return;
+        if (mod == null || !mod.enabled() || !mod.settingBoolean("k5_integration", true) || !mod.settingBoolean("suppress_stock_volume", true) || !audio.panelReady()) return;
         if (worker == null) {
             hide = CarApi.code(CarAudio.IFACE, "hideVolumeDisplay", "(Z)V");
             if (hide < 0) { mod.log("[volume-panel] hide getter unavailable; stock panel retained"); return; }
@@ -349,7 +349,8 @@ final class VolumePanel {
         }
         final long generation = CpClimate.sessionGeneration;
         for (long delay : new long[]{90,250}) worker.postDelayed(new Runnable() { public void run() {
-            if (generation != CpClimate.sessionGeneration || !audio.panelReady() || !mod.settingBoolean("k5_integration", true) || !foreground(c)) return;
+            if (generation != CpClimate.sessionGeneration || !audio.panelReady() || !mod.settingBoolean("k5_integration", true)
+                    || !mod.settingBoolean("suppress_stock_volume", true) || !foreground(c)) return;
             Parcel data = Parcel.obtain(), reply = Parcel.obtain();
             try {
                 IBinder b = CarClimate.service(CarAudio.SERVICE);
