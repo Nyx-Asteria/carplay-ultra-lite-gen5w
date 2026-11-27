@@ -515,7 +515,8 @@ final class ClimateMap {
             if (!(v instanceof Long)) return null;
             l = (Long) v;
         }
-        l = Math.max(cooling ? -3 : 0, Math.min(3, l));
+        // Match the advertised four-step diagnostic layout: -4 must reach high ventilation.
+        l = Math.max(cooling ? (VehicleState.coolingMin <= -4 ? -4 : -3) : 0, Math.min(3, l));
         if (l < 0) return new Command(SEAT, code, coolingState(l), 0);
         return new Command(SEAT, code, l == 0 ? 2 : (int) l + 5, 0);
     }
