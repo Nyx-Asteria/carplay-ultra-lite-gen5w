@@ -855,6 +855,27 @@ int main(void) {
         CHECK("VSP merge leaves malformed OEM reply untouched",g(rep,"enabledFeatures")==stock);
         m_release(rep);m_release(enabled);m_release(stock);m_release(vsp);
     }
+    {
+        /* FileTransfer belongs to WCP. CPUL may preserve an existing owner
+         * contribution, but never negotiate it merely because it is offered. */
+        Dict *rq=(Dict *)m_new_dict(0,0,&cb_dkey,&cb_dval);
+        Arr *offer=(Arr *)m_new_arr(0,0,&cb_arr);
+        Str *ft=str("fileTransfer"), *vsp=str("vehicleStateProtocol"), *enabled=str("enabledFeatures");
+        m_append(offer,ft);m_append(offer,vsp);
+        m_set(rq,kf,offer);m_release(offer);
+        rep=(Dict *)m_new_dict(0,0,&cb_dkey,&cb_dval);
+        cpc_setup_hook(rq,rep);
+        echo=g(rep,"enabledFeatures");
+        CHECK("FileTransfer offer does not cause CPUL to enable it",echo && echo->n==1
+              && !strcmp(s_of(echo->v[0]),"vehicleStateProtocol"));
+        Arr *prior=(Arr *)m_new_arr(0,0,&cb_arr);
+        m_append(prior,ft);m_set(rep,enabled,prior);m_release(prior);
+        cpc_setup_hook(rq,rep);
+        echo=g(rep,"enabledFeatures");
+        CHECK("CPUL preserves existing other-owner FileTransfer feature",echo && echo->n==2
+              && !strcmp(s_of(echo->v[0]),"fileTransfer") && !strcmp(s_of(echo->v[1]),"vehicleStateProtocol"));
+        m_release(rep);m_release(rq);m_release(ft);m_release(vsp);m_release(enabled);
+    }
     Dict *req2 = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
     Arr *feat2 = (Arr *)m_new_arr(0, 0, &cb_arr);
     Str *s2 = str("hevc"); m_append(feat2, s2); m_release(s2);
@@ -966,6 +987,11 @@ int main(void) {
         f = fopen(DIR "cpc-vs-3.key", "rb"); kn = f ? fread(kf, 1, sizeof kf, f) : 0; if (f) fclose(f);
         CHECK("uiSync stream keys in cpc-vs-3.key (72 bytes)", kn == 72);
         CHECK("uiSync stream: logged as uiSync on port 7135", strstr(lastlog, "uiSync stream 3 set up on port 7135") != 0);
+        Str *unknownRcs=str("00000000-0000-0000-0000-000000000000");
+        m_set(st,kt,unknownRcs);m_release(unknownRcs);
+        CHECK("themed UI Sync does not claim unknown remote-control client",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==4);
+        Str *syncAgain=str("07D9F906-8D64-4B54-A808-A20BCA2C51C2");
+        m_set(st,kt,syncAgain);m_release(syncAgain);
         unsigned char published[72]; memcpy(published,kf,72);
         CHECK("UI Sync staging file absent after publication",access(DIR "cpc-vs-3.key.tmp",F_OK)!=0);
         CHECK("create deterministic staging obstruction",mkdir(DIR "cpc-vs-3.key.tmp",0700)==0);

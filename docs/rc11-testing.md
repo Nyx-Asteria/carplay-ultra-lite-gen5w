@@ -26,6 +26,7 @@ Development candidate — not a claim of vehicle verification. See the mandatory
 - While parked only, test ordinary unprotected media and picture-only diagnostic separately. Correlate first frame, readiness, transport teardown and session finalization. Stop if projection becomes unstable. No DRM or Park bypass.
 
 ## Companion integration
+- Baseline tests use FileTransfer disabled/unavailable. A future compatible WCP RC7 experiment is a separate owner-approved comparison; no requirement for CPUL release readiness or asset installation.
 - Keep one navigation publisher: disable WCP cluster/HUD TBT before enabling Standalone TBT, retain shared identity and wireless/audio functionality.
 - Test Apple Maps, Google Maps and Waze individually; do not infer Waze support from other applications.
 - Verify PPS scaling and touch alignment with CarPlay; Android Auto remains separately unverified.
