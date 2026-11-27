@@ -108,6 +108,25 @@ public class UiSyncTest {
         out = sync.handle(framed(map("type", 2L, "ssn", 1L, "psn", 8L, "noAck", Boolean.TRUE)));
         check("noAck commands get no ack", out.isEmpty());
         check("another session is not ours", sync.handle(framed(map("type", 2L, "ssn", 9L, "psn", 3L))).isEmpty());
+        Map<Object,Object> acceptedPanel = new LinkedHashMap<Object,Object>(sync.panel);
+        Map<Object,Object> stale = new LinkedHashMap<Object,Object>();
+        stale.put("displayUUID","Cluster_Display");
+        stale.put("data",Bplist.encode(map("type",2L,"ssn",9L,"psn",99L)));
+        check("stale session leaves reply envelope and receive sequence intact",
+                sync.handle(OpackCodec.encode(stale)).isEmpty()
+                && acceptedPanel.equals(sync.panel) && sync.lastRx==8);
+        stale.put("data",Bplist.encode(map("type",99L,"ssn",1L,"psn",99L)));
+        check("unknown message type leaves accepted envelope intact",
+                sync.handle(OpackCodec.encode(stale)).isEmpty() && acceptedPanel.equals(sync.panel));
+        UiSync pending = new UiSync();
+        pending.handle(reset);
+        Map<Object,Object> resetPanel = new LinkedHashMap<Object,Object>(pending.panel);
+        stale.put("data",Bplist.encode(map("type",3L,"ssn",1L,"psn",99L)));
+        check("premature command acknowledgement leaves reset state intact",
+                pending.handle(OpackCodec.encode(stale)).isEmpty()
+                && pending.lastRx==0 && resetPanel.equals(pending.panel));
+        check("valid reset completion still initializes phone-managed session",
+                pending.handle(complete).size()==3 && pending.ready);
         boolean refused = false;
         try {
             sync.handle(new byte[] {(byte) 0xff});

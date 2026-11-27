@@ -162,10 +162,20 @@ final class UiSync {
         Object h = Bplist.decode((byte[]) d);
         if (!(h instanceof Map)) return out;
         Map<String, Object> header = (Map<String, Object>) h;
-        panel = new LinkedHashMap<Object, Object>(frame);
-        panel.remove("data");
         Long type = OpackCodec.asLong(header.get("type"));
         Long ssn = OpackCodec.asLong(header.get("ssn"));
+        // Rejected frames must not change the envelope used for subsequent replies.
+        if (type == null) return out;
+        if (type == RESET) {
+            if (awaitingResetComplete && nextTx == 2) return out;
+        } else {
+            if (ssn == null || ssn != session) return out;
+            if (!(type == RESET_COMPLETE && awaitingResetComplete)
+                    && !(type == COMMAND && ready)
+                    && !(type == COMMAND_ACK && ready)) return out;
+        }
+        panel = new LinkedHashMap<Object, Object>(frame);
+        panel.remove("data");
         if (type != null && type == RESET) {
             if (awaitingResetComplete && nextTx == 2) return out;
             session++;
