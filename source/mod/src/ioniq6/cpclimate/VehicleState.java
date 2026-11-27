@@ -1129,7 +1129,7 @@ final class VehicleState {
                 Long iid = OpackCodec.asLong(e.getKey());
                 if (iid != null && writable.contains(iid)) audioWrites.put(iid, e.getValue());
             }
-            audio.phoneWrote(audioWrites);
+            audio.phoneWrote(this,audioWrites);
         }
         Car c = car;
         if (c == null) {
