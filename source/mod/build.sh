@@ -11,7 +11,7 @@ V=$HERE/tools/video
 [ -d "$V/src" ] || exit 0
 [ -f "$V/r8.jar" ] || { echo "build.sh: the video engine's libraries are missing: run sh $V/fetch-libs.sh first" >&2; exit 1; }
 ID=$(basename "$HERE")
-CORE=$PWD/out/mod-classes/$ID
+CORE=${HMGAPI_MOD_CLASSES:-$PWD/out/mod-classes/$ID}
 [ -d "$CORE" ] || { echo "build.sh: no $CORE (HMG-API's mod build first)" >&2; exit 1; }
 SDK=${ANDROID_HOME:-$HOME/Library/Android/sdk}
 ANDROID_JAR=$(ls -d "$SDK"/platforms/android-*/android.jar | sort -V | tail -1)
@@ -26,7 +26,7 @@ for r in "$V"/rules/*.pro; do RULES="$RULES --pg-conf $r"; done
 # program: cp-climate + engine + libraries (androidx.annotation is compile-only)
 PROGRAM="$W/program.jar"
 for j in "$V"/libs/*.jar; do case "$(basename "$j")" in annotation-*) ;; *) PROGRAM="$PROGRAM $j" ;; esac; done
-java -cp "$V/r8.jar" com.android.tools.r8.R8 --release --min-api 19 --lib "$ANDROID_JAR" --classpath "$V/libs/annotation-1.3.0.jar" \
+java -cp "$V/r8.jar" com.android.tools.r8.R8 --release --min-api 19 --lib "$ANDROID_JAR" --classpath "$V/libs/annotation-1.3.0.jar" ${HMGAPI_R8_CLASSPATH_ARGS:-} \
     $RULES --output "$W/out.zip" $PROGRAM >"$W/r8.log" 2>&1 || { cat "$W/r8.log" >&2; exit 1; }
 DEXES=$(unzip -l "$W/out.zip" | grep -c 'classes[0-9]*\.dex' || true)
 [ "$DEXES" = 1 ] || { echo "build.sh: R8 made $DEXES dex files; Android 4.4's class loader reads only one" >&2; exit 1; }

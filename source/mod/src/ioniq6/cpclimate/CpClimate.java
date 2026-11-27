@@ -59,6 +59,7 @@ public final class CpClimate extends ModEntry {
         themePreflight = targetVerified && recentStarts().size() < GUARD_STARTS
                 && m.settingBoolean("ultra_theme", true) && theme.available(m);
         m.log("[theme] boot preflight=" + themePreflight);
+        if (targetVerified && m.settingBoolean("volume_panel", true) && m.settingBoolean("volume_link", true)) VolumePanel.zygote(m);
     }
 
     private static String property(String key) {
@@ -119,7 +120,7 @@ public final class CpClimate extends ModEntry {
         m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("climate_test", true));
         if (!targetVerified) return;
         boolean climate = m.settingBoolean("climate_test", true);
-        boolean any = climate || m.settingBoolean("vehicle_page", true) || m.settingBoolean("volume_link", true)
+        boolean any = climate || m.settingBoolean("native_radio", true) || m.settingBoolean("comfort_thresholds", true) || m.settingBoolean("vehicle_page", true) || m.settingBoolean("volume_link", true)
                 || m.settingBoolean("media_controls", true) || m.settingBoolean("parked_video", true) || themePreflight;
         if (!any) { m.log("[runtime] all features off; native patch withheld"); return; }
         mod = m;
@@ -164,7 +165,9 @@ public final class CpClimate extends ModEntry {
                 ParkedVideo park = new ParkedVideo(m);
                 if (!park.available()) { m.log("[video] Park getter missing; video withheld"); extraBits = 0; }
                 else {
-                    writeNumber(dir, "cpc-video-nosound", 1, "video: picture only");
+                    boolean sound = m.settingBoolean("video_audio", true);
+                    writeNumber(dir, "cpc-video-nosound", sound ? 0 : 1, "video: picture only");
+                    m.log("[video-audio] local player audio requested=" + sound + "; stock projection route untouched");
                     writeNumber(dir, "cpc-video-nopicture", 0, "video: picture enabled");
                     new VideoMessages(new VsChannel.Log() { public void log(String s) { m.log("[video] " + s); } });
                     if (!VideoMessages.startEngine(app.context)) {
@@ -213,7 +216,7 @@ public final class CpClimate extends ModEntry {
             VehicleState.twoRear = "d".equals(layout);
             // /info's copy of the car (the phone builds its car from it): cp-climate's description, not LIVI's
             K5Vehicle vehicle = null;
-            if (app.context != null && m.settingBoolean("vehicle_page", true)) {
+            if (app.context != null && (m.settingBoolean("vehicle_page", true) || m.settingBoolean("comfort_thresholds", true) || m.settingBoolean("native_radio", true))) {
                 vehicle = new K5Vehicle(app.context, m, state, lanes, log);
                 VehicleState.vehiclePage = vehicle.page;
             } else { VehicleState.vehiclePage = null; m.log("[vehicle] page disabled or context unavailable"); }
@@ -227,6 +230,7 @@ public final class CpClimate extends ModEntry {
             if (m.settingBoolean("volume_link", true)) {
                 CarAudio audio = new CarAudio(state, lanes, log, m);
                 CarAudio.instance = audio;
+                audio.listen(app.context);
                 audio.start();
             } else m.log("[audio] volume link disabled");
             if (m.settingBoolean("media_controls", true)) {
