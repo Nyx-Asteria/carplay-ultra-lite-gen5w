@@ -1197,6 +1197,8 @@ __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stre
         if (ui_sync_mode()) LOG("cp-climate: theme stream audit: type 130 not claimed; native path\n");
         return 0;
     }
+    CF d = new_dict();
+    if (!d) return 0;
     int err = 0;
     unsigned long long seed = (unsigned long long)FN(T_CFDictionaryGetInt64, long long (*)(CF, CF, int *))(stream, &K_seed, &err);
     unsigned char rd[32], wr[32];
@@ -1205,17 +1207,24 @@ __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stre
     if (!st) st = save_keys(lane, seed, rd, wr);
     for (int i = 0; i < 32; i++) { ((volatile unsigned char *)rd)[i] = 0; ((volatile unsigned char *)wr)[i] = 0; }
     if (st) {
+        release(d);
         LOG("### cp-climate: data stream %d not set up: %d\n", lane, st);
         return 0;
     }
-    CF d = new_dict();
-    if (!d) return 0;
+
     set_int(d, &K_type, STREAM_DATA);
     set_int(d, &K_streamID, STREAM_DATA + lane);
     int port = lane == 3 ? CPC_SYNC_PORT : lane == 2 ? CPC_IAP_PORT : CPC_PORT + lane;
     set_int(d, &K_dataPort, port);
     st = FN(T_ADD_STREAM_REPLY, int (*)(CF, CF))(reply, d);
     release(d);
+    if (st && lane == 3) {
+        /* A newly published key without a successful response is not usable.
+         * Fail closed rather than letting a later socket consume it. Existing
+         * authenticated sockets retain their own in-memory cipher. */
+        sys_unlink(DIR "cpc-vs-3.key");
+        LOG("cp-climate: uiSync key invalidated after failed stream reply\n");
+    }
     LOG("cp-climate: %s stream %d set up on port %d (reply %d)\n", lane == 3 ? "uiSync" : lane == 2 ? "iAP" : "vehicle state", lane, port, st);
     return st == 0;
 }

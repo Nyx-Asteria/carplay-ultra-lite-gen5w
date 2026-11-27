@@ -114,6 +114,7 @@ static long long m_get_int(const void *d, const void *k, int *err) {
     if (!v) { *err = -6727; return 0; }
     *err = 0; return *(const long long *)((const char *)v + 8);
 }
+static int add_stream_fail;
 static int m_add_stream(const void *reply, const void *stream);
 static char lastlog[512];
 static int vspi_file_logs, vspi_fallback_logs;
@@ -947,6 +948,10 @@ int main(void) {
         f=fopen(DIR "cpc-vs-3.key","rb"); kn=f?fread(kf,1,sizeof kf,f):0; if(f)fclose(f);
         CHECK("failed staging preserves previously published key record",kn==72 && memcmp(published,kf,72)==0);
         rmdir(DIR "cpc-vs-3.key.tmp");
+        add_stream_fail=1;
+        CHECK("failed UI Sync stream reply stays unclaimed",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==4);
+        CHECK("failed UI Sync reply invalidates newly published keys",access(DIR "cpc-vs-3.key",F_OK)!=0);
+        add_stream_fail=0;
         remove(DIR "cpc-uisync");
         ((Arr *)streams)->n--;   /* the later checks count the streams added before this one */
         m_release(streams->v[3]);
@@ -1123,6 +1128,7 @@ int main(void) {
 }
 
 static int m_add_stream(const void *reply, const void *stream) {
+    if (add_stream_fail) return -1;
     Str *k = str("streams");
     const void *a = m_get(reply, k);
     if (!a) { a = m_new_arr(0, 0, &cb_arr); m_set(reply, k, a); m_release(a); }
