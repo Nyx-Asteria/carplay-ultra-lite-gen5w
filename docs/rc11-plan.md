@@ -41,3 +41,7 @@ Production UI Sync now always passes null cluster layout and false forced center
 
 ## Approved WCP API v3 source integration
 Verified provider source `3b951c745ce78fde4ca6085b28d682c7d629bb98`; [pinned contract](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa/blob/75f1ecadc704e39be9095799f62bea64aa79bf4d/docs/cpul-api-v3-integration.md). FileTransfer is no longer a gate. Exact API v3 via provider class loader, stable theme-only owner and three-argument registration; WCP owns gasoline identity and StartSession. Compare identity/negotiation generations with identity reread in iAP2 process; no display activation gate on builder evidence. Preserve native apps, sidebars, virtual cluster and standard fallback. Combined source bundle verification and user-approved release remain outstanding.
+
+## WCP transport and pairing checkpoint
+
+See [pairing/theme validation and WCP relay](theme-pairing-validation.md) for the pinned full research review, test matrix P1–P8, timing, preference and transfer boundaries. FileTransfer remains non-blocking. No automatic pairing reset or preference bypass.
