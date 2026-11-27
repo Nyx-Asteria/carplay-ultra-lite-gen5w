@@ -658,6 +658,25 @@ int main(void) {
               && !strcmp(s_of(echo->v[1]), "viewAreas") && !strcmp(s_of(echo->v[2]), "altScreen"));
         CHECK("Ultra: the offer logged", strstr(lastlog, "viewAreas, altScreen") != 0);
         m_release(rep);
+        /* Themed sidebars restore ViewAreas even when only VSP is offered. */
+        Dict *limited=(Dict *)m_new_dict(0,0,&cb_dkey,&cb_dval);
+        Arr *limited_features=(Arr *)m_new_arr(0,0,&cb_arr);
+        Str *vsp=str("vehicleStateProtocol");
+        m_append(limited_features,vsp); m_release(vsp);
+        m_set(limited,kf,limited_features); m_release(limited_features);
+        rep=(Dict *)m_new_dict(0,0,&cb_dkey,&cb_dval);
+        cpc_setup_hook(limited,rep);
+        echo=g(rep,"enabledFeatures");
+        CHECK("generic cluster still requires ViewAreas offer",echo && echo->n==1);
+        m_release(rep);
+        uf=fopen(DIR "cpc-ultra","w");
+        if(uf){fputs("2\n",uf);fclose(uf);}
+        rep=(Dict *)m_new_dict(0,0,&cb_dkey,&cb_dval);
+        cpc_setup_hook(limited,rep);
+        echo=g(rep,"enabledFeatures");
+        CHECK("themed sidebars restore ViewAreas without offer, not altScreen",echo && echo->n==2
+              && !strcmp(s_of(echo->v[0]),"vehicleStateProtocol") && !strcmp(s_of(echo->v[1]),"viewAreas"));
+        m_release(rep);m_release(limited);
         remove(DIR "cpc-ultra");
         uf = fopen(DIR "cpc-xenable", "w");
         if (uf) { fputs("1\n", uf); fclose(uf); }
