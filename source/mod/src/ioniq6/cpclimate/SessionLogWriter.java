@@ -37,6 +37,8 @@ final class SessionLogWriter {
     private long start, written, errorBytes, suppressed, generation;
     private final LinkedHashMap<String,String> milestones=new LinkedHashMap<String,String>();
     private String currentId;
+    private final EnumMap<SessionLogPolicy.Category,Long> eventCounts=new EnumMap<SessionLogPolicy.Category,Long>(SessionLogPolicy.Category.class);
+    private long warningCount,errorCount,firstEventAt,lastEventAt;
 
     private static final class Event {
         final int kind;
@@ -142,7 +144,8 @@ final class SessionLogWriter {
     private static long androidIndependentMonotonic(){ return System.nanoTime()/1000000L; }
     private void begin(Event e) throws IOException {
         prune(true);
-        milestones.clear();
+        milestones.clear(); eventCounts.clear(); warningCount=errorCount=0;
+        firstEventAt=lastEventAt=e.time;
         start=e.time; generation=e.generation; written=0; errorBytes=0; diagnosticBytes=0; suppressed=0;
         currentId=new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss",Locale.US).format(new Date(start))
             +"_session-"+generation+"_"+UUID.randomUUID().toString();
@@ -175,17 +178,32 @@ final class SessionLogWriter {
     }
     private void summarize(Event e) {
         if(e.category==null)return;
+        Long count=eventCounts.get(e.category);
+        eventCounts.put(e.category,count==null?1L:count+1);
+        firstEventAt=Math.min(firstEventAt,e.time); lastEventAt=Math.max(lastEventAt,e.time);
         String s=e.text;
+        if(s.startsWith("WARN "))warningCount++;
+        if(s.startsWith("ERROR "))errorCount++;
         String key=null;
         if(s.contains("[theme-sync] negotiated traffic panels="))key="theme_panels";
         else if(s.contains("[theme-sync] first message for Center_Display"))key="center_negotiated";
         else if(s.contains("[theme-sync] first message for Cluster_Display"))key="cluster_negotiated";
         else if(s.contains("first picture shown")||s.contains("firstFrame=true"))key="video_first_frame";
         else if(s.contains("player ready"))key="video_ready";
+        else if(s.contains("[projection-theme] offered"))key="setup_offered";
+        else if(s.contains("[projection-theme] enabled"))key="setup_enabled";
+        else if(s.contains("[projection-theme] display registration"))key="display_registration";
+        else if(s.contains("[listener] cluster ready"))key="cluster_listener_ready";
+        else if(s.contains("[listener] uiSync ready"))key="uisync_listener_ready";
+        else if(s.contains("[listener] cluster first bytes="))key="cluster_first_bytes";
+        else if(s.contains("[listener] cluster stream closed bytes="))key="cluster_stream_end";
+        else if(s.contains("[seat-command]")&&s.contains("binder=accepted"))key="last_seat_binder_accepted";
+        else if(s.contains("[seat-command]")&&(s.contains("BCM matched")||s.contains("BCM unconfirmed")||s.contains("BCM unavailable")||s.contains("already at requested state")))key="last_seat_bcm_result";
+        else if(s.contains("[seat-feedback] notification"))key="last_seat_notification";
         else if(s.contains("[radio-source]"))key="last_radio_source";
         else if(s.contains("activation timed out"))key="last_activation_timeout";
         else if(e.important)key="last_"+e.category.name().toLowerCase(Locale.US)+"_warning";
-        if(key!=null)milestones.put(key,e.time+" "+s);
+        if(key!=null)milestones.put(key,e.time+" "+(s.length()>512?s.substring(0,512):s));
     }
     private void sync() throws IOException {
         if(normal!=null) { normal.flush(); normal.getFD().sync(); }
@@ -202,6 +220,8 @@ final class SessionLogWriter {
         try {
             out.write(("end_ms="+end+"\nduration_ms="+Math.max(0,end-start)+"\ntermination="+reason+
                 "\nqueue_dropped="+lost.getAndSet(0)+"\nsize_dropped="+suppressed+"\n").getBytes("UTF-8"));
+            out.write(("first_event_ms="+firstEventAt+"\nlast_event_ms="+lastEventAt+"\nwarning_count="+warningCount+"\nerror_count="+errorCount+"\n").getBytes("UTF-8"));
+            for(Map.Entry<SessionLogPolicy.Category,Long> item:eventCounts.entrySet())out.write(("events_"+item.getKey().name().toLowerCase(Locale.US)+"="+item.getValue()+"\n").getBytes("UTF-8"));
             for(Map.Entry<String,String> item:milestones.entrySet())out.write((item.getKey()+"="+item.getValue()+"\n").getBytes("UTF-8"));
             out.getFD().sync();
         } finally { out.close(); }
