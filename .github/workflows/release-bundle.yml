@@ -132,6 +132,21 @@ jobs:
           cp -a source/mod out/staging/cpul
           rm -f out/staging/cpul/build.sh
           HMGAPI_MOD_BUILD="$PWD/out/core" sh "$SDK/bin/mkmodpkg.sh" out/staging/cpul "$KEY"
+          # mkmodpkg packages recipes from the staging source, not the Java build.
+          # Verify the signed ZIP contains exactly the freshly compiled payload.
+          CPUL_ZIP="out/packages/carplay-ultra-lite-k5-$VERSION.zip"
+          unzip -p "$CPUL_ZIP" recipes/carplay-climate-m1.recipe | cmp - out/native/carplay-climate-m1.recipe
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          {
+            printf 'cpul=%s\n' "$GITHUB_SHA"
+            for component in hmgapi comfort collector wireless pps tbt; do
+              printf '%s=%s\n' "$component" "$(git -C ".$component" rev-parse HEAD)"
+            done
+            printf 'native_recipe_sha256=%s\n' "$(sha256sum out/native/carplay-climate-m1.recipe | cut -d ' ' -f 1)"
+            printf 'author_uuid=%s\n' "$AUTHOR_UUID"
+            clang --version
+            ld.lld --version
+          } > out/native/BUILD-PROVENANCE.txt
           cp -a .comfort/hmgapi-comfort out/staging/hmgapi-comfort
           python3 - <<'PY'
           import json
@@ -223,14 +238,15 @@ jobs:
           test "$(find out/release -name '*.zip' | wc -l)" -eq 7
           cp "docs/rc${VERSION##*.}-testing.md" out/release/TESTING.md
           cp CHANGELOG.md out/release/CHANGELOG.md
+          cp out/native/BUILD-PROVENANCE.txt out/release/BUILD-PROVENANCE.txt
           if [ "$VERSION" = "1.0.0-rc.11" ]; then cp docs/theme-pairing-validation.md out/release/theme-pairing-validation.md; fi
           printf '\n## Standalone TBT coexistence\nExplicitly disable WCP Integrated turn-by-turn, apply and restart before testing Standalone TBT. Keep Enable wireless CarPlay on; audio and Now Playing follow this master, and shared identity is independent. Remove the original Phone Projection TBT before installing the renamed fork. Never enable two navigation publishers.\n' >> out/release/TESTING.md
           (
             cd out/release
-            sha256sum *.zip > SHA256SUMS.txt
+            sha256sum *.zip *.md BUILD-PROVENANCE.txt > SHA256SUMS.txt
             sha256sum --strict -c SHA256SUMS.txt
             bundle="CarPlay-Ultra-Lite-K5-$VERSION-testing-bundle.zip"
-            zip -q "$bundle" *.zip *.md SHA256SUMS.txt
+            zip -q "$bundle" *.zip *.md BUILD-PROVENANCE.txt SHA256SUMS.txt
             unzip -t "$bundle"
             verify_dir=$(mktemp -d)
             unzip -q "$bundle" -d "$verify_dir"
@@ -262,4 +278,4 @@ jobs:
           bundle=$(basename "$(find release -name 'CarPlay-Ultra-Lite-K5-*-testing-bundle.zip' -print -quit)")
           VERSION=${bundle#CarPlay-Ultra-Lite-K5-}
           VERSION=${VERSION%-testing-bundle.zip}
-          gh release create "v$VERSION" release/*.zip release/SHA256SUMS.txt release/CHANGELOG.md release/TESTING.md --latest --target "$TARGET" --title "CarPlay Ultra-Lite K5 $VERSION" --notes-file release/CHANGELOG.md
+          gh release create "v$VERSION" release/*.zip release/SHA256SUMS.txt release/BUILD-PROVENANCE.txt release/*.md --latest --target "$TARGET" --title "CarPlay Ultra-Lite K5 $VERSION" --notes-file release/CHANGELOG.md

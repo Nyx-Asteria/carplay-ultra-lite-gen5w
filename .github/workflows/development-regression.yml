@@ -33,6 +33,21 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -yq clang lld python3-pyelftools
           /usr/bin/python3 source/tools/rebuild-pinned-recipe.py source/mod/recipes/carplay-climate-m1.recipe out/native/carplay-climate-m1.recipe
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          (
+            cd out/native
+            printf 'source_commit=%s\n' "$GITHUB_SHA" > BUILD-PROVENANCE.txt
+            clang --version >> BUILD-PROVENANCE.txt
+            ld.lld --version >> BUILD-PROVENANCE.txt
+            sha256sum carplay-climate-m1.recipe > SHA256SUMS.txt
+            sha256sum --strict -c SHA256SUMS.txt
+          )
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-recipe-${{ github.sha }}
+          path: out/native/
+          if-no-files-found: error
+          retention-days: 14
   companion-contract:
     runs-on: ubuntu-24.04
     steps:
