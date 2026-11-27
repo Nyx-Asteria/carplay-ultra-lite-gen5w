@@ -2,9 +2,24 @@ package ioniq6.cpclimate;
 import java.io.*;
 public final class SessionUsbExportTest {
     static void check(boolean b){if(!b)throw new AssertionError();}
+    static void hashRegression() throws Exception {
+        java.util.Random rng=new java.util.Random(12345);
+        for(int len:new int[]{0,1,55,56,57,63,64,65,119,120,127,128,129,32767,32768,32769,4194304}) {
+            byte[] data=new byte[len]; rng.nextBytes(data);
+            byte[] expected=java.security.MessageDigest.getInstance("SHA-256").digest(data);
+            SessionUsbExport.Sha256 stream=new SessionUsbExport.Sha256();
+            for(int off=0;off<len;) {int count=Math.min(37,len-off);stream.update(data,off,count);off+=count;}
+            check(java.util.Arrays.equals(expected,stream.digest()));
+        }
+    }
     public static void main(String[] args)throws Exception{
+        hashRegression();
         File root=File.createTempFile("cpul-export","");check(root.delete());check(root.mkdir());
+        java.security.Provider[] providers=java.security.Security.getProviders();
+        for(java.security.Provider provider:providers)java.security.Security.removeProvider(provider.getName());
         try{
+            try {java.security.MessageDigest.getInstance("SHA-256");throw new AssertionError("provider unexpectedly available");}
+            catch(java.security.NoSuchAlgorithmException expected){}
             File spool=new File(root,"spool"),usb=new File(root,"usb");
             check(spool.mkdir());check(usb.mkdir());
             String id="2026-11-26_01-00-00_session-7_12345678-1234-1234-1234-123456789abc";
@@ -38,6 +53,6 @@ public final class SessionUsbExportTest {
             check(failed&&!new File(s,".exported").exists());
             check(x.pending(spool)==1);
             System.out.println("SessionUsbExportTest passed");
-        }finally{SessionLogWriter.delete(root);}
+        }finally{for(java.security.Provider provider:providers)java.security.Security.addProvider(provider);SessionLogWriter.delete(root);}
     }
 }
