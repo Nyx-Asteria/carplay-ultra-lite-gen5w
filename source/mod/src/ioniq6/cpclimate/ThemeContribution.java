@@ -25,10 +25,11 @@ final class ThemeContribution {
     }
 
     synchronized boolean register(ModContext mod) {
-        if (registered != null) return true;
         try {
             Object service = mod.use(PROVIDER, SERVICE);
             if (service == null) { mod.log("[theme] shared identity service unavailable"); return false; }
+            if (registered == service) return true;
+            if (registered != null && !unregister(mod)) return false;
             Class<?> api = Class.forName(API, false, service.getClass().getClassLoader());
             if (!api.isInstance(service) || api.getField("API_VERSION").getInt(null) != 2) { mod.log("[theme] incompatible shared identity API"); return false; }
             Class<?> theme = Class.forName(API + "$ThemeIdentity", false, api.getClassLoader());
@@ -39,6 +40,11 @@ final class ThemeContribution {
             Method registration = null;
             try { registration = api.getMethod("registerTheme", String.class, theme, boolean.class); }
             catch (NoSuchMethodException stock) { /* original v2 provider */ }
+            // The provider stores the contribution before invoking its change callback.
+            // Retain withdrawal ownership even if that callback throws after insertion.
+            registered = service;
+            remove = unregister;
+            try {
             if (registration != null) {
                 registration.invoke(service, mod.id, value, start);
                 mod.log("[theme] CarPlayStartSession requested=" + start + " (provider native result unverified)");
@@ -46,8 +52,13 @@ final class ThemeContribution {
                 api.getMethod("registerTheme", String.class, theme).invoke(service, mod.id, value);
                 if (start) mod.log("[theme] CarPlayStartSession unavailable: provider extension not installed; identification only");
             }
-            registered = service;
-            remove = unregister;
+            } catch (Exception e) {
+                unregister(mod);
+                throw e;
+            } catch (LinkageError e) {
+                unregister(mod);
+                throw e;
+            }
             mod.log("Ultra theme contribution accepted by registry (native activation unverified)");
             return true;
         } catch (Exception e) {

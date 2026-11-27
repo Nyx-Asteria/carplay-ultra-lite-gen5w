@@ -68,3 +68,5 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [x] Consolidate eight diagnostic switches into detailed session diagnostics (default on) and protocol metadata diagnostics (default off); keep all experimental behavior switches. Existing per-category preferences are superseded by these new defaults. Suppress DEBUG/TRACE in shared HMG log while persistent writer is enabled; CI pending.
 
 - [x] Navigation characteristic changes use metadata-only protocol diagnostics, not ordinary climate logs; no route values emitted by these paths. Schema-based regression coverage; CI pending.
+
+- [x] Theme contribution handles provider replacement and attempts rollback on registration callback failure (WCP IdentityRegistry inserts before notifying). Native activation still unverified; no theme identity or protocol change. CI pending.
