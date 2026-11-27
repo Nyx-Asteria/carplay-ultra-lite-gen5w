@@ -25,10 +25,100 @@ final class K5Radio {
                     && context.getPackageManager().resolveActivity(candidate,0)!=null) found=candidate;
         } catch (Exception e) { log.log("[radio] discovery failed: "+e.getClass().getSimpleName()); }
         launch=found;
+        listenMetadata();
         log.log("[radio] stock radio launch available="+(launch!=null)+"; FM tuner subject to runtime service and firmware checks");
     }
+    static final String METADATA_ACTION = "ioniq6.cpclimate.RADIO_METADATA";
+    private volatile StationName stationName;
+    private volatile StationArtwork stationArtwork;
+    private final Object tagLock = new Object();
+    private long tagFrequency = -1, tagGeneration = -1;
+    private final String[] hdTags = {"", "", ""};
+    private void clearTags() {
+        synchronized (tagLock) {
+            tagFrequency = -1;
+            tagGeneration = -1;
+            java.util.Arrays.fill(hdTags, "");
+        }
+    }
+    private void receiveTag(long khz, int tag, String value) {
+        if (tag < 0 || tag > 2 || value == null || value.length() > 256) return;
+        synchronized (tagLock) {
+            long generation = CpClimate.sessionGeneration;
+            if (tagFrequency != khz || tagGeneration != generation) {
+                java.util.Arrays.fill(hdTags, "");
+                tagFrequency = khz;
+                tagGeneration = generation;
+            }
+            hdTags[tag] = value.trim();
+        }
+    }
+    private void publishTags(java.util.Map<Long,Object> values, long khz) {
+        synchronized (tagLock) {
+            if (tagFrequency != khz || tagGeneration != CpClimate.sessionGeneration) return;
+            if (!hdTags[0].isEmpty()) values.put(4355L, hdTags[0]);
+            values.put(4356L, hdTags[1]);
+            values.put(4357L, hdTags[2]);
+        }
+    }
+    private static final byte[] EMPTY_ARTWORK = new byte[0];
+    private static final class StationArtwork {
+        final long khz, generation;
+        final byte[] bytes;
+        StationArtwork(long khz, long generation, byte[] bytes) {
+            this.khz = khz; this.generation = generation; this.bytes = bytes;
+        }
+    }
+    // Observed OEM logo naming: 0000102049_Z100_10030.logo (100.3 MHz).
+    // Withhold unknown names rather than assigning a delayed image to another station.
+    static boolean logoMatchesFrequency(String file, long khz) {
+        return file != null && file.toLowerCase(java.util.Locale.US).endsWith("_" + (khz / 10) + ".logo");
+    }
+    static boolean supportedArtwork(byte[] b) {
+        if (b == null || b.length < 8 || b.length > 131072) return false;
+        boolean png = (b[0]&255)==137 && b[1]==80 && b[2]==78 && b[3]==71
+                && b[4]==13 && b[5]==10 && b[6]==26 && b[7]==10;
+        boolean jpeg = (b[0]&255)==255 && (b[1]&255)==216 && (b[2]&255)==255;
+        return png || jpeg;
+    }
+    private static final class StationName {
+        final long khz, generation, received;
+        final String name;
+        StationName(long khz, long generation, long received, String name) {
+            this.khz = khz; this.generation = generation; this.received = received; this.name = name;
+        }
+    }
+    private void listenMetadata() {
+        try {
+            context.registerReceiver(new android.content.BroadcastReceiver() {
+                @Override public void onReceive(Context c, Intent i) {
+                    if (!enabled() || !CpClimate.sessionActive) return;
+                    long khz = i.getLongExtra("frequency", -1);
+                    long received = i.getLongExtra("received", -1);
+                    long now = android.os.SystemClock.elapsedRealtime();
+                    String name = i.getStringExtra("name");
+                    if (khz < 87500 || khz > 108000 || received < 0 || now < received
+                            || now - received > 2000) return;
+                    if (name != null && name.length() <= 256) {
+                        stationName = new StationName(khz, CpClimate.sessionGeneration, received, name);
+                    }
+                    receiveTag(khz, i.getIntExtra("tag", -1), i.getStringExtra("text"));
+                    byte[] image = i.getByteArrayExtra("artwork");
+                    if (image != null && logoMatchesFrequency(i.getStringExtra("file"), khz)) {
+                        if (supportedArtwork(image)) {
+                            stationArtwork = new StationArtwork(khz, CpClimate.sessionGeneration, image);
+                            log.log("[radio-meta] station logo received " + khz + " kHz bytes=" + image.length);
+                        } else log.log("[radio-meta] unsupported station logo encoding bytes=" + image.length);
+                    }
+                }
+            }, new android.content.IntentFilter(METADATA_ACTION), "android.permission.DEVICE_POWER", main);
+        } catch (Throwable t) { log.log("[radio-meta] receiver unavailable: " + t.getClass().getSimpleName()); }
+    }
+    private long lastFmFrequency = -1;
     private volatile String probeStatus = "Ready";
-    private volatile boolean fmActive;
+    private volatile boolean fmActive, sxmActive, sxmAvailable;
+    private Object sxmTuner;
+    private static final String SXM_IFACE = "com.hkmc.media.sxm65h.ISXM65HService";
     private Object fmTuner, fmAudio;
     private static final String RADIO_IFACE = "com.hkmc.media.IRadioService";
 
@@ -104,11 +194,19 @@ final class K5Radio {
         values.put(4118L, java.util.Collections.emptyList());
         values.put(4354L, "");
         values.put(4355L, "");
+        values.put(4356L, "");
+        values.put(4357L, "");
+        if (VehicleState.sxmSchemaTest) {
+            values.put(4131L, true);
+            values.put(4133L, "");
+            values.put(4134L, java.util.Collections.emptyList());
+        }
+        values.put(4358L, EMPTY_ARTWORK);
         values.put(4359L, 0L);
         values.put(4117L, ClimateMap.BLANK);
-        if (!enabled() || !CpClimate.sessionActive) { fmActive = false; lastListPoll = 0; fmItems = java.util.Collections.emptyList(); return values; }
+        if (!enabled() || !CpClimate.sessionActive) { fmActive = false; sxmActive = false; sxmAvailable = false; lastListPoll = 0; fmItems = java.util.Collections.emptyList(); return values; }
         try {
-            if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) { fmActive = false; return values; }
+            if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) { fmActive = false; sxmActive = false; sxmAvailable = false; return values; }
             if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
             if (fmAudio == null) fmAudio = service(CarAudio.SERVICE, CarAudio.IFACE);
             long khz = fmKhz(readInt(fmTuner, RADIO_IFACE, "getLastFMFrequency"));
@@ -116,10 +214,29 @@ final class K5Radio {
             int stream = readInt(fmAudio, CarAudio.IFACE, "getCurStreamType");
             // RC4 observed FM mode 2 / stream 38, AM mode 1 / stream 39.
             fmActive = khz > 0 && mode == 2 && stream == 38;
+            sxmActive = mode == 4 && stream == 41;
+            refreshSxm(values);
+            if (!fmActive) { stationName = null; stationArtwork = null; clearTags(); lastFmFrequency = -1; }
             if (fmActive) {
+                if (lastFmFrequency != khz) {
+                    StationName previous = stationName;
+                    if (previous != null && previous.khz != khz) stationName = null;
+                    StationArtwork art = stationArtwork;
+                    if (art != null && art.khz != khz) stationArtwork = null;
+                    synchronized (tagLock) { if (tagFrequency != khz) clearTags(); }
+                    lastFmFrequency = khz;
+                }
                 values.put(4117L, khz);
                 values.put(4354L, "FM");
-                values.put(4355L, String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0));
+                StationName current = stationName;
+                String title = String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0);
+                if (current != null && current.khz == khz && current.generation == CpClimate.sessionGeneration
+                        && !current.name.isEmpty()) title = current.name;
+                values.put(4355L, title);
+                publishTags(values, khz);
+                StationArtwork art = stationArtwork;
+                if (art != null && art.khz == khz && art.generation == CpClimate.sessionGeneration)
+                    values.put(4358L, art.bytes);
                 values.put(4359L, 1L);
             }
             // Advertise an available FM source even before it is selected.
@@ -141,8 +258,138 @@ final class K5Radio {
                 }
                 values.put(4118L, fmItems);
             }
-        } catch (Throwable t) { fmActive = false; fmTuner = null; fmAudio = null; }
+        } catch (Throwable t) { fmActive = false; sxmActive = false; sxmAvailable = false; fmTuner = null; fmAudio = null; sxmTuner = null; }
         return values;
+    }
+
+    // Experimental Apple source schema remains explicitly opt-in. Native
+    // ownership is tracked even without it to prevent forwarding radio keys to the phone.
+    private void refreshSxm(java.util.Map<Long,Object> values) {
+        sxmAvailable = false;
+        if (!VehicleState.sxmSchemaTest) return;
+        try {
+            if (sxmTuner == null) sxmTuner = service(serviceName("SXM65H_SERVICE"), SXM_IFACE);
+            int channel = readInt(sxmTuner, SXM_IFACE, "getLastTunedChannelID");
+            sxmAvailable = sxmTuner != null && channel >= 0;
+            values.put(4131L, !sxmAvailable);
+            if (sxmAvailable) {
+                try { refreshSxmCatalog(values); }
+                catch (Throwable t) { log.log("[radio-sxm] catalog unavailable: " + t.getClass().getSimpleName()); }
+            }
+            if (!sxmAvailable || !sxmActive) { sxmMetadataChannel = -1; return; }
+            values.put(4133L, Integer.toString(channel));
+            values.put(4354L, "SXM");
+            values.put(4355L, "SiriusXM");
+            values.put(4359L, 1L);
+            // A channel ID is not necessarily its displayed channel number.
+            // Publish text only when the OEM channel record matches exactly.
+            refreshSxmFavoriteMetadata(values, channel);
+        } catch (Throwable t) { sxmTuner = null; }
+    }
+
+    private long sxmMetadataPoll;
+    private int sxmMetadataChannel = -1;
+    private long sxmMetadataGeneration = -1;
+    private String sxmTitle = "", sxmArtist = "", sxmName = "";
+    private volatile java.util.Set<Integer> sxmKnownIds = java.util.Collections.emptySet();
+    private volatile long sxmKnownGeneration = -1;
+    private long sxmCatalogPoll;
+    private java.util.List<Object> sxmItems = java.util.Collections.emptyList();
+
+    // The verified Smart Favorites API supplies a bounded initial catalog.
+    // IDs are opaque OEM identifiers, never synthesized from channel numbers.
+    private void refreshSxmCatalog(java.util.Map<Long,Object> values) throws Exception {
+        long now = android.os.SystemClock.elapsedRealtime();
+        long generation = CpClimate.sessionGeneration;
+        if (generation != sxmKnownGeneration || now - sxmCatalogPoll >= 10000) {
+            sxmCatalogPoll = now;
+            sxmKnownGeneration = -1;
+            sxmKnownIds = java.util.Collections.emptySet();
+            sxmItems = java.util.Collections.emptyList();
+            int category = readInt(sxmTuner, SXM_IFACE, "getSmartFavoritesCategoryID");
+            if (category < 0) return;
+            Object records = Class.forName(SXM_IFACE).getMethod("getCategoryChannels", int.class)
+                    .invoke(sxmTuner, category);
+            Class<?> type = Class.forName("com.hkmc.media.sxm65h.Channel");
+            if (records == null || !records.getClass().isArray()
+                    || records.getClass().getComponentType() != type) return;
+            java.lang.reflect.Field id = type.getDeclaredField("mChannelID");
+            id.setAccessible(true);
+            java.util.Set<Integer> known = new java.util.HashSet<Integer>();
+            java.util.List<Object> items = new java.util.ArrayList<Object>();
+            for (int i = 0; i < Math.min(100, java.lang.reflect.Array.getLength(records)); i++) {
+                Object entry = java.lang.reflect.Array.get(records, i);
+                if (entry == null) continue;
+                Object raw = id.get(entry);
+                if (!(raw instanceof Number)) continue;
+                int channel = ((Number)raw).intValue();
+                if (channel < 0 || !known.add(channel)) continue;
+                String name = channelText(type, entry, "mChannelLongName");
+                if (name.isEmpty()) name = "SiriusXM";
+                java.util.Map<String,Object> item = new java.util.LinkedHashMap<String,Object>();
+                item.put("identifier", Integer.toString(channel));
+                item.put("mediaItemName", name);
+                item.put("mediaItemShortName", name);
+                items.add(item);
+            }
+            sxmItems = items;
+            sxmKnownIds = java.util.Collections.unmodifiableSet(known);
+            sxmKnownGeneration = generation;
+            log.log("[radio-sxm] favorite catalog size=" + items.size());
+        }
+        values.put(4134L, sxmItems);
+    }
+
+    private void refreshSxmFavoriteMetadata(java.util.Map<Long,Object> values, int channel) {
+        long now = android.os.SystemClock.elapsedRealtime();
+        long generation = CpClimate.sessionGeneration;
+        if (channel != sxmMetadataChannel || generation != sxmMetadataGeneration
+                || now - sxmMetadataPoll >= 10000) {
+            sxmMetadataChannel = channel;
+            sxmMetadataGeneration = generation;
+            sxmMetadataPoll = now;
+            sxmTitle = ""; sxmArtist = ""; sxmName = "";
+            try {
+                int category = readInt(sxmTuner, SXM_IFACE, "getSmartFavoritesCategoryID");
+                if (category >= 0) {
+                    Object records = Class.forName(SXM_IFACE).getMethod("getCategoryChannels", int.class)
+                            .invoke(sxmTuner, category);
+                    Class<?> type = Class.forName("com.hkmc.media.sxm65h.Channel");
+                    if (records != null && records.getClass().isArray()
+                            && records.getClass().getComponentType() == type) {
+                        for (int i = 0; i < Math.min(100, java.lang.reflect.Array.getLength(records)); i++) {
+                            Object entry = java.lang.reflect.Array.get(records, i);
+                            if (entry == null) continue;
+                            java.lang.reflect.Field id = type.getDeclaredField("mChannelID");
+                            id.setAccessible(true);
+                            Object raw = id.get(entry);
+                            if (!(raw instanceof Number) || ((Number)raw).intValue() != channel) continue;
+                            sxmName = channelText(type, entry, "mChannelLongName");
+                            sxmTitle = channelText(type, entry, "mTitle");
+                            sxmArtist = channelText(type, entry, "mArtist");
+                            break;
+                        }
+                    }
+                }
+            } catch (Throwable t) { log.log("[radio-sxm] favorite metadata unavailable: " + t.getClass().getSimpleName()); }
+        }
+        if (!sxmTitle.isEmpty()) values.put(4355L, sxmTitle);
+        else if (!sxmName.isEmpty()) values.put(4355L, sxmName);
+        if (!sxmArtist.isEmpty()) values.put(4356L, sxmArtist);
+    }
+    private static String channelText(Class<?> type, Object entry, String name) throws Exception {
+        java.lang.reflect.Field field = type.getDeclaredField(name);
+        field.setAccessible(true);
+        Object value = field.get(entry);
+        if (!(value instanceof String)) return "";
+        String text = ((String)value).trim();
+        return text.substring(0, Math.min(256, text.length()));
+    }
+
+    boolean sxmSelected() { return sxmActive; }
+    boolean selectSxm() {
+        if (!VehicleState.sxmSchemaTest || !sxmAvailable) return false;
+        return selectRadioMode(tuneRequest.incrementAndGet(), 13);
     }
 
     /** Queue a seek only for the already-active FM tuner; never route a radio seek to the phone.
@@ -236,7 +483,9 @@ final class K5Radio {
 
     boolean selectFm() { return selectFm(tuneRequest.incrementAndGet()); }
 
-    private boolean selectFm(final long request) {
+    private boolean selectFm(final long request) { return selectRadioMode(request, 2); }
+
+    private boolean selectRadioMode(final long request, final int targetMode) {
         if (!enabled() || !CpClimate.sessionActive) return false;
         final long generation = CpClimate.sessionGeneration;
         fmCommands.execute(new Runnable() {
@@ -256,15 +505,15 @@ final class K5Radio {
                                 if (change.getReturnType() != boolean.class) return;
                                 Object manager = type.getConstructor(Context.class).newInstance(context);
                                 if (!probeActive(generation) || request != tuneRequest.get()) return;
-                                Object accepted = change.invoke(manager, Integer.valueOf(2));
-                                log.log("[radio] OEM FM1 mode request accepted=" + accepted);
+                                Object accepted = change.invoke(manager, Integer.valueOf(targetMode));
+                                log.log("[radio] OEM mode " + targetMode + " request accepted=" + accepted);
                             } catch (Throwable t) {
-                                log.log("[radio] FM selection failed: " + t.getClass().getSimpleName());
+                                log.log("[radio] mode selection failed: " + t.getClass().getSimpleName());
                             }
                         }
                     });
                 } catch (Throwable t) {
-                    log.log("[radio] FM selection unavailable: " + t.getClass().getSimpleName());
+                    log.log("[radio] mode selection unavailable: " + t.getClass().getSimpleName());
                 }
             }
         });

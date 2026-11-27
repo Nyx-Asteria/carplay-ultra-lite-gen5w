@@ -254,6 +254,8 @@ public final class CpClimate extends ModEntry {
                             Object source = ((java.util.Map<?,?>) value).get("identifier");
                             if ("FM".equals(source)) {
                                 if (!radio.selectFm()) log.log("[radio] FM selection refused");
+                            } else if ("SXM".equals(source)) {
+                                if (!radio.selectSxm()) log.log("[radio] SXM selection refused");
                             } else {
                                 radio.cancelPendingTune();
                                 log.log("[radio] unsupported source selection");
@@ -264,6 +266,10 @@ public final class CpClimate extends ModEntry {
                             if ("nextItem".equals(name)) { radio.seekFm(true); return; }
                             if ("previousItem".equals(name)) { radio.seekFm(false); return; }
                             // FM playback controls must not accidentally control the phone.
+                            return;
+                        }
+                        if (radio != null && radio.sxmSelected()) {
+                            log.log("[radio] SXM playback control withheld until native command mapping is verified");
                             return;
                         }
                         media.pressed(name, value);
