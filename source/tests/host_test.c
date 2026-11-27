@@ -190,7 +190,9 @@ static Dict *display(const char *uuid, int w, int h, int wp, int hp) {
 
 int main(void) {
     FILE *f = fopen(VSPI, "rb");
+    if (!f) { perror("VSPI fixture"); return 1; }
     vspi_len = fread(vspi_file, 1, sizeof vspi_file, f); fclose(f);
+    if (!vspi_len) { fprintf(stderr,"Empty VSPI fixture\n"); return 1; }
     memcpy(cpc_vspi, vspi_file, vspi_len);
     cpc_vspi_len = vspi_len;
     PUT(T_LOGCAT, &logcat);
