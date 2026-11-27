@@ -341,9 +341,35 @@ public class UiSyncTest {
         check("the channel logs both sides: " + logs, phoneLogged && carLogged);
     }
 
+    static void independentConnections() {
+        UiSync cluster = new UiSync(null, true);
+        UiSync center = new UiSync(null, true);
+        cluster.wanted = UiSync.layout("Modular");
+        center.legacyCenterLayout = true;
+        byte[] reset = framed(map("type", 0L, "ssn", 1L, "psn", 1L, "version", 2L));
+        byte[] complete = framed(map("type", 1L, "ssn", 1L, "psn", 1L, "version", 2L));
+        cluster.handle(reset);
+        Map<Object,Object> frame = new LinkedHashMap<Object,Object>();
+        frame.put("displayUUID", "Center_Display");
+        frame.put("data", Bplist.encode(map("type", 0L, "ssn", 1L, "psn", 1L, "version", 2L)));
+        center.handle(OpackCodec.encode(frame));
+        frame.put("data", Bplist.encode(map("type", 1L, "ssn", 1L, "psn", 1L, "version", 2L)));
+        List<byte[]> centerOut = center.handle(OpackCodec.encode(frame));
+        List<byte[]> clusterOut = cluster.handle(complete);
+        check("interleaved independent handshakes retain both layout requests",
+                centerOut.size() == 4 && clusterOut.size() == 4 && center.ready && cluster.ready);
+        center.reopen();
+        check("center reconnect does not reset cluster state",
+                cluster.ready && cluster.session == 1 && !center.ready);
+        check("cluster command still acknowledged after center reconnect",
+                cluster.handle(fromPhone(2, UiSync.PALETTE_CHANGE,
+                        map("layoutIdentifier", UiSync.layout("Modular").id, "paletteIdentifier", "blue"))).size() == 1);
+    }
+
     public static void main(String[] args) throws Exception {
         stateMachine();
         layoutRequest();
+        independentConnections();
         variant();
         plists(new File(args[1]), new File(args[2]));
         channel(new File(args[0]));

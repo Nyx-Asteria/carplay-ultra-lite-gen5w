@@ -287,8 +287,11 @@ public final class CpClimate extends ModEntry {
             }
             // the uiSync experiment: the theme's layout/palette channel, answered by UiSync
             // Bootstrap the known Modular layout; palette selection is still subject to asset verification.
-            if (uiSync) new UiSyncChannel(dir, log, UiSync.layout("Modular"),
-                    false).start();
+            if (uiSync) {
+                boolean forceWallpaper = m.settingBoolean("ultra_force_wallpaper", false);
+                m.log("[theme] center Wallpaper layout request=" + forceWallpaper);
+                new UiSyncChannel(dir, log, UiSync.layout("Modular"), forceWallpaper).start();
+            }
         }
         MethodHook copy = new MethodHook() {
             @Override
