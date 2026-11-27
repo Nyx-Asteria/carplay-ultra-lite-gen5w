@@ -23,7 +23,7 @@ final class SessionLogging {
     SessionLogging(ModContext mod, File files, String firmware) {
         this.mod=mod;
         EnumSet<Category> categories=EnumSet.noneOf(Category.class);
-        StringBuilder settings=new StringBuilder("firmware=").append(firmware);
+        StringBuilder settings=new StringBuilder("android_build=").append(firmware);
         for(Category c:Category.values()) {
             if(c==Category.CORE)continue;
             String key="diagnostic_"+c.name().toLowerCase(Locale.US);
@@ -42,6 +42,21 @@ final class SessionLogging {
         policy=new SessionLogPolicy(categories);
         writer=enabled?new SessionLogWriter(new File(files,"cpul-session-logs"),
             usb?new SessionUsbExport(new SessionUsbDestination()):null,categories):null;
+        if(writer!=null)timer.scheduleWithFixedDelay(new Runnable(){public void run(){reportWriterHealth();}},5,5,java.util.concurrent.TimeUnit.SECONDS);
+    }
+    private String lastWriterFailure,lastExportFailure;
+    private void reportWriterHealth(){
+        try {
+            String write=writer.failure(),export=writer.exportFailure();
+            if(!java.util.Objects.equals(write,lastWriterFailure)){
+                lastWriterFailure=write;
+                mod.log(write==null?"[session-log] writer recovered":"[session-log] writer failed: "+SessionLogPolicy.sanitize(write));
+            }
+            if(!java.util.Objects.equals(export,lastExportFailure)){
+                lastExportFailure=export;
+                mod.log(export==null?"[session-log] USB export recovered":"[session-log] USB export failed: "+SessionLogPolicy.sanitize(export));
+            }
+        }catch(RuntimeException ignored){ /* health monitoring must not stop the teardown timer */ }
     }
     synchronized void start(long id) {
         if(generation==id)return;
