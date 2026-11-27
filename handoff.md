@@ -9,6 +9,9 @@ Updated 2026-11-27. Repository Nyx-Asteria/carplay-ultra-lite-gen5w, branch rc11
 Cleanup 95%; logging 100% implementation; evidence-backed corrections 100% for available evidence; legacy heated-seat compatibility 100%; themes/virtual cluster 55%; companion integration 0%; final consolidation/regression 0%. These are estimates, not proof of on-car functionality. Parent 2f09919 / CI 46059257627 green; de3f487 / 46058796683 and 47ba9ca / 46058618602 green. Native C fixture not executed by those runs. This commit CI pending. No release published.
 
 ## Changes in this commit
+Fixed a confirmed source-level native compilation defect: Ultra display registration diagnostic was accidentally placed in add_view_area, where themed is undefined. Moved it into add_alt_display after successful display array publication; no negotiation or geometry changes. Parent f67d87b CI not accessible via connector; new build not executed locally. Theme 55%, WCP external 60% unchanged. Next verify native build/fixture and audit display identity consistency.
+
+Previous independent UI Sync regression commit:
 Added six native SETUP assertions for independent UI Sync without VSP: both flag gates, offer gate, stock feature preservation, idempotence, malformed reply handling. No production changes. Parent 9b7066d CI unavailable through connector; last verified green 2f09919 / 46059257627. New tests not executed locally. Theme 55%, external WCP 60% unchanged. Next verify native CI and inspect theme eligibility.
 
 Previous native infrastructure commit:

@@ -462,8 +462,6 @@ static int add_view_area(CF info, int pct, int edge, int extras, int wide) {
         release(copy);
     }
     put(info, &K_displays, out);
-    LOG("cp-climate: Ultra display registration: main=%s, alternate=%s, original count=%d\n",
-        themed ? "Center_Display" : "stock UUID", themed ? "Cluster_Display" : "virtual UUID", (int)n);
     return 1;
 }
 
@@ -591,6 +589,8 @@ static int add_alt_display(CF info, int themed) {
     append(out, alt);
     release(alt);
     put(info, &K_displays, out);
+    LOG("cp-climate: Ultra display registration: main=%s, alternate=%s, original count=%d\n",
+        themed ? "Center_Display" : "stock UUID", themed ? "Cluster_Display" : "virtual UUID", (int)n);
     return 1;
 }
 
