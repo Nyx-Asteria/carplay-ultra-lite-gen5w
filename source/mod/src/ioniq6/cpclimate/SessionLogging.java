@@ -107,7 +107,7 @@ final class SessionLogging {
     }
     static Category category(String message) {
         String s=message.toLowerCase(Locale.US);
-        if(s.startsWith("[vs-packet]"))return Category.VS_RAW;
+        if(s.startsWith("[vs-packet]")||s.startsWith("[vs-navigation]"))return Category.VS_RAW;
         if(s.startsWith("[projection-packet]"))return Category.PROJECTION_RAW;
         if(s.startsWith("[projection-theme]"))return Category.THEMES;
         if(s.startsWith("[projection-video]"))return Category.AIRPLAY;

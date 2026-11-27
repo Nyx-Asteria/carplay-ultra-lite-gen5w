@@ -66,3 +66,5 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [x] Report supported firmware target, verified startup preflight, Android build, CCNC launcher package presence and exact-file mount evidence for four known LivePatch targets. Mount ownership and actual OEM firmware version are not independently inferred; CI pending.
 
 - [x] Consolidate eight diagnostic switches into detailed session diagnostics (default on) and protocol metadata diagnostics (default off); keep all experimental behavior switches. Existing per-category preferences are superseded by these new defaults. Suppress DEBUG/TRACE in shared HMG log while persistent writer is enabled; CI pending.
+
+- [x] Navigation characteristic changes use metadata-only protocol diagnostics, not ordinary climate logs; no route values emitted by these paths. Schema-based regression coverage; CI pending.
