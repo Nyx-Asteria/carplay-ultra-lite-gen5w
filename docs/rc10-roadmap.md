@@ -64,3 +64,5 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [x] Pin incremental collector 55e8de065f32776ab9eb466207364e0bb66bf29b (collector CI passed); other companion pins remain pending coordination.
 
 - [x] Report supported firmware target, verified startup preflight, Android build, CCNC launcher package presence and exact-file mount evidence for four known LivePatch targets. Mount ownership and actual OEM firmware version are not independently inferred; CI pending.
+
+- [x] Consolidate eight diagnostic switches into detailed session diagnostics (default on) and protocol metadata diagnostics (default off); keep all experimental behavior switches. Existing per-category preferences are superseded by these new defaults. Suppress DEBUG/TRACE in shared HMG log while persistent writer is enabled; CI pending.

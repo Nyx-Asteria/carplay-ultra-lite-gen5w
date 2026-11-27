@@ -25,6 +25,13 @@ final class SessionLogPolicy {
         this.diagnostics = diagnostics.clone();
     }
 
+    static EnumSet<Category> diagnosticCategories(boolean detail,boolean packets) {
+        EnumSet<Category> categories=EnumSet.noneOf(Category.class);
+        if(detail)categories.addAll(EnumSet.of(Category.CLIMATE,Category.RADIO,Category.SXM,Category.AUDIO,Category.THEMES,Category.AIRPLAY));
+        if(packets)categories.addAll(EnumSet.of(Category.VS_RAW,Category.PROJECTION_RAW));
+        return categories;
+    }
+
     boolean enabled(Level level, Category category) {
         if (level == Level.ERROR || level == Level.WARN) return true;
         if (category == Category.VS_RAW || category == Category.PROJECTION_RAW)
