@@ -638,8 +638,8 @@ public class ClimateMapTest {
             check("legacy leaves fan off precedence unchanged",fan.size()==1&&fan.get(0).b==2);
         }
         // Exercise actual vehicle-state dispatch, not only the standalone mapper.
-        for(boolean immediate:new boolean[]{false,true}){
-            VehicleState.seatHeatImmediateFeedback=immediate;
+        for(boolean legacyImmediate:new boolean[]{false,true}){
+            VehicleState.seatHeatImmediateFeedback=legacyImmediate;
             for(long[] pair:new long[][]{
                 {ClimateMap.DRIVER_SEAT_LEVEL,ClimateMap.DRIVER_SEAT_ON,ClimateMap.DRIVER_VENT_LEVEL,ClimateMap.DRIVER_VENT_ON},
                 {ClimateMap.PASSENGER_SEAT_LEVEL,ClimateMap.PASSENGER_SEAT_ON,ClimateMap.PASSENGER_VENT_LEVEL,ClimateMap.PASSENGER_VENT_ON}}){
@@ -655,7 +655,7 @@ public class ClimateMapTest {
                 check("legacy explicit high dispatch",legacyDispatch.size()==1&&legacyDispatch.get(0).b==8);
                 legacyDispatch.clear();
                 legacyState.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest","transactionID",71L,"values",VehicleState.dict(pair[1],true))));
-                check("legacy pending level retained immediate="+immediate,legacyDispatch.size()==1&&legacyDispatch.get(0).b==8);
+                check("legacy pending level retained legacyImmediate="+legacyImmediate,legacyDispatch.size()==1&&legacyDispatch.get(0).b==8);
                 legacyDispatch.clear();
                 legacyState.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest","transactionID",72L,"values",VehicleState.dict(pair[1],false))));
                 check("legacy unambiguous off dispatch",legacyDispatch.size()==1&&legacyDispatch.get(0).b==2);
