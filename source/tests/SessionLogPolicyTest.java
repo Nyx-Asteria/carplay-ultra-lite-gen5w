@@ -33,6 +33,14 @@ public final class SessionLogPolicyTest {
         check(p.accept(INFO, CORE, "connected", 1) != null);
         for (int i = 0; i < 300; i++) p.accept(INFO, CORE, "item " + i, 2);
         check(p.accept(INFO, CORE, "connected", 3) != null);
+        check(SessionLogPolicy.diagnosticCategories(false,false).isEmpty());
+        check(SessionLogPolicy.diagnosticCategories(true,false).equals(EnumSet.of(CLIMATE,RADIO,SXM,AUDIO,THEMES,AIRPLAY)));
+        check(SessionLogPolicy.diagnosticCategories(false,true).equals(EnumSet.of(VS_RAW,PROJECTION_RAW)));
+        check(SessionLogPolicy.diagnosticCategories(true,true).size()==8);
+        SessionLogPolicy detail=new SessionLogPolicy(SessionLogPolicy.diagnosticCategories(true,false));
+        check(detail.enabled(DEBUG,THEMES) && detail.enabled(DEBUG,AIRPLAY));
+        check(!detail.enabled(TRACE,VS_RAW) && !detail.enabled(TRACE,PROJECTION_RAW));
+        check(detail.enabled(WARN,PROJECTION_RAW));
         System.out.println("SessionLogPolicyTest passed");
     }
 }

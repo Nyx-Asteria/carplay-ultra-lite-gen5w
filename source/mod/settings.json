@@ -114,67 +114,19 @@
       "apply": "restart"
     },
     {
-      "key": "diagnostic_climate",
+      "key": "diagnostic_detail",
       "type": "toggle",
-      "default": false,
-      "title": "Climate Diagnostics",
-      "description": "Enable additional climate diagnostics. Sensitive payloads must remain excluded.",
+      "default": true,
+      "title": "Detailed Session Diagnostics",
+      "description": "Collect additional climate, radio, SiriusXM, audio, theme and AirPlay diagnostics together. Saved in bounded session logs and exported to USB. Turn off for normal daily use if desired.",
       "apply": "restart"
     },
     {
-      "key": "diagnostic_radio",
+      "key": "diagnostic_packets",
       "type": "toggle",
       "default": false,
-      "title": "FM / HD Radio Diagnostics",
-      "description": "Enable additional radio diagnostics. Sensitive payloads must remain excluded.",
-      "apply": "restart"
-    },
-    {
-      "key": "diagnostic_sxm",
-      "type": "toggle",
-      "default": false,
-      "title": "SiriusXM Diagnostics",
-      "description": "Enable additional sxm diagnostics. Sensitive payloads must remain excluded.",
-      "apply": "restart"
-    },
-    {
-      "key": "diagnostic_audio",
-      "type": "toggle",
-      "default": false,
-      "title": "Audio / Source Diagnostics",
-      "description": "Enable additional audio diagnostics. Sensitive payloads must remain excluded.",
-      "apply": "restart"
-    },
-    {
-      "key": "diagnostic_themes",
-      "type": "toggle",
-      "default": false,
-      "title": "Theme Diagnostics",
-      "description": "Enable additional themes diagnostics. Sensitive payloads must remain excluded.",
-      "apply": "restart"
-    },
-    {
-      "key": "diagnostic_airplay",
-      "type": "toggle",
-      "default": false,
-      "title": "AirPlay Diagnostics",
-      "description": "Enable additional airplay diagnostics. Sensitive payloads must remain excluded.",
-      "apply": "restart"
-    },
-    {
-      "key": "diagnostic_vs_raw",
-      "type": "toggle",
-      "default": false,
-      "title": "Vehicle Services Packet Diagnostics",
-      "description": "Enable additional vs_raw diagnostics. Sensitive payloads must remain excluded.",
-      "apply": "restart"
-    },
-    {
-      "key": "diagnostic_projection_raw",
-      "type": "toggle",
-      "default": false,
-      "title": "Projection Packet Diagnostics",
-      "description": "Enable additional projection_raw diagnostics. Sensitive payloads must remain excluded.",
+      "title": "Protocol Packet Diagnostics",
+      "description": "Include additional vehicle services and projection packet metadata (types, sizes and stream events only; never raw payloads). Enable only for targeted protocol testing.",
       "apply": "restart"
     }
   ]

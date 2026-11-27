@@ -62,3 +62,15 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 
 - [x] Shared host regression script used by both development and signed bundle; include video session policy and all logging/radio/seat tests. Signed bundle still gated; verify development CI before release.
 - [x] Pin incremental collector 55e8de065f32776ab9eb466207364e0bb66bf29b (collector CI passed); other companion pins remain pending coordination.
+
+- [x] Report supported firmware target, verified startup preflight, Android build, CCNC launcher package presence and exact-file mount evidence for four known LivePatch targets. Mount ownership and actual OEM firmware version are not independently inferred; CI pending.
+
+- [x] Consolidate eight diagnostic switches into detailed session diagnostics (default on) and protocol metadata diagnostics (default off); keep all experimental behavior switches. Existing per-category preferences are superseded by these new defaults. Suppress DEBUG/TRACE in shared HMG log while persistent writer is enabled; CI pending.
+
+- [x] Navigation characteristic changes use metadata-only protocol diagnostics, not ordinary climate logs; no route values emitted by these paths. Schema-based regression coverage; CI pending.
+
+- [x] Theme contribution handles provider replacement and attempts rollback on registration callback failure (WCP IdentityRegistry inserts before notifying). Native activation still unverified; no theme identity or protocol change. CI pending.
+
+- [x] Distinguish confirmed registry contribution from uncertain ownership after failed registration/withdrawal; uncertain state must be withdrawn successfully before re-registration. CI pending; native activation remains separate.
+
+- [x] Extract production theme ownership state and regression-test confirmed, uncertain, replacement and withdrawal transitions in the shared CI suite. Reflective provider/native integration still needs runtime validation.

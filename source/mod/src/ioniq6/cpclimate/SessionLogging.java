@@ -20,17 +20,14 @@ final class SessionLogging {
     private final PreSessionEvents preSession=new PreSessionEvents();
     private long sessionStartedAt, previousEndedAt;
 
-    SessionLogging(ModContext mod, File files, String firmware) {
+    SessionLogging(ModContext mod, File files, String androidBuild, String environment) {
         this.mod=mod;
-        EnumSet<Category> categories=EnumSet.noneOf(Category.class);
-        StringBuilder settings=new StringBuilder("android_build=").append(firmware);
-        for(Category c:Category.values()) {
-            if(c==Category.CORE)continue;
-            String key="diagnostic_"+c.name().toLowerCase(Locale.US);
-            boolean on=mod.settingBoolean(key,false);
-            if(on)categories.add(c);
-            settings.append("; ").append(key).append('=').append(on);
-        }
+        boolean detail=mod.settingBoolean("diagnostic_detail",true);
+        boolean packets=mod.settingBoolean("diagnostic_packets",false);
+        EnumSet<Category> categories=SessionLogPolicy.diagnosticCategories(detail,packets);
+        StringBuilder settings=new StringBuilder("android_build=").append(androidBuild).append("; ").append(environment);
+        settings.append("; diagnostic_detail=").append(detail).append("; diagnostic_packets=").append(packets);
+        settings.append("; diagnostic_categories=").append(categories);
         boolean enabled=mod.settingBoolean("session_logging",true);
         boolean usb=mod.settingBoolean("session_usb_export",true);
         settings.append("; session_logging=").append(enabled).append("; session_usb_export=").append(usb);
@@ -104,11 +101,13 @@ final class SessionLogging {
         String safe=policy.accept(level,category,message,System.nanoTime()/1000000L);
         if(safe==null)return;
         if(writer!=null&&generation>=0&&(endingAt<0||teardown(message)))writer.recordAt(generation,level,category,safe,at);
-        mod.log(safe);
+        // With persistent logging enabled, keep extra trace/debug traffic out of the shared HMG log.
+        // Lifecycle events and warnings/errors remain visible; with logging disabled, preserve manual diagnostics.
+        if(writer==null || (level!=Level.DEBUG && level!=Level.TRACE))mod.log(safe);
     }
     static Category category(String message) {
         String s=message.toLowerCase(Locale.US);
-        if(s.startsWith("[vs-packet]"))return Category.VS_RAW;
+        if(s.startsWith("[vs-packet]")||s.startsWith("[vs-navigation]"))return Category.VS_RAW;
         if(s.startsWith("[projection-packet]"))return Category.PROJECTION_RAW;
         if(s.startsWith("[projection-theme]"))return Category.THEMES;
         if(s.startsWith("[projection-video]"))return Category.AIRPLAY;

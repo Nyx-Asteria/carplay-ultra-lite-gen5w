@@ -42,3 +42,9 @@ java -cp "out/tests:$CP" ioniq6.cpclimate.UiSyncTest out/tests out/python.bplist
 javac --release 8 -d out/tests source/mod/tools/video/src/ioniq6/cpclimate/video/PlaybackReport.java source/mod/tools/video/tests/PlaybackReportTest.java source/mod/tools/video/src/ioniq6/cpclimate/video/VideoSessionPolicy.java source/mod/tools/video/tests/VideoSessionPolicyTest.java
 java -cp out/tests ioniq6.cpclimate.video.PlaybackReportTest
 java -cp out/tests ioniq6.cpclimate.video.VideoSessionPolicyTest
+
+javac --release 8 -cp "$CP" -d out/tests source/tests/RuntimeEnvironmentTest.java
+java -cp "out/tests:$CP" ioniq6.cpclimate.RuntimeEnvironmentTest
+
+javac --release 8 -cp "$CP" -d out/tests source/tests/ThemeOwnershipTest.java
+java -cp "out/tests:$CP" ioniq6.cpclimate.ThemeOwnershipTest

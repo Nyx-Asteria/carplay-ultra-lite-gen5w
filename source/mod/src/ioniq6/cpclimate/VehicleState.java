@@ -1068,7 +1068,8 @@ final class VehicleState {
                 results.put(iid, NO_VALUE);
                 continue;
             }
-            if (shared.contains(iid)) out.log("VS phone set " + names.get(iid) + " to " + shown(v));
+            if (navigationCharacteristic(iid)) out.log("[vs-navigation] phone characteristic " + names.get(iid));
+            else if (shared.contains(iid)) out.log("VS phone set " + names.get(iid) + " to " + shown(v));
             else out.log("VS phone wrote " + names.get(iid));
             results.put(iid, WRITTEN);
             // LIVI hides a notification history entry here; M3 keeps no history, so nothing to hide
@@ -1271,9 +1272,14 @@ final class VehicleState {
         }
     }
 
+    // Navigation service IDs from VsData.NAME_IIDS; do not log route values.
+    static boolean navigationCharacteristic(long iid) {
+        return (iid>=258 && iid<=264) || (iid>=266 && iid<=271) || (iid>=273 && iid<=275);
+    }
     private void carSets(long iid, Object v, Map<Object, Object> changed) {
         if (values.containsKey(iid) && same(values.get(iid), v)) return;
-        if (names.containsKey(iid)) out.log("VS car set " + names.get(iid) + " to " + shown(v));
+        if (navigationCharacteristic(iid)) out.log("[vs-navigation] car characteristic " + names.get(iid));
+        else if (names.containsKey(iid)) out.log("VS car set " + names.get(iid) + " to " + shown(v));
         values.put(iid, v);
         if (followed.contains(iid)) changed.put(iid, v);
         Long notifier = notifiers.get(iid);

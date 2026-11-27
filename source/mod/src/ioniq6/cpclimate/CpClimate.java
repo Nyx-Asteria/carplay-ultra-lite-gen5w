@@ -122,7 +122,7 @@ public final class CpClimate extends ModEntry {
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
         if (sessionLogging == null) {
-            sessionLogging = new SessionLogging(m, dir, property("ro.build.display.id"));
+            sessionLogging = new SessionLogging(m, dir, property("ro.build.display.id"), RuntimeEnvironment.describe(property("ro.product.device"), app.context));
             new ProjectionLogCapture(sessionLogging).start();
         }
         ClimateMap.loadSetpoints(new File(dir, "cpc-setpoints"));

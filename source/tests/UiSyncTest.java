@@ -408,6 +408,9 @@ public class UiSyncTest {
     }
 
     public static void main(String[] args) throws Exception {
+        for(int i=0;i<VsData.NAME_IIDS.length;i++) {
+            check("navigation logging classification iid="+VsData.NAME_IIDS[i],VehicleState.navigationCharacteristic(VsData.NAME_IIDS[i])==(i<16));
+        }
         stateMachine();
         layoutRequest();
         independentConnections();
