@@ -31,10 +31,16 @@ final class UiSyncChannel extends Thread {
         super("cp-climate-uisync");
         this.dir = dir;
         this.out = out;
-        sync = new UiSync(new File(dir, "cpc-theme-preferences.properties"), true);
+        sync = new UiSync(preferenceFile(dir,layout,legacyCenterLayout), true);
         sync.wanted = layout;
         sync.legacyCenterLayout = legacyCenterLayout;
         setDaemon(true);
+    }
+
+    /** Production phone-managed mode has no disk preference owner.
+     * Preserve the historical file only for explicit legacy test requests. */
+    static File preferenceFile(File dir, UiSync.Layout layout, boolean legacyCenterLayout) {
+        return layout != null || legacyCenterLayout ? new File(dir,"cpc-theme-preferences.properties") : null;
     }
 
     private final java.util.concurrent.CountDownLatch bindFinished=new java.util.concurrent.CountDownLatch(1);
@@ -149,7 +155,7 @@ final class UiSyncChannel extends Thread {
     void serve(Socket sock, ChaChaPoly cipher) {
         // Sequence numbers and reset state belong to this authenticated connection.
         // A reconnect must not reset an older connection's handshake.
-        final PanelRouter router=new PanelRouter(new File(dir,"cpc-theme-preferences.properties"),sync);
+        final PanelRouter router=new PanelRouter(preferenceFile(dir,sync.wanted,sync.legacyCenterLayout),sync);
         out.log("SYNC connection opened");
         int logged = 0, packages = 0;
         java.util.Set<String> seenPanels = new java.util.HashSet<String>();

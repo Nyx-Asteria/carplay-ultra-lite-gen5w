@@ -476,6 +476,37 @@ public class UiSyncTest {
         check("reconnect creates fresh state without mutating old connection",reconnect.select(centerReset)!=center&&center.ready);
     }
 
+    static void phoneManagedStorage(File dir) throws Exception {
+        File isolated=new File(dir,"phone-managed-storage");
+        if(!isolated.mkdir())throw new AssertionError("isolated preference fixture");
+        File legacy=new File(isolated,"cpc-theme-preferences.properties");
+        try {
+            try(FileOutputStream out=new FileOutputStream(legacy)){
+                out.write("Cluster_Display.layout=legacy-marker\n".getBytes("UTF-8"));
+            }
+            byte[] before=read(legacy);
+            check("production mode does not open persisted layout preferences",
+                    UiSyncChannel.preferenceFile(isolated,null,false)==null);
+            check("legacy fixtures retain explicit preference path",
+                    legacy.equals(UiSyncChannel.preferenceFile(isolated,UiSync.layout("Modular"),false))
+                    &&legacy.equals(UiSyncChannel.preferenceFile(isolated,null,true)));
+            UiSync config=new UiSync();
+            UiSyncChannel.PanelRouter router=new UiSyncChannel.PanelRouter(
+                    UiSyncChannel.preferenceFile(isolated,null,false),config);
+            UiSync cluster=router.select(panelFrame("Cluster_Display",0));
+            cluster.handle(panelFrame("Cluster_Display",0));
+            check("production cluster starts phone-managed",cluster.handle(panelFrame("Cluster_Display",1)).size()==3);
+            cluster.remember("Cluster_Display",UiSync.layout("DigiRing").id,"green",true);
+            check("phone choice does not modify old shared preference file",Arrays.equals(before,read(legacy)));
+            UiSyncChannel.PanelRouter fresh=new UiSyncChannel.PanelRouter(
+                    UiSyncChannel.preferenceFile(isolated,null,false),config);
+            UiSync next=fresh.select(panelFrame("Cluster_Display",0));
+            next.handle(panelFrame("Cluster_Display",0));
+            check("fresh connection never restores old layout",next.handle(panelFrame("Cluster_Display",1)).size()==3);
+            check("no staged preference file in production",!new File(legacy.getPath()+".tmp").exists());
+        } finally {new File(legacy.getPath()+".tmp").delete();legacy.delete();isolated.delete();}
+    }
+
     static void sharedPreferences(File dir) throws Exception {
         File file=File.createTempFile("theme-preferences-", ".properties",dir);
         try {
@@ -551,6 +582,7 @@ public class UiSyncTest {
         layoutRequest();
         independentConnections();
         panelRouting();
+        phoneManagedStorage(new File(args[0]));
         sharedPreferences(new File(args[0]));
         variant();
         plists(new File(args[1]), new File(args[2]));
