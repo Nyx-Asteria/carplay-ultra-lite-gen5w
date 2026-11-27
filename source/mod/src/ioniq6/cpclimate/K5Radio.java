@@ -413,11 +413,11 @@ final class K5Radio {
         }
     }
     private static final class SxmSnapshot {
-        final long generation;
+        final long generation, received;
         final int[] ids, excluded;
         final String[] names, titles, artists;
-        SxmSnapshot(long generation, int[] ids, int[] excluded, String[] names, String[] titles, String[] artists) {
-            this.generation = generation; this.ids = ids; this.excluded=excluded; this.names = names; this.titles = titles; this.artists = artists;
+        SxmSnapshot(long generation, long received, int[] ids, int[] excluded, String[] names, String[] titles, String[] artists) {
+            this.generation = generation; this.received=received; this.ids = ids; this.excluded=excluded; this.names = names; this.titles = titles; this.artists = artists;
         }
     }
     private void listenSxmCatalog() {
@@ -456,11 +456,15 @@ final class K5Radio {
                     // A transient empty response must not erase a previously usable catalog.
                     // Live lock/subscription/skip checks still govern every tuning command.
                     SxmSnapshot previous=fullSxm;
+                    long generation=CpClimate.sessionGeneration;
+                    if(previous!=null&&!sxmSnapshotNewEnough(generation,received,previous.generation,previous.received)){
+                        log.log("[radio-sxm] stale catalog response withheld"); return;
+                    }
                     if(retainSxmSnapshot(ids.length,excluded.length,previous!=null&&previous.generation==CpClimate.sessionGeneration&&(previous.ids.length>0||previous.excluded.length>0))){
                         log.log("[radio-sxm] empty catalog response; withholding replacement");
                         return;
                     }
-                    fullSxm = new SxmSnapshot(CpClimate.sessionGeneration, ids, excluded, names, titles, artists);
+                    fullSxm = new SxmSnapshot(generation, received, ids, excluded, names, titles, artists);
                     log.log("[radio-sxm] full OEM catalog received count=" + ids.length + " excluded=" + excluded.length);
                 }
             }, new android.content.IntentFilter(SxmCatalogBridge.ACTION), "android.permission.DEVICE_POWER", main);
@@ -597,6 +601,10 @@ final class K5Radio {
     }
     // OEM channel records have been observed with numeric 0/1 flags.
     // Accept boolean representations too; unknown values are not authorization.
+    static boolean sxmSnapshotNewEnough(long generation,long received,long previousGeneration,long previousReceived){
+        return generation!=previousGeneration || received>=previousReceived;
+    }
+
     static boolean retainSxmSnapshot(int eligible,int excluded,boolean previousUseful){
         return eligible==0&&excluded==0&&previousUseful;
     }
