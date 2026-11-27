@@ -5,7 +5,7 @@
 #   sh mod/tools/video/fetch-libs.sh
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
-CENTRAL=https://repo1.maven.org/maven2
+CENTRAL=https://repo.maven.apache.org/maven2
 GOOGLE=https://dl.google.com/dl/android/maven2
 mkdir -p "$HERE/libs"
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
@@ -17,10 +17,10 @@ while read -r out repo path ver sum; do
     if [ -f "$dest" ] && [ "$(shasum -a 256 "$dest" | cut -d' ' -f1)" = "$sum" ]; then continue; fi
     base=$(basename "$path")
     url="$repo/$path/$ver/$base-$ver"
-    if curl -fsSL "$url.jar" -o "$W/dl" 2>/dev/null; then
+    if curl -fsSL --retry 4 --retry-max-time 120 --connect-timeout 15 --max-time 90 "$url.jar" -o "$W/dl" 2>/dev/null; then
         cp "$W/dl" "$dest"
     else
-        curl -fsSL "$url.aar" -o "$W/dl.aar"
+        curl -fsSL --retry 4 --retry-max-time 120 --connect-timeout 15 --max-time 90 "$url.aar" -o "$W/dl.aar"
         (cd "$W" && rm -f classes.jar && unzip -q -o dl.aar classes.jar)
         cp "$W/classes.jar" "$dest"
     fi
