@@ -34,3 +34,8 @@ assert settings['k5_vehicle_identity']['default'] is False
 assert settings['k5_vehicle_identity']['apply']=='restart'
 print('Pinned companion manifest contract passed')
 PY
+
+python3 "$root/source/tests/companion_recipe_ranges.py" \
+  "$root/source/mod/recipes/carplay-climate-m1.recipe" \
+  "$wcp/wireless-carplay-aa/recipes/carplay-core-wifi.recipe" \
+  "$wcp/wireless-carplay-aa/recipes/carplay-core-frames-ef49c09b.recipe"
