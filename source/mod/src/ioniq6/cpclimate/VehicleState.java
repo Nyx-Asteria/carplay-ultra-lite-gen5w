@@ -870,7 +870,30 @@ final class VehicleState {
         Map<Object, Object> changed = new LinkedHashMap<Object, Object>();
         Map<Object, Object> blanked = new LinkedHashMap<Object, Object>();
         long now = System.currentTimeMillis();
+        // SeatFan needs an authoritative paired level/power update after a phone write,
+        // even when the BCM confirms the same level already cached by write().
+        Set<Long> handledFans = new HashSet<Long>();
+        for (long[] pair : SEAT_FAN_PAIRS) {
+            Long levelAt = heldSince.get(pair[0]), onAt = heldSince.get(pair[1]);
+            if (levelAt == null && onAt == null) continue;
+            handledFans.add(pair[0]); handledFans.add(pair[1]);
+            if (!reported.containsKey(pair[0]) || !reported.containsKey(pair[1])) continue;
+            long since = Math.max(levelAt == null ? 0L : levelAt, onAt == null ? 0L : onAt);
+            boolean confirmed = (levelAt == null || same(values.get(pair[0]), reported.get(pair[0])))
+                    && (onAt == null || same(values.get(pair[1]), reported.get(pair[1])));
+            if (!confirmed && now - since < HOLD_MS) continue;
+            for (long iid : pair) {
+                heldSince.remove(iid);
+                Object actual = reported.get(iid);
+                carSets(iid, actual, changed);
+                if (followed.contains(iid)) changed.put(iid, actual);
+            }
+            out.log("[seat-fan] BCM " + (confirmed ? "confirmed" : "corrected")
+                    + " level=" + reported.get(pair[0]) + " on=" + reported.get(pair[1])
+                    + " iid=" + pair[0] + " (paired feedback)");
+        }
         for (Map.Entry<Long, Object> e : reported.entrySet()) {
+            if (handledFans.contains(e.getKey())) continue;
             Long since = heldSince.get(e.getKey());
             if (since != null) {
                 // the wheel heater's indicator follows a press only after ~5.5 s: its stale reading is held longer
@@ -941,6 +964,15 @@ final class VehicleState {
         return answer;
     }
 
+    private static final long[][] SEAT_FAN_PAIRS = {
+        {ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.DRIVER_VENT_ON},
+        {ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON}
+    };
+    private static boolean seatFanValue(long iid) {
+        for (long[] pair : SEAT_FAN_PAIRS) if (iid == pair[0] || iid == pair[1]) return true;
+        return false;
+    }
+
     private List<Out> write(int lane, Map<Object, Object> written, Object transaction) {
         Map<Object, Object> results = new LinkedHashMap<Object, Object>();
         Map<Object, Object> changed = new LinkedHashMap<Object, Object>();
@@ -958,7 +990,7 @@ final class VehicleState {
             results.put(iid, WRITTEN);
             // LIVI hides a notification history entry here; M3 keeps no history, so nothing to hide
             Object before = values.put(iid, v);
-            if (!same(before, v) && followed.contains(iid)) changed.put(iid, v);
+            if (!(car != null && seatFanValue(iid)) && !same(before, v) && followed.contains(iid)) changed.put(iid, v);
         }
         VehiclePage page = vehiclePage;
         if (page != null) {

@@ -48,7 +48,7 @@ public final class CpClimate extends ModEntry {
         targetVerified = model && core && identity && dipo;
         m.log("[preflight] target=" + model + " core=" + core + " identity=" + identity + " dipo=" + dipo + " ready=" + targetVerified);
         themePreflight = targetVerified
-                && m.settingBoolean("ultra_theme", true) && m.settingBoolean("ultra_identity", true) && theme.available(m);
+                && m.settingBoolean("ultra_theme", true) && m.settingBoolean("ultra_sidebars", true) && theme.available(m);
         m.log("[theme] boot preflight=" + themePreflight);
         if (targetVerified && m.settingBoolean("k5_integration", true)) VolumePanel.zygote(m);
     }
@@ -103,7 +103,7 @@ public final class CpClimate extends ModEntry {
     @Override
     public void appLoaded(ModContext m, LoadedApp app) {
         if ("com.tcc.iap2server".equals(app.packageName)) {
-            if (themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true) && m.settingBoolean("ultra_identity", true)) {
+            if (themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true) && m.settingBoolean("ultra_sidebars", true)) {
                 theme.register(m);
             } else m.log("[theme] iAP2 contribution withheld by boot preflight/settings");
             return;
@@ -118,19 +118,19 @@ public final class CpClimate extends ModEntry {
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
         ClimateMap.loadSetpoints(new File(dir, "cpc-setpoints"));
         {
-            // Independent Ultra experiments: start with identity and session negotiation only.
+            // RC6 verified baseline; themed identity and display IDs are paired.
             boolean ultra = m.enabled() && m.settingBoolean("ultra_theme", true);
-            boolean cluster = ultra && m.settingBoolean("ultra_cluster", false);
-            boolean themedIds = cluster && m.settingBoolean("ultra_display_ids", false);
-            boolean variant = ultra && m.settingBoolean("ultra_variant", false);
-            boolean features = ultra && m.settingBoolean("ultra_features", false);
-            boolean enhanced = ultra && m.settingBoolean("ultra_enhanced_ui", false);
+            boolean cluster = ultra;
+            boolean themedIds = cluster && themePreflight && m.settingBoolean("ultra_sidebars", true);
+            boolean variant = ultra;
+            boolean features = ultra;
+            boolean enhanced = ultra;
             m.log("[theme] identity=" + themePreflight + " cluster=" + cluster + " themedIds=" + themedIds + " variant=" + variant + " features=" + features + " enhanced=" + enhanced);
             m.log("[theme] DiPO display profile enabled=" + ultra + " (shared provider native result not exposed)");
             writeDelegatedScale(dir, m); // Optional Phone Projection Scaling integration.
             writeDock(dir, "1");                                  // the bottom dock with the climate bar
-            writeVersion(dir, ultra && m.settingBoolean("ultra_receiver_version", false) ? "950" : "off");                             // receiver version 950.7.1 in /info
-            writeFlag(dir, "cpc-extras", ultra && m.settingBoolean("ultra_display_extras", false), "LIVI display extras");
+            writeVersion(dir, ultra ? "950" : "off");                             // receiver version 950.7.1 in /info
+            writeFlag(dir, "cpc-extras", ultra, "LIVI display extras");
             writeCluster(dir, "full");                            // the instrument panel with its plugin (climate overlay)
             writeWide(dir, "0");
             writeUltra(dir, themedIds ? 2 : cluster ? 1 : 0);                       // virtual cluster + the theme's display names
@@ -141,9 +141,9 @@ public final class CpClimate extends ModEntry {
             String model = "DBX";
             VehicleState.variant = variant && !"none".equals(model) ? model : "";
             m.log("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
-            boolean uiSync = ultra && m.settingBoolean("ultra_ui_sync", false);                               // the theme's layouts, palettes and wallpapers
+            boolean uiSync = themedIds && m.settingBoolean("ultra_ui_sync", false);                               // the theme's layouts, palettes and wallpapers
             writeFlag(dir, "cpc-uisync", uiSync, "uiSync (CarPlay theme layouts and palettes)");
-            writeFeatures(dir, features ? (m.settingBoolean("ultra_full_features", false) ? "livi_all" : "livi_nonaudio") : "off");
+            writeFeatures(dir, features ? "livi_all" : "off");
             writeFlag(dir, "cpc-xfeat", enhanced, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
             // Stage 2 is not validated: do not offer video even if an old setting is saved.
@@ -288,7 +288,7 @@ public final class CpClimate extends ModEntry {
             // the uiSync experiment: the theme's layout/palette channel, answered by UiSync
             // Bootstrap the known Modular layout; palette selection is still subject to asset verification.
             if (uiSync) new UiSyncChannel(dir, log, UiSync.layout("Modular"),
-                    m.settingBoolean("ultra_legacy_center_layout", false)).start();
+                    false).start();
         }
         MethodHook copy = new MethodHook() {
             @Override

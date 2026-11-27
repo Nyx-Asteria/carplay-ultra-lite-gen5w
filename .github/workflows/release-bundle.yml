@@ -54,7 +54,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Nyx-Asteria/Phone-Projection-Scaling
-          ref: 90c58da991d8ed5392b2549f05043366996de103
+          ref: 150962a2624f9b855ab6c41d3d5a631cdb7cbd30
           path: .pps
           persist-credentials: false
       - uses: actions/setup-java@v4
@@ -189,4 +189,4 @@ jobs:
           bundle=$(basename "$(find release -name 'CarPlay-Ultra-Lite-K5-*-testing-bundle.zip' -print -quit)")
           VERSION=${bundle#CarPlay-Ultra-Lite-K5-}
           VERSION=${VERSION%-testing-bundle.zip}
-          gh release create "v$VERSION" release/*.zip release/SHA256SUMS.txt --prerelease --latest=false --target "$TARGET" --title "CarPlay Ultra-Lite K5 $VERSION" --notes-file release/TESTING.md
+          gh release create "v$VERSION" release/*.zip release/SHA256SUMS.txt --latest --target "$TARGET" --title "CarPlay Ultra-Lite K5 $VERSION" --notes-file release/TESTING.md
