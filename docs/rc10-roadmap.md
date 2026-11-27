@@ -46,3 +46,5 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - Consolidate development commits into meaningful reviewable units; preserve published release tags and create recovery refs before any history rewrite.
 - Review build and test infrastructure; verify identical artifacts or explain intentional differences.
 - Do not rewrite active RC10 history; agree migration scope before changing shared branch history.
+
+- [x] AirPlay player-specific listeners and generation-bound audio fallback; CI pending.
