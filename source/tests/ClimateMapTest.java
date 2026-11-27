@@ -637,6 +637,31 @@ public class ClimateMapTest {
             List<ClimateMap.Command> fan=ClimateMap.commands(writes,current,2);
             check("legacy leaves fan off precedence unchanged",fan.size()==1&&fan.get(0).b==2);
         }
+        // Exercise actual vehicle-state dispatch, not only the standalone mapper.
+        for(boolean immediate:new boolean[]{false,true}){
+            VehicleState.seatHeatImmediateFeedback=immediate;
+            for(long[] pair:new long[][]{
+                {ClimateMap.DRIVER_SEAT_LEVEL,ClimateMap.DRIVER_SEAT_ON,ClimateMap.DRIVER_VENT_LEVEL,ClimateMap.DRIVER_VENT_ON},
+                {ClimateMap.PASSENGER_SEAT_LEVEL,ClimateMap.PASSENGER_SEAT_ON,ClimateMap.PASSENGER_VENT_LEVEL,ClimateMap.PASSENGER_VENT_ON}}){
+                final List<ClimateMap.Command> legacyDispatch=new java.util.ArrayList<ClimateMap.Command>();
+                VehicleState legacyState=new VehicleState(new VsChannel.Log(){public void log(String m){}});
+                legacyState.car=new VehicleState.Car(){public void phoneWrote(Map<Long,Object> w,Map<Long,Object> state){
+                    legacyDispatch.addAll(ClimateMap.commands(w,state,2));
+                }};
+                Map<Long,Object> baseline=new java.util.LinkedHashMap<Long,Object>();
+                baseline.put(pair[0],0L);baseline.put(pair[1],false);baseline.put(pair[2],0L);baseline.put(pair[3],false);
+                legacyState.fromCar(baseline);
+                legacyState.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest","transactionID",70L,"values",VehicleState.dict(pair[0],3L))));
+                check("legacy explicit high dispatch",legacyDispatch.size()==1&&legacyDispatch.get(0).b==8);
+                legacyDispatch.clear();
+                legacyState.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest","transactionID",71L,"values",VehicleState.dict(pair[1],true))));
+                check("legacy pending level retained immediate="+immediate,legacyDispatch.size()==1&&legacyDispatch.get(0).b==8);
+                legacyDispatch.clear();
+                legacyState.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest","transactionID",72L,"values",VehicleState.dict(pair[1],false))));
+                check("legacy unambiguous off dispatch",legacyDispatch.size()==1&&legacyDispatch.get(0).b==2);
+            }
+        }
+        VehicleState.seatHeatImmediateFeedback=true;
         ClimateMap.legacySeatHeatArbitration=false;
         ClimateMap.Reading snap=new ClimateMap.Reading();
         ClimateMap.TemperatureSample firstTemperatureSample=new ClimateMap.TemperatureSample(20,65535,25,77,65535,100);
