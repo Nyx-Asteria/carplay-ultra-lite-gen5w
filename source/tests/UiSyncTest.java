@@ -407,6 +407,34 @@ public class UiSyncTest {
         check("reconnect creates fresh state without mutating old connection",reconnect.select(centerReset)!=center&&center.ready);
     }
 
+    static void sharedPreferences(File dir) throws Exception {
+        File file=File.createTempFile("theme-preferences-", ".properties",dir);
+        try {
+            UiSync a=new UiSync(file,true),b=new UiSync(file,true);
+            a.wanted=b.wanted=UiSync.layout("Modular");
+            a.remember("Cluster_Display",UiSync.layout("DigiRing").id,"green",true);
+            check("existing panel reads latest saved choice", "green".equals(b.selected("Cluster_Display").palette)
+                    && UiSync.layout("DigiRing").id.equals(b.selected("Cluster_Display").id));
+            b.remember("Center_Display",UiSync.CENTER.id,"blue",true);
+            a.remember("Cluster_Display",UiSync.layout("DigiRing").id,"red",false);
+            java.util.Properties disk=new java.util.Properties();
+            FileInputStream input=new FileInputStream(file);
+            try{disk.load(input);}finally{input.close();}
+            check("independent panel preference retained",UiSync.CENTER.id.equals(disk.getProperty("Center_Display.layout")));
+            check("latest palette visible to other existing handler","red".equals(b.selected("Cluster_Display").palette));
+            disk.remove("Cluster_Display.layout");
+            FileOutputStream output=new FileOutputStream(file);
+            try{disk.store(output,"reset selected layout");}finally{output.close();}
+            b.remember("Center_Display",UiSync.CENTER.id,"blue",true);
+            check("removed layout not resurrected by older cache",UiSync.layout("Modular").id.equals(a.selected("Cluster_Display").id));
+            output=new FileOutputStream(file);
+            try{output.write("broken=\\uZZZZ".getBytes("UTF-8"));}finally{output.close();}
+            byte[] corrupted=read(file);
+            a.remember("Cluster_Display",UiSync.layout("DigiRing").id,"green",true);
+            check("malformed file not overwritten",Arrays.equals(corrupted,read(file)));
+        }finally{file.delete();new File(file.getPath()+".tmp").delete();}
+    }
+
     public static void main(String[] args) throws Exception {
         for(int i=0;i<VsData.NAME_IIDS.length;i++) {
             check("navigation logging classification iid="+VsData.NAME_IIDS[i],VehicleState.navigationCharacteristic(VsData.NAME_IIDS[i])==(i<16));
@@ -415,6 +443,7 @@ public class UiSyncTest {
         layoutRequest();
         independentConnections();
         panelRouting();
+        sharedPreferences(new File(args[0]));
         variant();
         plists(new File(args[1]), new File(args[2]));
         channel(new File(args[0]));
