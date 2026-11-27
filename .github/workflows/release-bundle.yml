@@ -56,13 +56,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Nyx-Asteria/hmgapi-wireless-cp-aa
-          ref: 4885b9fd7c05c2755aad6b32d8fdc15b5bddb0c6
+          ref: 3b951c745ce78fde4ca6085b28d682c7d629bb98
           path: .wireless
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
           repository: Nyx-Asteria/Phone-Projection-Scaling
-          ref: 150962a2624f9b855ab6c41d3d5a631cdb7cbd30
+          ref: bd57be364d95d9542b5aaf81269fa2b8dc1d35e2
           path: .pps
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -120,6 +120,10 @@ jobs:
           mkdir -p out/staging out/park-tests out/tests out/check-classes out/check-dex
           javac --release 8 -d out/park-tests source/mod/src/ioniq6/cpclimate/ParkedState.java source/tests/ParkedStateTest.java
           java -cp out/park-tests ioniq6.cpclimate.ParkedStateTest
+          bash source/tests/run-companion-contract.sh .wireless .tbt .pps
+          bash source/tests/run-native-regressions.sh
+          /usr/bin/python3 source/tools/rebuild-pinned-recipe.py source/mod/recipes/carplay-climate-m1.recipe out/native/carplay-climate-m1.recipe
+          cp out/native/carplay-climate-m1.recipe source/mod/recipes/carplay-climate-m1.recipe
           sh "$SDK/bin/build-mod.sh" source/mod out/core out/work
           bash source/tests/run-regressions.sh
           sh source/mod/tools/video/fetch-libs.sh
@@ -219,13 +223,14 @@ jobs:
           test "$(find out/release -name '*.zip' | wc -l)" -eq 7
           cp "docs/rc${VERSION##*.}-testing.md" out/release/TESTING.md
           cp CHANGELOG.md out/release/CHANGELOG.md
+          if [ "$VERSION" = "1.0.0-rc.11" ]; then cp docs/theme-pairing-validation.md out/release/theme-pairing-validation.md; fi
           printf '\n## Standalone TBT coexistence\nExplicitly disable WCP Integrated turn-by-turn, apply and restart before testing Standalone TBT. Keep Enable wireless CarPlay on; audio and Now Playing follow this master, and shared identity is independent. Remove the original Phone Projection TBT before installing the renamed fork. Never enable two navigation publishers.\n' >> out/release/TESTING.md
           (
             cd out/release
             sha256sum *.zip > SHA256SUMS.txt
             sha256sum --strict -c SHA256SUMS.txt
             bundle="CarPlay-Ultra-Lite-K5-$VERSION-testing-bundle.zip"
-            zip -q "$bundle" *.zip TESTING.md CHANGELOG.md SHA256SUMS.txt
+            zip -q "$bundle" *.zip *.md SHA256SUMS.txt
             unzip -t "$bundle"
             verify_dir=$(mktemp -d)
             unzip -q "$bundle" -d "$verify_dir"

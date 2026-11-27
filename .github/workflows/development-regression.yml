@@ -28,6 +28,40 @@ jobs:
           persist-credentials: false
       - name: Native hook regression (host CFLite mock)
         run: bash source/tests/run-native-regressions.sh
+      - name: Compile ARM payload and regenerate recipe
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq clang lld python3-pyelftools
+          /usr/bin/python3 source/tools/rebuild-pinned-recipe.py source/mod/recipes/carplay-climate-m1.recipe out/native/carplay-climate-m1.recipe
+  companion-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Nyx-Asteria/hmgapi-wireless-cp-aa
+          ref: 3b951c745ce78fde4ca6085b28d682c7d629bb98
+          path: .wireless
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Nyx-Asteria/Standalone_TBT
+          ref: e8770256ff6679546c483af43aed3f7a6b19b998
+          path: .tbt
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Nyx-Asteria/Phone-Projection-Scaling
+          ref: bd57be364d95d9542b5aaf81269fa2b8dc1d35e2
+          path: .pps
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: bash source/tests/run-companion-contract.sh .wireless .tbt .pps
   test:
     runs-on: ubuntu-24.04
     steps:
