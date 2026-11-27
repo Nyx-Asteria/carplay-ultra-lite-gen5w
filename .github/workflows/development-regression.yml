@@ -54,6 +54,8 @@ jobs:
           done
           javac --release 8 -cp "$CP" -d out/tests source/tests/ParkedStateTest.java
           java -cp "out/tests:$CP" ioniq6.cpclimate.ParkedStateTest
+          javac --release 8 -cp "$CP" -d out/tests source/tests/SeatCommandTraceTest.java
+          java -cp "out/tests:$CP" ioniq6.cpclimate.SeatCommandTraceTest
           javac --release 8 -cp "$CP" -d out/tests source/tests/SeatSchemaTest.java
           javac --release 8 -cp "$CP" -d out/tests source/tests/RadioActivationTraceTest.java
           java -cp "out/tests:$CP" ioniq6.cpclimate.RadioActivationTraceTest
