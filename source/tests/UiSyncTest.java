@@ -434,6 +434,13 @@ public class UiSyncTest {
         check("interleaved center completes without forcing layout",router.select(panelFrame("Center_Display",1)).handle(panelFrame("Center_Display",1)).size()==3);
         check("interleaved cluster completes with configured layout",router.select(panelFrame("Cluster_Display",1)).handle(panelFrame("Cluster_Display",1)).size()==4);
         check("all routed sessions ready",cluster.ready&&center.ready&&legacy.ready);
+        check("unknown explicit display cannot enter legacy lane",router.select(panelFrame("Unknown_Display",0))==null);
+        check("malformed OPACK cannot enter legacy lane",router.select(new byte[0])==null);
+        Map<Object,Object> invalid=new LinkedHashMap<Object,Object>();
+        invalid.put("displayUUID",42L);
+        invalid.put("data",Bplist.encode(map("type",0L)));
+        check("non-string display cannot enter legacy lane",router.select(OpackCodec.encode(invalid))==null);
+        check("rejected frames preserve all panel states",cluster.ready&&center.ready&&legacy.ready);
         UiSyncChannel.PanelRouter reconnect=new UiSyncChannel.PanelRouter(null,config);
         check("reconnect creates fresh state without mutating old connection",reconnect.select(centerReset)!=center&&center.ready);
     }

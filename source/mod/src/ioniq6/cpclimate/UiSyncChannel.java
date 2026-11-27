@@ -95,8 +95,20 @@ final class UiSyncChannel extends Thread {
             this.preferences=preferences;this.configuration=configuration;
         }
         UiSync select(byte[] body) {
-            String id=panelId(body);
-            if(id==null)id="legacy";
+            // Missing displayUUID is the historical legacy lane; an explicit
+            // unknown or malformed display must not share its handshake state.
+            String id;
+            try {
+                Object decoded=OpackCodec.decode(body);
+                if (!(decoded instanceof java.util.Map)) return null;
+                java.util.Map<?,?> frame=(java.util.Map<?,?>)decoded;
+                if (!frame.containsKey("displayUUID")) id="legacy";
+                else {
+                    Object display=frame.get("displayUUID");
+                    if (!"Center_Display".equals(display) && !"Cluster_Display".equals(display)) return null;
+                    id=(String)display;
+                }
+            } catch (RuntimeException e) { return null; }
             UiSync state=panels.get(id);
             if(state==null){
                 state=new UiSync(preferences,true);
@@ -162,6 +174,11 @@ final class UiSyncChannel extends Thread {
                         List<byte[]> answers;
                         List<String> picked;
                         UiSync sync=router.select(body);
+                        if (sync == null) {
+                            if (logged++ < MAX_LOGGED) out.log("[theme-sync] unsupported or malformed panel frame ignored");
+                            at += size;
+                            continue;
+                        }
                         synchronized (sync) {
                             try {
                                 answers = sync.handle(body);
