@@ -78,7 +78,14 @@ final class ThemeContribution {
                                 || !mod.settingBoolean("ultra_sidebars", true)) {
                             synchronized (ThemeContribution.this) {
                                 if (observer != Thread.currentThread()) return;
-                                unregister(mod);
+                                boolean withdrawn = unregister(mod);
+                                String status = withdrawn ? "contribution_withdrawn" : "withdrawal_pending";
+                                if (!status.equals(last)) {
+                                    mod.log("[theme] negotiation " + status);
+                                    android.util.Log.i("CPULCrossProcess", "[theme] negotiation " + status);
+                                    last = status;
+                                }
+                                previous = null;
                             }
                             Thread.sleep(2000);
                             continue;
@@ -122,6 +129,15 @@ final class ThemeContribution {
                         // Periodically emit a fresh observation, never replay old evidence.
                         synchronized (ThemeContribution.this) {
                             if (observer != Thread.currentThread()) return;
+                            // Do not publish a sample after eligibility or ownership was lost
+                            // during the reflective calls. Never treat builder evidence as acceptance.
+                            if (!mod.enabled() || !mod.settingBoolean("ultra_theme", true)
+                                    || !mod.settingBoolean("ultra_sidebars", true)) {
+                                next = unregister(mod) ? "contribution_withdrawn" : "withdrawal_pending";
+                                service = null;
+                            } else if (owned && service != null && !ownership.confirmed(service)) {
+                                next = "contribution_unconfirmed";
+                            }
                             long now = android.os.SystemClock.elapsedRealtime();
                             if (service != previous || !next.equals(last)) {
                                 mod.log("[theme] negotiation " + next);
@@ -173,6 +189,9 @@ final class ThemeContribution {
             return true;
         } catch (Exception e) {
             mod.error("Ultra theme withdrawal failed", e);
+            return false;
+        } catch (LinkageError e) {
+            mod.error("Ultra theme withdrawal linkage unavailable", e);
             return false;
         }
     }
