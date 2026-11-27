@@ -28,81 +28,17 @@
     {
       "key": "ultra_theme",
       "type": "toggle",
-      "default": false,
-      "title": "Ultra experiments",
-      "description": "Master switch for individually selected Ultra components. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_identity",
-      "type": "toggle",
-      "default": false,
-      "title": "Ultra: theme identity",
-      "description": "Advertise original theme ID via Wireless shared identity. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_session_start",
-      "type": "toggle",
       "default": true,
-      "title": "Ultra: CarPlayStartSession",
-      "description": "Requires Ultra theme identity and a compatible Wireless provider. Respond to CarPlayAvailability with receiver and theme metadata; stock startup remains available when prerequisites are missing. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_cluster",
-      "type": "toggle",
-      "default": false,
-      "title": "Ultra: virtual cluster",
-      "description": "Advertise secondary display stream. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_display_ids",
-      "type": "toggle",
-      "default": false,
-      "title": "Ultra: themed display IDs",
-      "description": "Requires virtual cluster. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_variant",
-      "type": "toggle",
-      "default": false,
-      "title": "Ultra: DBX vehicle variant",
-      "description": "Advertise theme vehicle variant. Restart required.",
+      "title": "CarPlay Ultra",
+      "description": "Enable theme identity, session start, virtual display, DBX and extended Ultra capabilities. Restart required.",
       "apply": "restart"
     },
     {
       "key": "ultra_ui_sync",
       "type": "toggle",
-      "default": false,
-      "title": "Ultra: UI synchronization",
-      "description": "Negotiate layout and palette channel. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_features",
-      "type": "toggle",
-      "default": false,
-      "title": "Ultra: extended features",
-      "description": "Advertise non-audio LIVI features. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_full_features",
-      "type": "toggle",
-      "default": false,
-      "title": "Ultra: original feature mask",
-      "description": "Requires extended features; experimental original upstream mask. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_enhanced_ui",
-      "type": "toggle",
-      "default": false,
-      "title": "Ultra: enhanced RequestCarUI",
-      "description": "Advertise enhanced UI capability. Restart required.",
+      "default": true,
+      "title": "Ultra themes and UI synchronization",
+      "description": "Enable layout, palette and wallpaper synchronization when CarPlay Ultra is enabled. Restart required.",
       "apply": "restart"
     }
   ]

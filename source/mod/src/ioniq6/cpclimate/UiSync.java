@@ -58,6 +58,58 @@ final class UiSync {
     /** the cluster layout the car asks for once the channel is up (null: none, as 0.9.11) */
     Layout wanted;
     boolean light;
+    static final String DEFAULT_PALETTE = "midnight";
+    static final String DEFAULT_WALLPAPER = "gradient-Midnight";
+    // Apple package 44C9FA31EC v985: center Wallpaper primary layout, no zones.
+    static final Layout CENTER = new Layout("Wallpaper", "9E19BC4E-5251-5821-A0BA-26479A79F722", "blue", null, null);
+    private java.io.File preferences;
+    private final java.util.Properties saved = new java.util.Properties();
+    private final boolean centerEnabled;
+    UiSync() { this(null, false); }
+    UiSync(java.io.File preferences, boolean centerEnabled) {
+        this.preferences = preferences;
+        this.centerEnabled = centerEnabled;
+        if (preferences != null) try {
+            java.io.FileInputStream in = new java.io.FileInputStream(preferences);
+            try { saved.load(in); } finally { in.close(); }
+        } catch (java.io.IOException ignored) {}
+    }
+    static Layout byId(String id) {
+        for (Layout l : THEME_LAYOUTS) if (l.id.equals(id)) return l;
+        return CENTER.id.equals(id) ? CENTER : null;
+    }
+    static boolean offered(Layout l, String p) {
+        if (p == null) return false;
+        if (l == CENTER) return "blue".equals(p);
+        if ("Cobranded".equals(l.name)) return "custom".equals(p);
+        if ("MapsMedia".equals(l.name)) return "vibrant".equals(p);
+        return ("Modular".equals(l.name) && "multicolor".equals(p))
+            || java.util.Arrays.asList("blue","green","midnight","orange","red","rose","starlight","yellow").contains(p);
+    }
+    Layout selected(String display) {
+        Layout base = "Cluster_Display".equals(display) ? wanted :
+                centerEnabled && "Center_Display".equals(display) ? CENTER : null;
+        if (base == null) return null;
+        Layout remembered = byId(saved.getProperty(display + ".layout"));
+        if (remembered != null && (base == CENTER) == (remembered == CENTER)) base = remembered;
+        String p = saved.getProperty(display + ".palette." + base.id);
+        if (!offered(base, p)) p = offered(base, DEFAULT_PALETTE) ? DEFAULT_PALETTE : base.palette;
+        return new Layout(base.name, base.id, p, base.zone, base.component);
+    }
+    void remember(String display, String id, String palette, boolean selectLayout) {
+        Layout l = byId(id);
+        if (l == null || !("Cluster_Display".equals(display) && l != CENTER ||
+                centerEnabled && "Center_Display".equals(display) && l == CENTER)) return;
+        if (selectLayout) saved.setProperty(display + ".layout", id);
+        if (offered(l, palette)) saved.setProperty(display + ".palette." + id, palette);
+        if (preferences == null) return;
+        java.io.File tmp = new java.io.File(preferences.getPath() + ".tmp");
+        try {
+            java.io.FileOutputStream out = new java.io.FileOutputStream(tmp);
+            try { saved.store(out, "CPUL layout preferences"); out.getFD().sync(); } finally { out.close(); }
+            if (!tmp.renameTo(preferences)) tmp.delete();
+        } catch (java.io.IOException ignored) { tmp.delete(); }
+    }
 
     long session, nextTx, lastRx, version;
     boolean ready, awaitingResetComplete;
@@ -116,8 +168,9 @@ final class UiSync {
             if (version >= 2) withId(extra);
             out.add(message(RESET_COMPLETE, null, extra));
             out.add(message(COMMAND, command(ALLOW_LAYOUT_CHANGE, "allow", Boolean.TRUE), null));
-            if (wanted != null && "Cluster_Display".equals(panel.get("displayUUID")))
-                out.add(message(COMMAND, requestLayout(wanted, light ? LIGHT : DARK), null));
+            Layout selected = selected(String.valueOf(panel.get("displayUUID")));
+            if (selected != null)
+                out.add(message(COMMAND, requestLayout(selected, light ? LIGHT : DARK), null));
             out.add(message(COMMAND, command(GIVE_FOCUS, "tokenID", FOCUS_TOKEN), null));
         } else if (type != null && type == COMMAND && ready) {
             lastRx = orLast(header.get("psn"));
@@ -154,8 +207,12 @@ final class UiSync {
         if (type == null) return false;
         if (type == START_LAYOUT_TRANSITION && data.get("layoutID") instanceof String) {
             choices.add("layout " + data.get("layoutID") + (data.get("paletteID") instanceof String ? " palette " + data.get("paletteID") : ""));
+            remember(String.valueOf(panel.get("displayUUID")), (String) data.get("layoutID"),
+                    data.get("paletteID") instanceof String ? (String) data.get("paletteID") : null, true);
         } else if (type == PALETTE_CHANGE && data.get("layoutIdentifier") instanceof String && data.get("paletteIdentifier") instanceof String) {
             choices.add("palette " + data.get("paletteIdentifier") + " of layout " + data.get("layoutIdentifier"));
+            remember(String.valueOf(panel.get("displayUUID")), (String) data.get("layoutIdentifier"),
+                    (String) data.get("paletteIdentifier"), false);
         } else if (type == APPEARANCE_PREFERENCE_CHANGE) {
             Long p = OpackCodec.asLong(data.get("preference"));
             if (p != null && p >= 0 && p <= 2) choices.add("appearance " + (p == 0 ? "automatic" : p == 1 ? "light" : "dark"));
@@ -172,7 +229,7 @@ final class UiSync {
     /** LIVI ui_sync.rs request_layout: the layout, its palette, the appearance and the map zone's component */
     static Map<String, Object> requestLayout(Layout l, long appearance) {
         Map<String, Object> active = new LinkedHashMap<String, Object>();
-        active.put(l.zone, l.component);
+        if (l.zone != null && l.component != null) active.put(l.zone, l.component);
         Map<String, Object> data = new LinkedHashMap<String, Object>();
         data.put("layoutID", l.id);
         data.put("paletteID", l.palette);

@@ -48,7 +48,7 @@ public final class CpClimate extends ModEntry {
         targetVerified = model && core && identity && dipo;
         m.log("[preflight] target=" + model + " core=" + core + " identity=" + identity + " dipo=" + dipo + " ready=" + targetVerified);
         themePreflight = targetVerified
-                && m.settingBoolean("ultra_theme", false) && m.settingBoolean("ultra_identity", false) && theme.available(m);
+                && m.settingBoolean("ultra_theme", true) && theme.available(m);
         m.log("[theme] boot preflight=" + themePreflight);
         if (targetVerified && m.settingBoolean("k5_integration", true)) VolumePanel.zygote(m);
     }
@@ -103,7 +103,7 @@ public final class CpClimate extends ModEntry {
     @Override
     public void appLoaded(ModContext m, LoadedApp app) {
         if ("com.tcc.iap2server".equals(app.packageName)) {
-            if (themePreflight && m.enabled() && m.settingBoolean("ultra_theme", false)) {
+            if (themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true)) {
                 theme.register(m);
             } else m.log("[theme] iAP2 contribution withheld by boot preflight/settings");
             return;
@@ -112,7 +112,7 @@ public final class CpClimate extends ModEntry {
         m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("k5_integration", true));
         if (!targetVerified) return;
         boolean climate = m.settingBoolean("k5_integration", true);
-        boolean any = climate || m.settingBoolean("k5_integration", true) || m.settingBoolean("parked_video", false) || m.settingBoolean("ultra_theme", false);
+        boolean any = climate || m.settingBoolean("k5_integration", true) || m.settingBoolean("parked_video", false) || m.settingBoolean("ultra_theme", true);
         if (!any) { m.log("[runtime] all features off; native patch withheld"); return; }
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
@@ -121,12 +121,12 @@ public final class CpClimate extends ModEntry {
             // CarPlay Ultra-Lite 1.0: two settings. Everything the development builds made switchable is fixed
             // at what was tested on the Ioniq 6 (CEEV USA 260507, 2026-11-08); the code for the other values stays.
             // Theme registration is not integrated yet. Never advertise unsupported Ultra mode.
-            boolean ultra = m.enabled() && m.settingBoolean("ultra_theme", false);
-            boolean cluster = ultra && m.settingBoolean("ultra_cluster", false);
-            boolean themedIds = cluster && m.settingBoolean("ultra_display_ids", false);
-            boolean variant = ultra && m.settingBoolean("ultra_variant", false);
-            boolean features = ultra && m.settingBoolean("ultra_features", false);
-            boolean enhanced = ultra && m.settingBoolean("ultra_enhanced_ui", false);
+            boolean ultra = m.enabled() && m.settingBoolean("ultra_theme", true);
+            boolean cluster = ultra;
+            boolean themedIds = cluster;
+            boolean variant = ultra;
+            boolean features = ultra;
+            boolean enhanced = ultra;
             m.log("[theme] identity=" + themePreflight + " cluster=" + cluster + " themedIds=" + themedIds + " variant=" + variant + " features=" + features + " enhanced=" + enhanced);
             m.log("[theme] DiPO display profile enabled=" + ultra + " (shared provider native result not exposed)");
             writeSize(dir, "80");
@@ -143,9 +143,9 @@ public final class CpClimate extends ModEntry {
             String model = "DBX";
             VehicleState.variant = variant && !"none".equals(model) ? model : "";
             m.log("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
-            boolean uiSync = ultra && m.settingBoolean("ultra_ui_sync", false);                               // the theme's layouts, palettes and wallpapers
+            boolean uiSync = ultra && m.settingBoolean("ultra_ui_sync", true);                               // the theme's layouts, palettes and wallpapers
             writeFlag(dir, "cpc-uisync", uiSync, "uiSync (CarPlay theme layouts and palettes)");
-            writeFeatures(dir, features ? (m.settingBoolean("ultra_full_features", false) ? "livi_all" : "livi_nonaudio") : "off");
+            writeFeatures(dir, features ? "livi_all" : "off");
             writeFlag(dir, "cpc-xfeat", enhanced, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
             // Stage 2 is not validated: do not offer video even if an old setting is saved.
