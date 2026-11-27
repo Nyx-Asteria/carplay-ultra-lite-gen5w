@@ -518,6 +518,31 @@ int main(void) {
         CHECK("theme ids: logged", strstr(lastlog, "theme display ids") != 0);
         m_release(si);
         CHECK("every object released after the theme case", live == 0);
+        /* A preexisting alternate screen must not orphan the stock touch device. */
+        si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        sd = (Arr *)m_new_arr(0, 0, &cb_arr);
+        sm = display("stock-center", 1920, 720, 292, 110);
+        m_append(sd, sm); m_release(sm);
+        sm = display("stock-cluster", 800, 480, 102, 61);
+        k = str("type"); m_set_int(sm, k, 111); m_release(k);
+        m_append(sd, sm); m_release(sm);
+        k = str("displays"); m_set(si, k, sd); m_release(k); m_release(sd);
+        {
+            Arr *hids = (Arr *)m_new_arr(0, 0, &cb_arr);
+            Dict *hd = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+            Str *hk = str("displayUUID"), *hv = str("stock-center");
+            m_set(hd, hk, hv); m_release(hk); m_release(hv);
+            m_append(hids, hd); m_release(hd);
+            k = str("hidDevices"); m_set(si, k, hids); m_release(k); m_release(hids);
+        }
+        cpc_info_hook(si);
+        ds2 = g(si, "displays");
+        th = g(si, "hidDevices");
+        CHECK("existing alternate screen retains center and HID identity",
+              ds2 && ds2->n == 2 && !strcmp(s_of(g(ds2->v[0], "uuid")), "stock-center")
+              && th && th->n == 1 && !strcmp(s_of(g(th->v[0], "displayUUID")), "stock-center"));
+        m_release(si);
+        CHECK("existing alternate screen case releases all objects", live == 0);
         f = fopen(DIR "cpc-hid", "w");
         if (f) { fputs("1\n", f); fclose(f); }
         si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);

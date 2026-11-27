@@ -537,24 +537,32 @@ static void move_hid(CF info, CF old, CF now) {
 static int add_alt_display(CF info, int themed) {
     CF displays = get(info, &K_displays);
     if (!is(displays, T_CFArrayGetTypeID) || count(displays) < 1) return 0;
-    CF out = new_array();
-    if (!out) return 0;
     CFIndex n = count(displays);
+    /* Validate the complete list before changing any HID association. */
     for (CFIndex i = 0; i < n; i++) {
         CF d = at(displays, i);
         if (is(d, T_CFDictionaryGetTypeID) && dict_int(d, &K_dispType) == STREAM_ALT_SCREEN) {
             LOG("cp-climate: Ultra display registration skipped: existing type 111 display (themed=%d)\n", themed);
-            release(out);
             return 0;
         }
+    }
+    CF first = at(displays, 0);
+    if (themed && (!is(first, T_CFDictionaryGetTypeID) || !is(get(first, &K_uuid), T_CFStringGetTypeID))) {
+        LOG("cp-climate: Ultra theme registration skipped: missing valid center identity\n");
+        return 0;
+    }
+    CF out = new_array();
+    if (!out) return 0;
+    for (CFIndex i = 0; i < n; i++) {
+        CF d = at(displays, i);
         /* the main display gets LIVI's type 110 (TCC's has none), so the two can be told apart;
          * themed, also the theme's id for it, and the touch screen and buttons follow it */
         CF main = i == 0 && is(d, T_CFDictionaryGetTypeID) && (themed || !get(d, &K_dispType)) ? new_dict() : 0;
+        if (themed && i == 0 && !main) { release(out); return 0; }
         if (main) {
             FN(T_CFDictionaryApplyFunction, void (*)(CF, void (*)(CF, CF, void *), void *))(d, copy_entry, (void *)main);
             set_int(main, &K_dispType, STREAM_MAIN_SCREEN);
             if (themed) {
-                move_hid(info, get(d, &K_uuid), &K_centerId);
                 set(main, &K_uuid, &K_centerId);
                 if (livi_hid_mode()) set_int(main, &K_primaryInput, PRIMARY_INPUT_KNOBS);
             }
@@ -588,6 +596,7 @@ static int add_alt_display(CF info, int themed) {
     set_int(alt, &K_mapAppSetting, APPEARANCE_AUTOMATIC);
     append(out, alt);
     release(alt);
+    if (themed) move_hid(info, get(first, &K_uuid), &K_centerId);
     put(info, &K_displays, out);
     LOG("cp-climate: Ultra display registration: main=%s, alternate=%s, original count=%d\n",
         themed ? "Center_Display" : "stock UUID", themed ? "Cluster_Display" : "virtual UUID", (int)n);
