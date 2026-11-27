@@ -750,6 +750,44 @@ int main(void) {
     cpc_setup_hook(req2, rep);
     CHECK("phone without vehicleStateProtocol: reply unchanged", rep->n == 0);
     m_release(rep);
+    {
+        /* Independent UI Sync without VSP: retain stock and never duplicate. */
+        Dict *rq = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        Arr *offer = (Arr *)m_new_arr(0, 0, &cb_arr);
+        Str *sync = str("uiSync"), *stock = str("hevc"), *enabled = str("enabledFeatures");
+        m_append(offer, sync); m_set(rq, kf, offer); m_release(offer);
+        FILE *uf = fopen(DIR "cpc-uisync", "w");
+        if (!uf) { perror("cpc-uisync"); return 1; }
+        fputs("1\n", uf); fclose(uf);
+        rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        Arr *prior = (Arr *)m_new_arr(0, 0, &cb_arr);
+        m_append(prior, stock); m_set(rep, enabled, prior); m_release(prior);
+        cpc_setup_hook(rq, rep);
+        echo = g(rep, "enabledFeatures");
+        CHECK("no VSP: UI Sync alone leaves stock", echo && echo->n == 1 && !strcmp(s_of(echo->v[0]), "hevc"));
+        uf = fopen(DIR "cpc-sync-independent", "w");
+        if (!uf) { perror("cpc-sync-independent"); return 1; }
+        fputs("1\n", uf); fclose(uf);
+        cpc_setup_hook(req2, rep);
+        echo = g(rep, "enabledFeatures");
+        CHECK("independent UI Sync requires offer", echo && echo->n == 1 && !strcmp(s_of(echo->v[0]), "hevc"));
+        cpc_setup_hook(rq, rep);
+        echo = g(rep, "enabledFeatures");
+        CHECK("independent UI Sync preserves stock", echo && echo->n == 2 && !strcmp(s_of(echo->v[0]), "hevc") && !strcmp(s_of(echo->v[1]), "uiSync"));
+        cpc_setup_hook(rq, rep);
+        echo = g(rep, "enabledFeatures");
+        CHECK("independent UI Sync idempotent", echo && echo->n == 2 && !strcmp(s_of(echo->v[0]), "hevc") && !strcmp(s_of(echo->v[1]), "uiSync"));
+        m_set(rep, enabled, stock);
+        cpc_setup_hook(rq, rep);
+        CHECK("malformed stock features untouched", g(rep, "enabledFeatures") == stock);
+        m_release(rep);
+        remove(DIR "cpc-uisync");
+        rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        cpc_setup_hook(rq, rep);
+        CHECK("independent flag alone cannot enable UI Sync", rep->n == 0);
+        m_release(rep); remove(DIR "cpc-sync-independent");
+        m_release(rq); m_release(sync); m_release(stock); m_release(enabled);
+    }
     Dict *req3 = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
     rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
     cpc_setup_hook(req3, rep);
