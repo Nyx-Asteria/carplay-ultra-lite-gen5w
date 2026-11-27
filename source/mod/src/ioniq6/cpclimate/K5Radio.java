@@ -220,7 +220,7 @@ final class K5Radio {
         if (!enabled() || !CpClimate.sessionActive) {
             fmActive = false; sxmActive = false; sxmAvailable = false;
             stationName = null; stationArtwork = null; clearTags(); lastFmFrequency = -1;
-            sxmArt = null; currentSxmChannel = -1; fullSxm = null;
+            sxmArt = null; currentSxmChannel = -1; fullSxm = null; sxmLive.clear();
             sxmKnownGeneration = -1; sxmKnownIds = java.util.Collections.emptySet();
             lastListPoll = 0; fmItems = java.util.Collections.emptyList();
             fmTuner=null; fmAudio=null; sxmTuner=null; lastServiceHealth="";
@@ -305,7 +305,7 @@ final class K5Radio {
         } catch (Throwable t) {
             fmActive=false; sxmActive=false; sxmAvailable=false; fmAudio=null;
             stationName=null; stationArtwork=null; clearTags(); lastFmFrequency=-1;
-            currentSxmChannel=-1; sxmArt=null;
+            currentSxmChannel=-1; sxmArt=null; sxmLive.clear();
             activationLog(activationTrace.sample(CpClimate.sessionGeneration,tuneRequest.get(),-1,-1,android.os.SystemClock.elapsedRealtime()));
             serviceHealth("audio sample unavailable: "+t.getClass().getSimpleName());
         }
@@ -328,8 +328,12 @@ final class K5Radio {
                 try { refreshSxmCatalog(values, channel); }
                 catch (Throwable t) { log.log("[radio-sxm] catalog unavailable: " + t.getClass().getSimpleName()); }
             }
-            if (!sxmAvailable || !sxmActive) { currentSxmChannel = -1; sxmArt = null; return; }
-            if (currentSxmChannel != channel) { sxmArt = null; currentSxmChannel = channel; }
+            if (!sxmAvailable || !sxmActive) { currentSxmChannel = -1; sxmArt = null; sxmLive.clear(); return; }
+            if (currentSxmChannel != channel) {
+                sxmArt = null;
+                sxmLive.channelChanged(CpClimate.sessionGeneration,channel);
+                currentSxmChannel = channel;
+            }
             if (sxmArt != null && sxmArt.generation != CpClimate.sessionGeneration) sxmArt = null;
             SxmArt art = sxmArt;
             if (art != null && art.channel == channel && art.generation == CpClimate.sessionGeneration)
@@ -341,18 +345,22 @@ final class K5Radio {
             // A channel ID is not necessarily its displayed channel number.
             // Publish text only when the OEM channel record matches exactly.
             refreshSxmFavoriteMetadata(values, channel);
-        } catch (Throwable t) { sxmTuner=null; sxmAvailable=false; currentSxmChannel=-1; sxmArt=null; values.put(4131L,true); }
+            SxmLiveMetadata live=sxmLive.current(CpClimate.sessionGeneration,channel);
+            if(live!=null&&live.matches(CpClimate.sessionGeneration,channel)){
+                values.put(4355L,live.title.isEmpty()?(live.name.isEmpty()?"SiriusXM":live.name):live.title);
+                values.put(4356L,live.artist);
+            }
+        } catch (Throwable t) { sxmTuner=null; sxmAvailable=false; currentSxmChannel=-1; sxmArt=null; sxmLive.clear(); values.put(4131L,true); }
     }
 
-    private long sxmRequestGeneration = -1;
-    private long sxmRequestTime = -1;
+    private final SxmCatalogRequest sxmCatalogRequest = new SxmCatalogRequest();
     // These exact void binder methods request asynchronous catalog updates.
     // Do not change category filters, tune, or request bulk artwork here.
     private void requestSxmCatalog() {
         long generation = CpClimate.sessionGeneration;
         long now = android.os.SystemClock.elapsedRealtime();
-        if (sxmRequestGeneration == generation || (sxmRequestTime >= 0 && now - sxmRequestTime < 30000)) return;
-        sxmRequestTime = now;
+        SxmSnapshot snapshot=fullSxm;
+        if (!sxmCatalogRequest.begin(generation,now,snapshot!=null&&snapshot.generation==generation&&snapshot.ids.length>0)) return;
         try {
             Class<?> iface = Class.forName(SXM_IFACE);
             java.lang.reflect.Method categories = iface.getMethod("requestAllAvailableCategories");
@@ -362,12 +370,12 @@ final class K5Radio {
             categories.invoke(sxmTuner);
             if (!probeActive(generation) || !sxmActive) return;
             channels.invoke(sxmTuner);
-            sxmRequestGeneration = generation;
             log.log("[radio-sxm] requested OEM category and channel catalog; awaiting asynchronous updates");
         } catch (Throwable t) { log.log("[radio-sxm] catalog request unavailable: " + t.getClass().getSimpleName()); }
     }
 
     private volatile SxmSnapshot fullSxm;
+    private final SxmMetadataState sxmLive=new SxmMetadataState();
     private volatile SxmArt sxmArt;
     private volatile int currentSxmChannel = -1;
     private static final class SxmArt {
@@ -393,6 +401,13 @@ final class K5Radio {
                     if (!enabled() || !CpClimate.sessionActive || !VehicleState.sxmSchemaTest) return;
                     long age = android.os.SystemClock.elapsedRealtime() - i.getLongExtra("received", -1);
                     if (age < 0 || age > 2000) return;
+                    if(i.hasExtra("liveChannel")){
+                        int id=i.getIntExtra("liveChannel",-1);
+                        if(sxmActive&&id>=0){
+                            sxmLive.receive(new SxmLiveMetadata(CpClimate.sessionGeneration,id,i.getStringExtra("liveName"),i.getStringExtra("liveTitle"),i.getStringExtra("liveArtist")));
+                        }
+                        return;
+                    }
                     if (i.hasExtra("artChannel")) {
                         int id = i.getIntExtra("artChannel", -1);
                         byte[] bytes = i.getByteArrayExtra("artwork");
@@ -404,6 +419,13 @@ final class K5Radio {
                     String[] names = i.getStringArrayExtra("names"), titles = i.getStringArrayExtra("titles"), artists = i.getStringArrayExtra("artists");
                     if (ids == null || ids.length > 512 || names == null || titles == null || artists == null
                             || names.length != ids.length || titles.length != ids.length || artists.length != ids.length) return;
+                    // A transient empty response must not erase a previously usable catalog.
+                    // Live lock/subscription/skip checks still govern every tuning command.
+                    SxmSnapshot previous=fullSxm;
+                    if(ids.length==0 && previous!=null && previous.generation==CpClimate.sessionGeneration && previous.ids.length>0){
+                        log.log("[radio-sxm] empty catalog response; withholding replacement");
+                        return;
+                    }
                     fullSxm = new SxmSnapshot(CpClimate.sessionGeneration, ids, names, titles, artists);
                     log.log("[radio-sxm] full OEM catalog received count=" + ids.length);
                 }

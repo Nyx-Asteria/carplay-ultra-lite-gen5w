@@ -58,6 +58,30 @@ final class SxmCatalogBridge {
                 }
             });
             diagnostic(m,"[radio-sxm] decoded catalog observer installed");
+            // DL322 RadioNA DEX declares this exact callback with a Channel object.
+            // Observe the decoded current-channel record, not catalog track snapshots.
+            try {
+                final Field title=field(channel,"mTitle"), artist=field(channel,"mArtist");
+                Hooks.findAndHookMethod(listener,"onCurrentChannelUpdated",channel,new MethodHook(){
+                    @Override protected void afterHookedMethod(Param p){
+                        try {
+                            if(!m.enabled()||!m.settingBoolean("k5_integration",true)||!m.settingBoolean("sxm_schema_test",false))return;
+                            Object row=p.args[0];
+                            if(!channel.isInstance(row))return;
+                            Object raw=id.get(row);
+                            if(!(raw instanceof Number)||((Number)raw).intValue()<0)return;
+                            context.sendBroadcast(new Intent(ACTION).setPackage(CpClimate.DIPO)
+                                .putExtra("received",android.os.SystemClock.elapsedRealtime())
+                                .putExtra("liveChannel",((Number)raw).intValue())
+                                .putExtra("liveName",bounded(name.get(row)))
+                                .putExtra("liveTitle",bounded(title.get(row)))
+                                .putExtra("liveArtist",bounded(artist.get(row))),"android.permission.DEVICE_POWER");
+                        }catch(Throwable t){diagnostic(m,"[radio-sxm] live metadata bridge failed: "+t.getClass().getSimpleName());}
+                    }
+                });
+                diagnostic(m,"[radio-sxm] current-channel observer installed");
+            }catch(Throwable t){diagnostic(m,"[radio-sxm] current-channel observer unavailable: "+t.getClass().getSimpleName());}
+
             final android.os.HandlerThread worker = new android.os.HandlerThread("cpul-sxm-art");
             worker.start();
             final android.os.Handler handler = new android.os.Handler(worker.getLooper());
@@ -94,6 +118,11 @@ final class SxmCatalogBridge {
                 }
             });
         } catch (Throwable t) { diagnostic(m,"[radio-sxm] catalog observer unavailable: " + t.getClass().getSimpleName()); }
+    }
+    private static String bounded(Object value){
+        if(!(value instanceof String))return "";
+        String s=((String)value).trim();
+        return s.substring(0,Math.min(256,s.length()));
     }
     private static Field field(Class<?> c, String name) throws Exception {
         Field f = c.getDeclaredField(name); f.setAccessible(true); return f;
