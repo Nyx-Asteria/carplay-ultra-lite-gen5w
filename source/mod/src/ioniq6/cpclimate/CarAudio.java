@@ -83,12 +83,22 @@ final class CarAudio extends Thread {
     private final int txSoundSetting = CarApi.code(IFACE, "getSoundSetting", "(I)I");
     private long lastBosePoll = -1, lastBoseGeneration = -1;
     private String lastBose = "";
-    private volatile String boseReading = VehiclePage.NONE;
-    private volatile long boseGeneration = -1, boseReadAt = -1;
+    private volatile BoseSample boseSample;
+    private static final class BoseSample {
+        final long generation, readAt;
+        final int stream, availability, setting;
+        BoseSample(long generation,long readAt,int stream,int availability,int setting){
+            this.generation=generation;this.readAt=readAt;this.stream=stream;
+            this.availability=availability;this.setting=setting;
+        }
+    }
     private int lastBoseStream = -1;
     String boseStatus() {
-        long age = android.os.SystemClock.elapsedRealtime() - boseReadAt;
-        return active() && boseGeneration == CpClimate.sessionGeneration && age >= 0 && age <= 10000 ? boseReading : VehiclePage.NONE;
+        BoseSample sample=boseSample;
+        if(sample==null||!active())return VehiclePage.NONE;
+        long age=android.os.SystemClock.elapsedRealtime()-sample.readAt;
+        return sample.generation==CpClimate.sessionGeneration && sample.stream==mainStream && age>=0 && age<=10000
+                ? "Availability "+sample.availability+" / Setting "+sample.setting : VehiclePage.NONE;
     }
     private void probeBose(long generation, int stream) {
         if (txSoundAvailability < 0 || txSoundSetting < 0) return;
@@ -102,16 +112,14 @@ final class CarAudio extends Thread {
             int availability = callSoundRead(txSoundAvailability);
             int setting = callSoundRead(txSoundSetting);
             String sample = "stream=" + stream + " availability=" + availability + " setting=" + setting;
-            boseReading = "Availability " + availability + " / Setting " + setting;
-            boseGeneration = generation;
-            boseReadAt = android.os.SystemClock.elapsedRealtime();
+            if(!active()||generation!=CpClimate.sessionGeneration){boseSample=null;return;}
+            boseSample=new BoseSample(generation,android.os.SystemClock.elapsedRealtime(),stream,availability,setting);
             if (!sample.equals(lastBose)) {
                 lastBose = sample;
                 out.log("[audio-bose] Centerpoint " + sample);
             }
         } catch (Throwable t) {
-            boseReading = VehiclePage.NONE;
-            boseGeneration = -1;
+            boseSample=null;
             String sample = "unavailable: " + t.getClass().getSimpleName();
             if (!sample.equals(lastBose)) { lastBose = sample; out.log("[audio-bose] " + sample); }
         }
@@ -122,7 +130,7 @@ final class CarAudio extends Thread {
     // navigation, call, or alert streams for the main media slider.
     private int mediaStream() throws Exception {
         if (txCurrent < 0 || txMode < 0) return 14;
-        int mode = call(txMode), stream = call(txCurrent);
+        int mode = readInt(txMode), stream = readInt(txCurrent);
         if (mode == 2 && stream == 38) return 38;
         if (mode == 4 && stream == 41) return 41;
         return 14;
@@ -211,6 +219,7 @@ final class CarAudio extends Thread {
                     try {
                         if (!active() || s[2] != CpClimate.sessionGeneration || shown == null || shown != state[0]) continue;
                         if (s[0] < 0) {
+                            if(!hasObserved(VehicleState.MUTE))continue;
                             call(s[1] == 1 ? txMute : txUnmute);
                             muted = s[1] == 1;
                             out.log("[audio] " + (muted ? "muted" : "un-muted") + " for the phone");
@@ -220,6 +229,7 @@ final class CarAudio extends Thread {
                         synchronized (wanted) {
                             if (wanted[(int) s[0]] != s[1]) continue;
                         }
+                        if(!hasObserved(LINKS[(int)s[0]][0]))continue;
                         int stream = (int) s[3];
                         if (s[0] == 0 && stream != mediaStream()) {
                             out.log("[audio] media source changed; stale volume write discarded");
@@ -254,7 +264,7 @@ final class CarAudio extends Thread {
                     woken = false;
                 }
                 VehicleState vs = state[0];
-                if (!active() || vs == null || !(lanes[0].isOpen() || lanes[1].isOpen())) { shown = null; observedGeneration = -1; synchronized (this) { observed.clear(); } sends.clear(); VolumePanel.publishReady(panelContext, false); continue; }
+                if (!active() || vs == null || !(lanes[0].isOpen() || lanes[1].isOpen())) { shown = null; observedGeneration = -1; boseSample=null; lastBoseGeneration=-1; synchronized (this) { observed.clear(); } sends.clear(); VolumePanel.publishReady(panelContext, false); continue; }
                 long generation = CpClimate.sessionGeneration;
                 Map<Long, Object> fresh = new LinkedHashMap<Long, Object>();
                 StringBuilder seen = new StringBuilder();
@@ -262,12 +272,12 @@ final class CarAudio extends Thread {
                 probeBose(generation, main);
                 seen.append("main=").append(main).append(' ');
                 for (long[] link : LINKS) {
-                    int level = call(txGet, link[0] == VehicleState.VOLUME ? main : (int) link[1], 0);
+                    int level = readInt(txGet, link[0] == VehicleState.VOLUME ? main : (int) link[1], 0);
                     if (level < 0 || level > MAX_LEVEL) continue;   // a stream this car doesn't have, or another scale
                     fresh.put(link[0], percent(level));
                     seen.append(link[1]).append('=').append(level).append(' ');
                 }
-                if (txUserMute >= 0) { boolean mute = call(txUserMute) != 0; fresh.put(VehicleState.MUTE, mute); seen.append("mute=").append(mute); }
+                if (txUserMute >= 0) { boolean mute = readInt(txUserMute) != 0; fresh.put(VehicleState.MUTE, mute); seen.append("mute=").append(mute); }
                 if (!seen.toString().equals(last)) {
                     last = seen.toString();
                     out.log("[audio] " + last);
@@ -283,6 +293,13 @@ final class CarAudio extends Thread {
             } catch (InterruptedException e) {
                 return;
             } catch (Throwable t) {
+                // Do not accept writes or suppress the OEM panel using an
+                // observation that could no longer be verified.
+                shown=null;
+                observedGeneration=-1;
+                synchronized(this){observed.clear();}
+                sends.clear();
+                VolumePanel.publishReady(panelContext,false);
                 if (failures++ < 5) out.log("[audio] read failed: " + t);
             }
         }
@@ -290,15 +307,20 @@ final class CarAudio extends Thread {
 
     // Do not interpret an empty binder reply as a valid zero-valued sound setting.
     private int callSoundRead(int code) throws Exception {
+        return readInt(code,BOSE_CP);
+    }
+
+    private int readInt(int code,int... args) throws Exception {
+        if(code<0)throw new IllegalStateException("audio getter unavailable");
         IBinder binder = CarClimate.service(SERVICE);
         if (binder == null) throw new IllegalStateException("audio service missing");
         Parcel data = Parcel.obtain(), reply = Parcel.obtain();
         try {
             data.writeInterfaceToken(IFACE);
-            data.writeInt(BOSE_CP);
-            if (!binder.transact(code, data, reply, 0)) throw new IllegalStateException("sound read rejected");
+            for(int arg:args)data.writeInt(arg);
+            if (!binder.transact(code, data, reply, 0)) throw new IllegalStateException("audio read rejected");
             reply.readException();
-            if (reply.dataAvail() < 4) throw new IllegalStateException("sound read empty");
+            if (reply.dataAvail() < 4) throw new IllegalStateException("audio read empty");
             return reply.readInt();
         } finally { data.recycle(); reply.recycle(); }
     }

@@ -1,13 +1,13 @@
 {
   "id": "carplay-ultra-lite-k5",
   "name": "CarPlay Ultra-Lite K5",
-  "version": "1.0.0-rc.8",
+  "version": "1.0.0-rc.9",
   "hmgapi": ">=1.1.0-rc.8",
   "authors": [
     "cp-climate contributors"
   ],
   "license": "GPL-3.0-or-later",
-  "description": "Kia K5 DL322 USA 260507 CarPlay Ultra-Lite: front climate and seats, Ultra sidebars, native FM and radio diagnostics, theme and parked AirPlay experiments, stable projection scaling integration. RC8 vehicle testing build. Based on LIVI (GPL-3.0).",
+  "description": "Kia K5 DL322 USA 260507 CarPlay Ultra-Lite: front climate and seats, Ultra sidebars, native FM and radio diagnostics, theme and parked AirPlay experiments, stable projection scaling integration. RC9 vehicle testing build. Based on LIVI (GPL-3.0).",
   "system": [
     {
       "model": [
