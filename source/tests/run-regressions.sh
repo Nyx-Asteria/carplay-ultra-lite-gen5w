@@ -40,3 +40,5 @@ run_core_test VehicleDeliveryOwnershipTest
 # Exercise simultaneous lane startup and session replacement against production code.
 mkdir -p out/tests/session-pair
 run_core_test SessionPairTest out/tests/session-pair
+
+python3 source/tests/session_settings_test.py
