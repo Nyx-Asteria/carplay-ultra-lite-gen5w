@@ -14,6 +14,14 @@ public final class VolumePanelPolicyTest {
         check(!VolumePanelPolicy.suppress(true,true,true,3500,3500,true,true),"expired");
         check(!VolumePanelPolicy.suppress(true,true,true,9000,1000,true,true),"implausible");
         check(!VolumePanelPolicy.suppress(true,true,true,0,1000,true,true),"revoked");
+        check(CarAudio.boseSampleCurrent(1,1,14,14,1000,1100),"Bose stable media sample");
+        check(!CarAudio.boseSampleCurrent(1,2,14,14,1000,1100),"Bose session replaced");
+        check(!CarAudio.boseSampleCurrent(1,1,14,38,1000,1100),"Bose source changed to FM");
+        check(!CarAudio.boseSampleCurrent(1,1,38,41,1000,1100),"Bose source changed to SiriusXM");
+        check(CarAudio.boseSampleCurrent(1,1,41,41,1000,11000),"Bose freshness boundary");
+        check(!CarAudio.boseSampleCurrent(1,1,41,41,1000,11001),"Bose expired sample");
+        check(!CarAudio.boseSampleCurrent(1,1,14,14,1100,1000),"Bose future timestamp");
+        check(!CarAudio.boseSampleCurrent(1,1,14,14,-1,1000),"Bose missing timestamp");
         System.out.println("VolumePanelPolicy: ALL OK");
     }
 }

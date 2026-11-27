@@ -93,11 +93,16 @@ final class CarAudio extends Thread {
         }
     }
     private int lastBoseStream = -1;
+    static boolean boseSampleCurrent(long sampledGeneration,long currentGeneration,int sampledStream,int currentStream,long readAt,long now){
+        return sampledGeneration==currentGeneration && sampledStream==currentStream
+                && readAt>=0 && now>=readAt && now-readAt<=10000;
+    }
+
     String boseStatus() {
         BoseSample sample=boseSample;
         if(sample==null||!active())return VehiclePage.NONE;
-        long age=android.os.SystemClock.elapsedRealtime()-sample.readAt;
-        return sample.generation==CpClimate.sessionGeneration && sample.stream==mainStream && age>=0 && age<=10000
+        return boseSampleCurrent(sample.generation,CpClimate.sessionGeneration,sample.stream,mainStream,
+                sample.readAt,android.os.SystemClock.elapsedRealtime())
                 ? "Availability "+sample.availability+" / Setting "+sample.setting : VehiclePage.NONE;
     }
     private void probeBose(long generation, int stream) {
@@ -112,8 +117,17 @@ final class CarAudio extends Thread {
             int availability = callSoundRead(txSoundAvailability);
             int setting = callSoundRead(txSoundSetting);
             String sample = "stream=" + stream + " availability=" + availability + " setting=" + setting;
-            if(!active()||generation!=CpClimate.sessionGeneration){boseSample=null;return;}
-            boseSample=new BoseSample(generation,android.os.SystemClock.elapsedRealtime(),stream,availability,setting);
+            // Do not associate the pair with a source that changed during the read.
+            // The sampling interval counts toward freshness; a slow Binder reply
+            // must not make an old observation appear newly acquired.
+            int confirmedStream=mediaStream();
+            if(!active() || !boseSampleCurrent(generation,CpClimate.sessionGeneration,stream,confirmedStream,
+                    now,android.os.SystemClock.elapsedRealtime())){
+                boseSample=null;
+                lastBoseGeneration=-1; // retry on the next regular poll
+                return;
+            }
+            boseSample=new BoseSample(generation,now,stream,availability,setting);
             if (!sample.equals(lastBose)) {
                 lastBose = sample;
                 out.log("[audio-bose] Centerpoint " + sample);
