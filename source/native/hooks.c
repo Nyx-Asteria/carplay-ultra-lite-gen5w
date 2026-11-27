@@ -372,7 +372,38 @@ static int add_view_area(CF info, int pct, int edge, int extras, int wide) {
     CF displays = get(info, &K_displays);
     if (!is(displays, T_CFArrayGetTypeID) || count(displays) < 1) return 0;
     CF first = at(displays, 0);
-    if (!is(first, T_CFDictionaryGetTypeID) || get(first, &K_viewAreas)) return 0;
+    if (!is(first, T_CFDictionaryGetTypeID)) return 0;
+    /* A stock/PPS view area must not prevent the separate Ultra display
+     * metadata from being advertised. Preserve geometry and scaling here. */
+    if (get(first, &K_viewAreas)) {
+        if (!extras) return 0;
+        CF out = new_array(), copy = new_dict();
+        if (!out || !copy) {
+            if (out) release(out);
+            if (copy) release(copy);
+            return 0;
+        }
+        FN(T_CFDictionaryApplyFunction, void (*)(CF, void (*)(CF, CF, void *), void *))(first, copy_entry, (void *)copy);
+        int err = 0;
+        long long f = FN(T_CFDictionaryGetInt64, long long (*)(CF, CF, int *))(first, &K_features_d, &err);
+        set_int(copy, &K_features_d, (err ? 0 : f) | DISPLAY_FEATURE_KNOBS);
+        if (!get(copy, &K_uiAppMode)) set_int(copy, &K_uiAppMode, APPEARANCE_DARK);
+        if (!get(copy, &K_uiAppSetting)) set_int(copy, &K_uiAppSetting, APPEARANCE_AUTOMATIC);
+        if (!get(copy, &K_mapAppMode)) set_int(copy, &K_mapAppMode, APPEARANCE_DARK);
+        if (!get(copy, &K_mapAppSetting)) set_int(copy, &K_mapAppSetting, APPEARANCE_AUTOMATIC);
+        if (!get(copy, &K_adjacentViewAreas)) put(copy, &K_adjacentViewAreas, new_array());
+        CF no = boolean(bplist_false);
+        if (no) {
+            if (!get(copy, &K_cornerMasks)) set(copy, &K_cornerMasks, no);
+            release(no);
+        }
+        append(out, copy);
+        release(copy);
+        for (CFIndex i = 1; i < count(displays); i++) append(out, at(displays, i));
+        put(info, &K_displays, out);
+        LOG("cp-climate: Ultra display metadata supplemented; existing viewAreas preserved\n");
+        return 0;
+    }
     CF out = new_array();
     if (!out) return 0;
     CFIndex n = count(displays);
@@ -431,6 +462,8 @@ static int add_view_area(CF info, int pct, int edge, int extras, int wide) {
         release(copy);
     }
     put(info, &K_displays, out);
+    LOG("cp-climate: Ultra display registration: main=%s, alternate=%s, original count=%d\n",
+        themed ? "Center_Display" : "stock UUID", themed ? "Cluster_Display" : "virtual UUID", (int)n);
     return 1;
 }
 
@@ -512,6 +545,7 @@ static int add_alt_display(CF info, int themed) {
     for (CFIndex i = 0; i < n; i++) {
         CF d = at(displays, i);
         if (is(d, T_CFDictionaryGetTypeID) && dict_int(d, &K_dispType) == STREAM_ALT_SCREEN) {
+            LOG("cp-climate: Ultra display registration skipped: existing type 111 display (themed=%d)\n", themed);
             release(out);
             return 0;
         }
@@ -1006,9 +1040,29 @@ static void video_sender_start(void *session);   /* below, with the video stage 
 
 __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stream, CF reply, long type) {
     if (!stream || !reply) return 0;
+    /* LIVI distinguishes screen receivers by type, not by rewriting UUIDs
+     * in SETUP. Observe any optional display identifiers without changing
+     * the native receiver's main-screen routing. */
+    if (ui_sync_mode() && (type == STREAM_MAIN_SCREEN || type == STREAM_ALT_SCREEN)) {
+        CF u = get(stream, &K_uuid), d = get(stream, &K_displayUUID);
+        const char *us = is(u, T_CFStringGetTypeID)
+            ? FN(T_CFStringGetCStringPtr, const char *(*)(CF, unsigned))(u, UTF8) : 0;
+        const char *ds = is(d, T_CFStringGetTypeID)
+            ? FN(T_CFStringGetCStringPtr, const char *(*)(CF, unsigned))(d, UTF8) : 0;
+        LOG("cp-climate: theme screen SETUP type %d uuid=%s displayUUID=%s\n",
+            (int)type, us ? us : "(absent/unavailable)", ds ? ds : "(absent/unavailable)");
+    }
     if (type == STREAM_ALT_SCREEN) return ultra_mode() ? alt_stream(reply) : 0;
-    if (type != STREAM_DATA) return 0;
+    if (type != STREAM_DATA) {
+        if (ui_sync_mode()) LOG("cp-climate: theme stream audit: native path type %d\n", (int)type);
+        return 0;
+    }
     CF kind = get(stream, &K_clientTypeUUID);
+    if (ui_sync_mode()) {
+        const char *uuid = is(kind, T_CFStringGetTypeID)
+            ? FN(T_CFStringGetCStringPtr, const char *(*)(CF, unsigned))(kind, UTF8) : 0;
+        LOG("cp-climate: theme stream audit: type 130 clientTypeUUID %s\n", uuid ? uuid : "(unavailable)");
+    }
     if (kind && (extra_features() & 1) && (equal(kind, &K_vpData) || equal(kind, &K_vpSettings) || equal(kind, &K_vpOverlay))) {
         int which = equal(kind, &K_vpData) ? 0 : equal(kind, &K_vpSettings) ? 1 : 2;
         CF d = new_dict();
@@ -1025,7 +1079,10 @@ __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stre
     }
     int lane = !kind ? -1 : equal(kind, &K_vsNormal) ? 0 : equal(kind, &K_vsHigh) ? 1
         : equal(kind, &K_iapStream) && iap_mode() ? 2 : equal(kind, &K_syncStream) && ui_sync_mode() ? 3 : -1;
-    if (lane < 0) return 0;
+    if (lane < 0) {
+        if (ui_sync_mode()) LOG("cp-climate: theme stream audit: type 130 not claimed; native path\n");
+        return 0;
+    }
     int err = 0;
     unsigned long long seed = (unsigned long long)FN(T_CFDictionaryGetInt64, long long (*)(CF, CF, int *))(stream, &K_seed, &err);
     unsigned char rd[32], wr[32];
