@@ -138,9 +138,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
 
     /** DATCService's temperature callback (synchronous: every call is answered at once) */
     static final class Temperatures extends Binder {
-        volatile float driverC = Float.NaN, passengerC = Float.NaN, passengerF = Float.NaN;
-        volatile int driverState = -1, passengerState = -1;
-        volatile PassengerTempTrace.Sample passengerSample;
+        volatile ClimateMap.TemperatureSample sample;
 
         @Override
         protected boolean onTransact(int code, Parcel data, Parcel reply, int flags) {
@@ -158,12 +156,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
                     float pc = data.readFloat();
                     int ps = data.readInt();
                     float pf = data.readFloat();
-                    driverC = dc;
-                    passengerF = pf;
-                    driverState = ds;
-                    passengerC = pc;
-                    passengerState = ps;
-                    passengerSample = new PassengerTempTrace.Sample(pc,pf,ps,android.os.SystemClock.elapsedRealtime());
+                    sample = new ClimateMap.TemperatureSample(dc,ds,pc,pf,ps,android.os.SystemClock.elapsedRealtime());
                 }
             } catch (Throwable t) {
                 // a callback we can't read: keep the last values
@@ -396,7 +389,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
                 String passengerResult = seatTrace.observe(1, r.passengerSeat, generation, now);
                 if (driverResult != null) out.log(driverResult);
                 if (passengerResult != null) out.log(passengerResult);
-                String tempResult = passengerTrace.observe(temps.passengerSample,r.passengerRaw,r.unit,r.sync,generation,now);
+                String tempResult = passengerTrace.observe(r.temperatureSample == null ? null : r.temperatureSample.passenger,r.passengerRaw,r.unit,r.sync,generation,now);
                 if (tempResult != null) out.log(tempResult);
                 Map<Long, Object> values = ClimateMap.toCarPlay(r);
                 String seen = values.toString();
@@ -434,6 +427,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
     ClimateMap.Reading read() throws Exception {
         if (txGetStatus < 0) return null;   // no climate status call on this firmware: nothing to show
         if (datc == null) {
+            temps.sample = null;
             datc = service(DATC);
             if (datc == null) return null;
             if (datcListenerOk && txRegisterDatc >= 0) register(datc);
@@ -451,11 +445,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
         r.sync = status(F_SYNC);
         r.unit = unit = temperatureUnit();
         r.driverOnly = driverOnly();
-        r.driverC = temps.driverC;
-        r.driverState = temps.driverState;
-        r.passengerC = temps.passengerC;
-        r.passengerF = temps.passengerF;
-        r.passengerState = temps.passengerState;
+        r.applyTemperatureSample(temps.sample);
         // Same OEM feedback path as HMG-API Hub/Comfort: BCM, not USM.
         IBinder seatBody = service(BCM);
         if (seatBody != null) {

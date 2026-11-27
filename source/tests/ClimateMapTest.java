@@ -589,6 +589,15 @@ public class ClimateMapTest {
             check("optimistic contradictory off withheld "+pair[0],off.size()==1&&VehicleState.validFanFeedback(ps.values.get(pair[0]),ps.values.get(pair[1])));
         }
         VehicleState.seatFanImmediateFeedback=false;
+        ClimateMap.Reading snap=new ClimateMap.Reading();
+        ClimateMap.TemperatureSample first=new ClimateMap.TemperatureSample(20,65535,25,77,65535,100);
+        ClimateMap.TemperatureSample second=new ClimateMap.TemperatureSample(21,65535,26,79,65535,200);
+        snap.applyTemperatureSample(first);
+        check("temperature sample consistent",snap.driverC==20 && snap.passengerC==25 && snap.passengerF==77 && snap.temperatureSample.passenger.at==100);
+        snap.applyTemperatureSample(second);
+        check("temperature sample replacement consistent",snap.driverC==21 && snap.passengerC==26 && snap.passengerF==79 && snap.temperatureSample.passenger.at==200);
+        snap.applyTemperatureSample(null);
+        check("temperature sample reset on service reconnect",Float.isNaN(snap.driverC)&&Float.isNaN(snap.passengerC)&&Float.isNaN(snap.passengerF)&&snap.passengerState==-1&&snap.temperatureSample==null);
         System.out.println(fails == 0 ? "ALL OK" : fails + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }
