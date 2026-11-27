@@ -107,49 +107,35 @@ public class ClimateMapTest {
         check("a ventilating seat shows no heating (state 4 read on the car 2026-11-09)", Long.valueOf(0).equals(ClimateMap.toCarPlay(r).get(ClimateMap.DRIVER_SEAT_LEVEL)));
         check("nothing read: nothing told", ClimateMap.toCarPlay(new ClimateMap.Reading()).isEmpty());
 
-        // the extra seat and wheel controls (setting extra_seats), states read on the car 2026-11-09:
-        // seats 2 off, 3/4/5 ventilation low/medium/high, 6/7/8 heat low/medium/high; rear 2, 6 low, 8 high; wheel indicators 0 off, 1 on
-        ClimateMap.extras = false;
-        r = car(1, 0, 0, 0, 2, 3, 2, 77, 0);
-        r.driverSeat = 5; r.passengerSeat = 3; r.rearLeftSeat = 8; r.rearRightSeat = 6; r.wheel = 1;
-        check("extras off: nothing about them is told", !ClimateMap.toCarPlay(r).containsKey(ClimateMap.DRIVER_VENT_LEVEL)
-                && !ClimateMap.toCarPlay(r).containsKey(ClimateMap.WHEEL_LEVEL));
+        // K5 front seats: combined heating and ventilation, no rear or wheel services.
         ClimateMap.extras = true;
-        v = ClimateMap.toCarPlay(r);
-        check("ventilation: state 5 is level 3, state 3 is level 1", Long.valueOf(3).equals(v.get(ClimateMap.DRIVER_VENT_LEVEL))
-                && Boolean.TRUE.equals(v.get(ClimateMap.DRIVER_VENT_ON)) && Long.valueOf(1).equals(v.get(ClimateMap.PASSENGER_VENT_LEVEL)));
-        check("rear seats: state 8 is high (2), 6 is low (1)", Long.valueOf(2).equals(v.get(ClimateMap.REAR_LEFT_LEVEL))
-                && Long.valueOf(1).equals(v.get(ClimateMap.REAR_RIGHT_LEVEL)) && Boolean.TRUE.equals(v.get(ClimateMap.REAR_LEFT_ON)));
-        check("steering wheel indicator on is level 1", Long.valueOf(1).equals(v.get(ClimateMap.WHEEL_LEVEL)));
-        r.driverSeat = 6; r.rearLeftSeat = 2; r.wheel = 0;
-        v = ClimateMap.toCarPlay(r);
-        check("a heating seat shows no ventilation; rear off; wheel off", Long.valueOf(0).equals(v.get(ClimateMap.DRIVER_VENT_LEVEL))
-                && Long.valueOf(0).equals(v.get(ClimateMap.REAR_LEFT_LEVEL)) && Long.valueOf(0).equals(v.get(ClimateMap.WHEEL_LEVEL)));
-        {
-            Map<Long, Object> w = new java.util.LinkedHashMap<Long, Object>();
-            w.put(ClimateMap.PASSENGER_VENT_LEVEL, Long.valueOf(2));
-            List<ClimateMap.Command> c = ClimateMap.commands(w, new java.util.TreeMap<Long, Object>(w), 2);
-            check("write: passenger ventilation 2 is the car's state 4", c.size() == 1 && c.get(0).kind == ClimateMap.SEAT
-                    && c.get(0).a == ClimateMap.SET_PASSENGER_SEAT && c.get(0).b == 4);
-            w.clear(); w.put(ClimateMap.REAR_LEFT_LEVEL, Long.valueOf(2));
-            c = ClimateMap.commands(w, new java.util.TreeMap<Long, Object>(w), 2);
-            check("write: rear left high is the car's state 8", c.size() == 1 && c.get(0).a == ClimateMap.SET_REAR_LEFT && c.get(0).b == 8);
-            w.clear(); w.put(ClimateMap.REAR_RIGHT_LEVEL, Long.valueOf(1));
-            c = ClimateMap.commands(w, new java.util.TreeMap<Long, Object>(w), 2);
-            check("write: rear right low is the car's state 6", c.size() == 1 && c.get(0).a == ClimateMap.SET_REAR_RIGHT && c.get(0).b == 6);
-            w.clear(); w.put(ClimateMap.REAR_RIGHT_ON, Boolean.FALSE);
-            c = ClimateMap.commands(w, new java.util.TreeMap<Long, Object>(w), 2);
-            check("write: rear right off is the car's state 2", c.size() == 1 && c.get(0).a == ClimateMap.SET_REAR_RIGHT && c.get(0).b == 2);
-            w.clear(); w.put(ClimateMap.WHEEL_LEVEL, Long.valueOf(1));
-            c = ClimateMap.commands(w, new java.util.TreeMap<Long, Object>(w), 2);
-            check("write: wheel 1 is a wheel command for on", c.size() == 1 && c.get(0).kind == ClimateMap.WHEEL && c.get(0).a == 1);
-            w.clear(); w.put(ClimateMap.DRIVER_VENT_LEVEL, Long.valueOf(0));
-            Map<Long, Object> heating = new java.util.TreeMap<Long, Object>(w);
-            heating.put(ClimateMap.DRIVER_SEAT_LEVEL, Long.valueOf(2));
-            c = ClimateMap.commands(w, heating, 2);
-            check("write: ventilation 0 while the seat heats sends nothing", c.isEmpty());
-            c = ClimateMap.commands(w, new java.util.TreeMap<Long, Object>(w), 2);
-            check("write: ventilation 0 with the seat not heating is off (2)", c.size() == 1 && c.get(0).b == 2);
+        VehicleState.coolingLayout = true;
+        VehicleState.coolingMin = -3;
+        VehicleState.rearZone = false;
+        VehicleState.rowRear = false;
+        VehicleState.twoRear = false;
+        int[] codes = {5, 4, 3, 2, 6, 7, 8};
+        for (int level = -3; level <= 3; level++) {
+            int code = codes[level + 3];
+            r = new ClimateMap.Reading();
+            r.driverSeat = code; r.passengerSeat = code;
+            r.rearLeftSeat = 8; r.rearRightSeat = 8; r.wheel = 1;
+            v = ClimateMap.toCarPlay(r);
+            check("K5 both front seats read " + level, Long.valueOf(level).equals(v.get(ClimateMap.DRIVER_SEAT_LEVEL))
+                    && Long.valueOf(level).equals(v.get(ClimateMap.PASSENGER_SEAT_LEVEL)));
+            for (long iid : new long[] {ClimateMap.DRIVER_SEAT_LEVEL, ClimateMap.PASSENGER_SEAT_LEVEL}) {
+                List<ClimateMap.Command> cs = ClimateMap.commands(one(iid, Long.valueOf(level)), v, 2);
+                check("K5 seat write " + iid + " level " + level, cs.size() == 1
+                        && cs.get(0).kind == ClimateMap.SEAT && cs.get(0).b == code
+                        && cs.get(0).a == (iid == ClimateMap.DRIVER_SEAT_LEVEL ? ClimateMap.SET_DRIVER_SEAT : ClimateMap.SET_PASSENGER_SEAT));
+            }
+            check("K5 unsupported seat values absent", !v.containsKey(ClimateMap.REAR_LEFT_LEVEL)
+                    && !v.containsKey(ClimateMap.REAR_RIGHT_LEVEL) && !v.containsKey(ClimateMap.WHEEL_LEVEL)
+                    && !v.containsKey(ClimateMap.DRIVER_VENT_LEVEL));
+        }
+        for (long iid : new long[] {ClimateMap.REAR_LEFT_LEVEL, ClimateMap.REAR_RIGHT_LEVEL, ClimateMap.WHEEL_LEVEL,
+                ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_LEVEL}) {
+            check("K5 unsupported write ignored " + iid, ClimateMap.commands(one(iid, 2L), v, 2).isEmpty());
         }
         ClimateMap.extras = false;
 

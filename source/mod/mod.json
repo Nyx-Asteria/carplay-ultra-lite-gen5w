@@ -1,27 +1,20 @@
 {
-  "id": "cp-climate",
-  "name": "CarPlay Ultra-Lite",
-  "version": "1.1.7",
-  "hmgapi": ">=1.0.0",
+  "id": "carplay-ultra-lite-k5",
+  "name": "CarPlay Ultra-Lite K5",
+  "version": "0.1.0-alpha.1",
+  "hmgapi": ">=1.1.0-rc.8",
   "authors": [
     "cp-climate contributors"
   ],
   "license": "GPL-3.0-or-later",
-  "description": "CarPlay Ultra features on a Gen5W head unit's own screen, for wireless CarPlay with iOS 26 or later: the car's climate in CarPlay both ways (dock temperatures, Apple's Climate app, a panel per seat with power buttons, Driver Only, seat heat, front and rear defrost), and with the E-GMP CarPlay EV Routing mod's theme on, the CarPlay Ultra theme with its wallpapers and Themes page. DiPO's CarPlay receiver is patched in memory (libCarPlayCore.so, one recipe); the vehicle state streams use ports 7130-7135 on the hotspot. Built and tested on the Ioniq 6 (CEEV USA 260507); run the compatibility check (cp-climate-check) before installing on another car. Based on LIVI by Lasse Heitgres (GPL-3.0).",
+  "description": "Development port for the Kia K5 DL322 USA 260507. Not validated on-car. Uses existing wireless projection; Ultra theme and video remain disabled pending integration and validation. Based on LIVI (GPL-3.0).",
   "system": [
     {
       "model": [
-        "CEEV"
+        "DL322"
       ],
       "region": "USA",
       "firmware": "260507"
-    },
-    {
-      "model": [
-        "CEEV"
-      ],
-      "region": "CAN",
-      "firmware": "250818"
     }
   ],
   "hooks": {
@@ -51,5 +44,12 @@
         "action": "accept"
       }
     ]
-  }
+  },
+  "requires": [
+    "wireless-carplay-aa"
+  ],
+  "conflicts": [
+    "egmp-carplay-ev-routing",
+    "cp-climate"
+  ]
 }

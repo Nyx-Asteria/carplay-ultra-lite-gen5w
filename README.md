@@ -1,160 +1,183 @@
-# CarPlay Ultra-Lite
+<div align="center">
 
-![CarPlay Ultra-Lite on a Hyundai Ioniq 6](images/carplay-ultra-lite-home.png)
+# CarPlay Ultra-Lite K5
 
-CarPlay Ultra-style features for Hyundai and Kia **Gen5W** head units running **HMG-API**:
+**Your Kia. Your CarPlay.**
 
-- **Climate in CarPlay:**
-  - temperatures, fan, A/C, AUTO, SYNC, vents, recirculation, seat heat, and front and rear defrost
-  - a climate panel for each seat; the passenger's power button turns off just the passenger side
-- **The CarPlay Ultra theme:** wallpapers and colours you pick in CarPlay **Settings > Themes**.
-- **Coming in the next release** (running on the test car now, see [In testing](#in-testing-the-next-release)): the car's own page in CarPlay's **Vehicle** app, the car's volume in CarPlay, and vehicle notifications.
+A dedicated CarPlay Ultra-style experience for the Kia K5, powered by HMG-API.
 
-**Status:** tested on a **Hyundai Ioniq 6 (US, firmware 260507)**. The Kia EV6 and Hyundai Ioniq 5 should work too; run the compatibility check first. This is an unofficial mod and you use it at your own risk.
+[![Status](https://img.shields.io/badge/status-in_development-f59e0b?style=flat-square)](#development)
+[![HMG-API](https://img.shields.io/badge/HMG--API-required-2563eb?style=flat-square)](https://github.com/Open-HMG/HMG-API)
+[![License](https://img.shields.io/badge/license-GPL--3.0--or--later-22c55e?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-K5_Gen5W-64748b?style=flat-square)](#compatibility)
 
-## Download
+[Features](#features) · [Compatibility](#compatibility) · [Installation](#installation) · [Development](#development) · [Technical details](#technical-details)
 
-Get **carplay-ultra-lite-bundle-1.0.0.zip** from the [latest release](../../releases/latest) and unzip it; the USB folders the steps below mention are inside. To run only the compatibility check first, get **carplay-ultra-lite-check-1.0.0-usb.zip** and copy its `HMGAPI` folder to the top of a USB stick.
+</div>
 
-**Test build 1.3.3:** for a car that already runs 1.0.0, **carplay-ultra-lite-1.3.3-usb-update.zip** is on the [1.3.3 test build page](../../releases/tag/v1.3.3-test). It has run for a few hours on one Ioniq 6; read [In testing](#in-testing-the-next-release) and the README inside the zip first.
+---
 
-## What you need
+## Overview
 
-- **HMG-API** 1.0.0 or later, working on your car with your car's hook map.
-- **Wireless CarPlay:**
-  - Ioniq 6: use the wireless CarPlay/Android Auto fix included here (`usb-2-install-ioniq6-with-wireless-fix`).
-  - EV6 and Ioniq 5: use HMG-API's official wireless-carplay-aa.
-- **An iPhone** on iOS 26 or later (tested on iOS 27.0).
-- **A USB stick.**
+**CarPlay Ultra-Lite K5** is an independent port of [SafariForest's CarPlay Ultra-Lite](https://github.com/SafariForest/carplay-ultra-lite-gen5w), built specifically for the Kia K5.
 
-## Step 1: compatibility check
+The aim is to bring the Ultra-style interface, native climate controls and additional vehicle functionality into CarPlay without replacing the factory head unit or changing the existing wireless projection setup.
 
-1. Copy everything inside `usb-1-check` to the top of the USB stick.
-2. Plug the stick into the car. In the **HMG-API app**, open **Updates** and install **CarPlay Ultra-Lite compatibility check**. Confirm the author key `4bec7579-…`, then apply, and restart if it asks.
-3. About a minute after the screen is up, the report appears on the stick in **`CarPlayUltraLite-Check`**. Open `cp-climate-check.md` on a computer: the table at the top says **YES** or **NO** for each feature.
-4. Remove the check in the HMG-API app. It only reads and changes nothing.
+Unlike the original multi-vehicle project, this port targets one known vehicle and firmware configuration. Unnecessary compatibility paths and EV-specific functionality will be removed where appropriate.
 
-If anything says **NO**, don't install. Open an issue with `cp-climate-check.md` and `cp-climate-check.json` attached, or give both to your own Claude together with the `source` folder.
+> [!NOTE]
+> This project is in early development. The features below are planned, not verified on-car. No installable K5 release is available yet.
 
-## Step 2: install
+## Features
 
-1. If the check says an E-GMP CarPlay EV Routing mod on your car is **signed by another author**, remove it in the HMG-API app first ([original project](https://github.com/isaacwisdom/egmp-carplay-ev-routing)). Why: the theme needs the build included here, and the two can't be installed side by side:
-   - **HMG-API won't swap them.** Both have the same mod ID, and HMG-API only updates a mod with a package from the same author.
-   - **A new name wouldn't help.** Both builds change the same parts of the car's CarPlay connection, so running both could break wireless CarPlay.
-   - **You lose nothing.** The build included here does everything the original does, and adds the theme.
-   - **Your car stays your car.** The included build carries a separate profile for each car, and HMG-API installs only the one for yours: an EV6 shows in Apple Maps as a Kia EV6 and an Ioniq 5 as an Ioniq 5, each with its own battery size and charging curve. Charge level, range, mileage, speed and gear are always read live from your own car. As in the original, the profiles are for the US long-range battery on firmware 260507.
-2. Copy everything inside **`usb-2-install-ioniq6-with-wireless-fix`** (Ioniq 6: it also brings the wireless CarPlay/Android Auto fix the Ioniq 6 needs) or **`usb-2-install-ev6-ioniq5`** (EV6 and Ioniq 5, which already have wireless CarPlay from HMG-API) to the top of the stick.
-3. In the HMG-API app, open **Updates** and install every package:
-   - Order: wireless-carplay-aa first (Ioniq 6 only), then E-GMP CarPlay EV Routing (it tells the iPhone which theme to load), then CarPlay Ultra-Lite.
-   - Confirm the author key `4bec7579-…`.
-   - On an EV6 or Ioniq 5, choose **Install anyway**.
-4. Apply the changes and restart the head unit.
+- **Ultra interface** — themes, wallpapers and individual climate panels.
+- **Integrated vehicle identification** — theme assets contributed through the existing wireless CarPlay shared identification API, without EV routing.
+- **Native climate** — temperatures, fan, A/C, AUTO, SYNC, vents, recirculation and supported defrost controls.
+- **Seat controls** — three-level heating and ventilation for the driver and front passenger.
+- **Comfort integration** — optional visual editing of Comfort & Startup's three heating and three ventilation thresholds, using Comfort as the source of truth.
+- **Parked video** — optional AirPlay video with strict Park and session-state safeguards.
+- **K5 vehicle page** — vehicle information, native Kia shortcuts and additional supported controls.
+- **HMG-API integration** — one signed K5 package, managed independently of wireless projection.
 
-## Step 3: pair the iPhone again (once)
+## Compatibility
 
-1. On the iPhone, go to **Settings > General > CarPlay**, tap your car, then **Forget This Car**, and connect again. Keep the iPhone online the first time: it downloads the theme.
-2. On the car, open CarPlay **Settings > Themes** and pick a style and wallpaper.
+| Vehicle | Software version | Verification |
+| :--- | :--- | :--- |
+| **2022 Kia K5 (US)** | `DL322.USA.0000.V015.012.260507` | Target vehicle; initial compatibility report collected, port not yet tested |
 
-## Settings (HMG-API app)
+<details>
+<summary><strong>Target platform</strong></summary>
 
-| Mod | Setting | Default | Notes |
-|---|---|---|---|
-| CarPlay Ultra-Lite | CarPlay Ultra | on | Off: climate only, with the classic CarPlay look. Also turn EV Routing's CarPlay theme off. |
-| CarPlay Ultra-Lite | Rear window defrost | on | Works in READY only. |
-| E-GMP CarPlay EV Routing | CarPlay theme | on | Needs CarPlay Ultra on. |
+| Property | Value |
+| :--- | :--- |
+| Head unit | Gen5W |
+| Android | 4.4.2 / API 19 |
+| Display | 1920 × 720 |
+| Projection | Existing working HMG-API wireless CarPlay |
 
-Restart the head unit after changing a setting. After a theme change, also forget and pair the iPhone again.
+</details>
 
-## In testing: the next release
+Other vehicles and firmware versions are outside the scope of this port. Matching native library fingerprints and framework methods will be required before hooks are applied.
 
-Version 1.3.3 is running on the test car (Hyundai Ioniq 6, US, firmware 260507) and is available as a **test build** (see [Download](#download)); the main release is still 1.0.0. The full list of changes is in the [changelog](CHANGELOG.md).
+## Installation
 
-### The car's page in CarPlay's Vehicle app
+### Requirements
 
-![The top of the Vehicle app: Notifications, Volume and the car's section](images/vehicle-top.png)
+- The supported Kia K5 firmware.
+- [HMG-API](https://github.com/Open-HMG/HMG-API) with working wireless CarPlay and hooks enabled.
+- An iPhone running iOS 26 or later.
+- A signed package from this fork.
 
-- **Live readings:** battery level, range and odometer, read from the car and rounded the way the instrument cluster rounds them. Nothing is sent to the car for these.
-- **Car home screen:** a button that takes you to the head unit's own home screen. The car's MEDIA button brings you straight back to CarPlay.
-- **Battery preconditioning:** a switch, if [Launchpad](https://github.com/paytondevs/gen5w-preconditioning) is installed. Launchpad stays the one that sends the request, with its own checks and time limit.
+> [!WARNING]
+> There is no validated K5 package yet. Do not install the inherited Ioniq 6 or EV6 packages as a substitute.
 
-![The car's section: battery, preconditioning, range and odometer](images/vehicle-car.png)
+The intended distribution is a single signed HMG-API USB package, published through [Releases](../../releases) once ready. Installation and rollback instructions will accompany the first prerelease.
 
-- **Ambient light:** a switch for the Light Vibes "lights follow the music" effect and a button that opens Light Vibes, if it is installed.
+The existing wireless-carplay-aa package and working Wi-Fi configuration remain separate and unchanged. The K5 port uses HMG-API and the existing wireless-carplay-aa installation. Shared CarPlay identity must be enabled. No wireless package version is pinned; shared API compatibility is checked at runtime. The modified E-GMP routing package is not intended to be installed.
 
-![The Ambient light section](images/vehicle-ambient-light.png)
+## Development
 
-- **Head unit:** buttons that open the head unit's own screens: HMG-API, NEMESIS Manager, Radio, EV and Vehicle settings.
+### Stage 1 — Ultra interface and climate
 
-![The Head unit section](images/vehicle-head-unit.png)
+- [x] Restrict the manifest to DL322 USA 260507 and add a stock firmware preflight.
+- [ ] Validate hook maps, native recipes and runtime patch compatibility.
+- [x] Replace the generic compatibility checker with K5-specific target and shared identity prerequisites (compile/runtime validation pending).
+- [x] Obtain the original and modified routing sources and identify the theme contribution.
+- [x] Confirm public wireless RC7 exposes independent theme registration and the target package includes shared identity support.
+- [x] Add a theme-only API v2 consumer adapter.
+- [ ] Wire the adapter to a verified cross-process readiness and recovery lifecycle.
+- [ ] Remove EV routing, battery data and unnecessary multi-vehicle paths.
+- [x] Assign a distinct package ID, development version and conflict with the original package.
+- [ ] Audit remaining internal paths and package tooling.
+- [ ] Validate climate methods, listener fingerprints, flags and command mappings.
+- [ ] Enable supported climate and seat controls with physical-control feedback.
+- [ ] Verify themes, wallpapers, per-seat panels and return to the Kia home screen.
+- [ ] Build a signed prerelease with compatibility guards and reversible installation.
+- [ ] Test wireless CarPlay audio, calls, navigation, reconnects and Android Auto regressions while parked.
 
-### The car's volume in CarPlay
+The current development code deliberately withholds Ultra theme and AirPlay video advertising until their respective integration and safety checks are complete. This is not an installation-ready build.
 
-![CarPlay's Volume page showing the car's levels](images/vehicle-volume.png)
+### Stage 2 — AirPlay video
 
-- CarPlay's **Volume** page shows the head unit's real levels for media, navigation, phone and Siri, follows the volume knob and the steering wheel buttons, and sets the car's volume when you change it in CarPlay.
-- **Experiment, off by default:** while CarPlay is on the screen, the volume knob and the steering wheel's volume and mute buttons show only CarPlay's own slider, not the head unit's volume pop-up. Everywhere else the volume looks and works as always.
+- [ ] Review upstream video and EV6 improvements.
+- [ ] Require an active CarPlay session and verified fresh Park state; stop immediately on state loss, non-Park or errors.
+- [ ] Keep video disabled by default and prevent automatic restart after returning to Park.
+- [ ] Validate H.264 decoding, overlays, audio and return to normal CarPlay while parked.
+- [ ] Retain TLS certificate validation and redact sensitive logs.
 
-![CarPlay's own volume slider, with the head unit's pop-up gone](images/volume-slider.png)
+### Stage 3 — K5 experience
 
-### Vehicle notifications
 
-- The Vehicle app has a **Notifications** list, and its icon shows a badge. For now the car posts one entry at each start, to prove the list works; real events come next (see [Planned](#planned)).
+- [ ] Create a K5-specific vehicle page and Kia-inspired visual identity.
+- [ ] Investigate fuel level, range, odometer and other read-only data.
+- [ ] Add native Kia and installed-mod shortcuts.
+- [ ] Explore volume, vehicle notifications, radio and sound settings.
+- [ ] Evaluate GPU support for future 3D vehicle visuals.
 
-### New settings
+## Test settings
 
-| Setting | Default | Notes |
-|---|---|---|
-| The car's page in CarPlay's Vehicle app | on | |
-| Car volume in CarPlay | on | CarPlay's Volume page shows and sets the car's levels. |
-| Only CarPlay's volume slider in CarPlay (experiment) | off | Handles the volume keys inside the car's system software while CarPlay is on screen. If the volume keys ever misbehave, turn it off and restart. |
+One boolean toggle per major feature, enabled by default once implemented. Climate integration enables both vehicle feedback and supported commands together. The K5 target exposes only front driver/passenger seats with three heating and three ventilation levels; no rear seat controls, rear climate zones or ambient lighting. Steering wheel heat and Driver Only are withheld pending equipment validation. Unsupported command groups are rejected before queueing and sending. Restart after changes. Theme and parked video switches will be added with their implementation.
 
-### Known issues in the test build
+## Technical details
 
-- **Mute:** with the experiment on, the head unit's volume pop-up still flashes for a moment when you press mute on the steering wheel. To be fixed.
-- **Radio:** CarPlay's Radio app opens but says "DAB Radio Not Available": the car's tuner isn't connected to it yet. The Radio button in the Vehicle app opens the head unit's own radio.
-- **Other cars:** the section is titled "Ioniq 6" on every car, and the preconditioning, Ambient light and screen rows also show on a car that doesn't have those apps, where they do nothing.
-- **Volume page:** the last row is still labelled "Musik", a leftover placeholder.
+The port is based on [feature/climate-and-video](https://github.com/SafariForest/carplay-ultra-lite-gen5w/tree/feature/climate-and-video) at `70e3ba2`. The [EV6 fork](https://github.com/lths/carplay-ultra-lite-ev6) serves as a reference for Kia-specific controls and parked-video safeguards.
 
-## Climate and video branch (source)
+| Component | Purpose |
+| :--- | :--- |
+| `libCarPlayCore.so` | Vehicle-state protocol and CarPlay interface integration |
+| Wireless shared identification API | Theme contribution; wireless projection owns the iAP2 patch |
+| Automotive framework | Vehicle-specific climate commands and feedback |
+| HMG-API | Hook management, settings, packaging and recovery |
 
-The branch `feature/climate-and-video` publishes the mod's source in [`source/`](source/), with work beyond 1.0.0:
-- **Climate:** rear seat heat, front seat cooling, rear climate zones, and the climate's on/off state.
-- **Video playback (experimental):** AirPlay video from the iPhone, played on the head unit through the iPhone's network.
+The original compatibility report rejected the combined theme, wallpaper and per-seat panel verdict. The upstream checker requires both an E-GMP model and a matching iAP2 library. The K5 is not an E-GMP vehicle, so support must be established through its actual firmware and capabilities rather than bypassing the verdict.
 
-It is tested on one Ioniq 6 (Canada, firmware 250818). Some parts are not yet tried in the car. [`source/README.md`](source/README.md) has the status of each part, how the patches work, and how to build and test.
+The original Ultra-Lite setup requires a modified EV-routing package to advertise the theme to the iPhone. This port will contribute theme identity through the existing wireless shared identification API rather than importing the older native identity patch. EV routing and fabricated EV data are not part of the design. Separate packages that patch the same locations must not coexist.
 
-## Good to know
+### Shared identity integration
 
-- **Power buttons:** the driver's turns the climate off; the passenger's turns off only the passenger side.
-- **Buttons on both sides:** A/C, recirculation and the defrost buttons show on both seats' panels. That's how CarPlay lays them out.
-- **Getting back to the car's screens:** while the theme is on, CarPlay has no Hyundai/Kia logo button to tap. Use any of the car's own buttons that lead back to its home screen instead. The next release adds a **Car home screen** button in CarPlay's Vehicle app.
-- **USB cable:** plugging a cable into the car's USB port can drop CarPlay for a few seconds; it reconnects by itself.
+Public [wireless RC7 API source](https://github.com/Open-HMG/hmgapi-wireless-cp-aa/blob/v2.2.0-rc.7/wireless-carplay-aa/src/hmgapi/mods/wireless/api/CarPlayIdentification.java) defines service `carplay-identification`, API version 2, `registerTheme`, `removeTheme` and a `ThemeIdentity(String, long, String)` value. The wireless provider must expose shared identity. The exact compiled API and runtime lifecycle still require validation. The intended theme tuple from SafariForest is `44C9FA31EC:985:19.0`. Register only a theme, never an EV vehicle contribution. If the service is missing or registration fails, leave Ultra advertising disabled and retain normal projection. Coordinate removal with disable/uninstall and session lifecycle. Do not install a second iAP2 recipe.
 
-## Planned
+See [integration design](docs/integration.md) for the theme adapter and optional Comfort configuration contract. The adapter is not yet called by the runtime.
 
-The aim: everything you use the head unit's own screens for, inside CarPlay.
+### Stage 4 — Optional Comfort integration
 
-- **Radio:** FM, AM and HD stations and tuning in CarPlay's Radio app, from the head unit's own tuner.
-- **Sound settings:** bass, mid, treble, balance, fade and the equaliser presets in CarPlay.
-- **Charging:** charging status, time remaining and charge limits in the Vehicle app.
-- **Real notifications:** charging finished, a tyre warning, a trip summary when you park.
-- **Vehicle settings in CarPlay:** the common ones (drive mode and the like) as rows, not only as a shortcut to the head unit's screen.
-- **Light Vibes page:** presets, brightness and mode in CarPlay.
-- **Other cars:** rows hidden when a car doesn't have the app behind them, and the section named after the car it runs on.
-- **Fixes:** the volume pop-up that still flashes on mute, and the "Musik" label on the Volume page.
-- **Being looked into:** Waze alerts (police, hazards) shown on the instrument cluster and through the ambient light.
+- [ ] Add optional [Comfort & Startup](https://github.com/lemoyneiv/hmgapi-comfort) threshold controls using an owner-authorized configuration bridge.
+- [ ] If necessary, develop a separate Comfort fork with a supported configuration API.
 
-## Troubleshooting
+Comfort integration must not block the core K5 port, video, vehicle information or shortcuts. No Comfort dependency is required for those features.
 
-- **CarPlay stays black:** turn off EV Routing's **CarPlay theme** and restart.
-- **The head unit keeps restarting:** HMG-API turns mod hooks off by itself after 3 quick restarts, and CarPlay Ultra-Lite turns itself off after two crashes within 10 minutes. Then disable CarPlay Ultra-Lite in the HMG-API app.
-- **Reporting a problem:** attach the check report. Never post iPhone logs publicly: they contain your car's Wi-Fi password.
+### Build from source
 
-## Credits and licence
+The K5 manifest uses package ID `carplay-ultra-lite-k5` and version `0.1.0-alpha.1`. The original `cp-climate` package conflicts with this port; do not install both.
 
-- The climate and vehicle protocol is based on [LIVI](https://github.com/f-io/LIVI) by Lasse Heitgres (GPL-3.0).
-- Wireless CarPlay and Android Auto come from [HMG-API](https://github.com/VysseCodes/HMG-API) (AGPL-3.0).
-- The theme is switched on through a modified build of the [E-GMP CarPlay EV Routing](https://github.com/isaacwisdom/egmp-carplay-ev-routing) mod (GPL-3.0), which is not part of this project. The changes made to it are in the bundle's `source/` folder.
-- CarPlay Ultra-Lite is GPL-3.0-or-later. Its source code, and the source of the other two mods, is in the bundle's `source/` folder.
+The inherited build instructions are in [source/README.md](source/README.md). K5-specific build and packaging instructions will replace them as the implementation develops.
 
-Not affiliated with Apple, Hyundai, Kia or Aston Martin. CarPlay is a trademark of Apple Inc.
+Use a consistent author key and never commit signing keys, proprietary firmware, device identifiers or credentials.
+
+### Development standards
+
+- Keep commits meaningful, independently coherent and tested where possible.
+- Amend mistakes into their original commit; use fixup/autosquash for earlier commits rather than retaining standalone repair commits.
+- Keep distinct enhancements in separate commits.
+- Keep code, tests, manifests, settings and documentation consistent.
+- Preserve upstream history and attribution. Use expected-head checks when rewriting our development branch; coordinate shared history rewrites.
+- Host tests do not establish on-car compatibility. Fail closed on unknown firmware, unavailable capabilities or invalid safety state.
+
+## Credits
+
+- **[SafariForest](https://github.com/SafariForest/carplay-ultra-lite-gen5w)** — original CarPlay Ultra-Lite implementation.
+- **[lths](https://github.com/lths/carplay-ultra-lite-ev6)** — EV6 port and Kia-specific reference.
+- **[LIVI / Lasse Heitgres](https://github.com/f-io/LIVI)** — vehicle-state protocol foundations.
+- **[isaacwisdom](https://github.com/isaacwisdom/egmp-carplay-ev-routing)** — original E-GMP routing project underlying theme identification.
+- **[Open-HMG](https://github.com/Open-HMG/HMG-API)** — head-unit mod framework and tooling.
+- **[Nyx-Asteria](https://github.com/Nyx-Asteria)** — K5 port, development and testing.
+
+Released under **[GPL-3.0-or-later](LICENSE)**. Applicable upstream notices and corresponding source must be retained.
+
+---
+
+<div align="center">
+
+<sub>Unofficial project. Not affiliated with Apple, Hyundai or Kia. Head-unit modifications are performed at your own risk.</sub>
+
+</div>

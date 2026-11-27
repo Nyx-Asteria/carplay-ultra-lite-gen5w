@@ -41,6 +41,17 @@ public final class CpClimate extends ModEntry {
     static final String[] MARKS = { "Setting up session", "cp-climate", "Unsupported stream type",
             "Command '", "Request accessory UI", "ChangeModeBorrow", "ChangeModeUnborrow", "Modes changed" };
 
+    private boolean targetVerified;
+
+    @Override
+    public void zygoteInit(ModContext m) {
+        targetVerified = "wp_daudioplus_dl322_us".equals(android.os.Build.DEVICE)
+                && "d3a47296437df56fb1ffc7ac3dfca4cb".equals(ModContext.md5("/system/lib/libCarPlayCore.so"))
+                && "fc7cb675b46a44bd893a1edc054c5e71".equals(ModContext.md5("/system/lib/libiap2session.so"))
+                && "edc6f75f5ccf79b63dc85a0902b63d91".equals(ModContext.md5("/system/app/HKMC_DiPO.odex"));
+        m.log("DL322 stock firmware preflight: " + (targetVerified ? "matched" : "not matched; hooks withheld"));
+    }
+
     static ModContext mod;
     static File guard;
     static final Set<String> copied = new HashSet<String>();
@@ -72,7 +83,7 @@ public final class CpClimate extends ModEntry {
 
     @Override
     public void appLoaded(ModContext m, LoadedApp app) {
-        if (!DIPO.equals(app.packageName)) return;
+        if (!DIPO.equals(app.packageName) || !targetVerified || !m.settingBoolean("climate_test", true)) return;
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
         guard = new File(dir, GUARD_FILE);
@@ -86,7 +97,8 @@ public final class CpClimate extends ModEntry {
             save(starts);
             // CarPlay Ultra-Lite 1.0: two settings. Everything the development builds made switchable is fixed
             // at what was tested on the Ioniq 6 (CEEV USA 260507, 2026-11-08); the code for the other values stays.
-            boolean ultra = m.settingBoolean("carplay_ultra", true);
+            // Theme registration is not integrated yet. Never advertise unsupported Ultra mode.
+            boolean ultra = false;
             writeSize(dir, "100");
             writeDock(dir, "1");                                  // the bottom dock with the climate bar
             writeVersion(dir, "950");                             // receiver version 950.7.1 in /info
@@ -98,7 +110,7 @@ public final class CpClimate extends ModEntry {
             writeFlag(dir, "cpc-iap", false, "iAPChannel");
             // the theme's vehicle: the Aston Martin DBX unless the vehicle_variant test setting picks another
             // (the Climate app shows a placeholder instead of its car picture with DBX; which model it needs is a test)
-            String model = m.settingString("vehicle_variant", "DBX");
+            String model = "DBX";
             VehicleState.variant = ultra && !"none".equals(model) ? model : "";
             m.log("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
             boolean uiSync = ultra;                               // the theme's layouts, palettes and wallpapers
@@ -106,7 +118,8 @@ public final class CpClimate extends ModEntry {
             writeFeatures(dir, ultra ? "livi_all" : "off");
             writeFlag(dir, "cpc-xfeat", ultra, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
-            int extraBits = m.settingBoolean("video_playback", true) ? 1 : 0;
+            // Stage 2 is not validated: do not offer video even if an old setting is saved.
+            int extraBits = 0;
             writeNumber(dir, "cpc-xenable", extraBits, extraBits != 0 ? "SETUP extra features: videoPlayback" : "SETUP extra features off");
             writeNumber(dir, "cpc-hid", 0, "LIVI input devices in /info");   // on, iOS drew a knob-focus box
             m.nativePatch(app, "libCarPlayCore.so");
@@ -123,22 +136,23 @@ public final class CpClimate extends ModEntry {
             for (int lane = 0; lane < 2; lane++) lanes[lane] = new VsChannel(lane, dir, log, state, lanes);
             for (VsChannel ch : lanes) ch.start();
             // M4: the car's climate on CarPlay both ways (CarClimate reads it and sends the phone's changes)
-            CarClimate.rearDefrost = m.settingBoolean("rear_defrost", true);
+            CarClimate.configureTestSwitches(m);
+            CarClimate.rearDefrost = true;
             // the ambient light test (off): one shared, writable setting in CarPlay's car settings whose value is a #RRGGBB
             // that is sent to the car's mood light; see VehicleState.withAmbientTest and CarClimate.writeAmbient
-            VehicleState.ambientTest = CarClimate.ambientTest = m.settingBoolean("ambient_test", false);
+            VehicleState.ambientTest = CarClimate.ambientTest = false;
             // the extra seat and wheel controls (off): rear seat heat, front seat ventilation, steering wheel heater
-            VehicleState.extras = ClimateMap.extras = m.settingBoolean("extra_seats", false);
+            VehicleState.extras = ClimateMap.extras = true;
             // A: ventilation as separate SeatFan services; B: as the seats' own cooling levels, plus a rear zone
             // the driver card has room for three buttons: AUTO, vent position, seat (2026-11-10: more were drawn on top
             // of each other). The wheel heater and the per-seat power are off unless turned on.
-            VehicleState.wheelHeater = m.settingBoolean("wheel_heater", false);
-            VehicleState.zonePower = m.settingBoolean("zone_power", false);
-            VehicleState.rearZone = m.settingBoolean("rear_zone", true);
-            ClimateMap.blankWhenOff = m.settingBoolean("blank_when_off", true);
-            VehicleState.ventCard = "passenger".equals(m.settingString("vent_card", "driver")) ? "passenger" : "driver";
-            VehicleState.coolingMin = "-4".equals(m.settingString("cooling_min", "-4")) ? -4 : -3;
-            String layout = m.settingString("extras_layout", "b");
+            VehicleState.wheelHeater = false;
+            VehicleState.zonePower = false;
+            VehicleState.rearZone = false;
+            ClimateMap.blankWhenOff = true;
+            VehicleState.ventCard = "driver";
+            VehicleState.coolingMin = -3;
+            String layout = "b";
             VehicleState.coolingLayout = "b".equals(layout) || "c".equals(layout) || "d".equals(layout);
             VehicleState.rowRear = "c".equals(layout);
             VehicleState.twoRear = "d".equals(layout);

@@ -481,50 +481,21 @@ final class VehicleState {
     static byte[] withExtras(byte[] accessories, Map<Long, Object> values) {
         Object list = OpackCodec.decode(accessories);
         if (!(list instanceof List)) return null;
-        List<Object> seatServices = null, climateServices = null;
-        Map<Object, Object> seatTemplate = null, passengerSeat = null, zoneTemplate = null, driverTemp = null;
+        Map<Object, Object> driver = null, passenger = null;
         for (Object a : (List<Object>) list) {
             Object services = a instanceof Map ? ((Map<Object, Object>) a).get("services") : null;
             if (!(services instanceof List)) continue;
             for (Object s : (List<Object>) services) {
                 if (!(s instanceof Map)) continue;
-                Long iid = OpackCodec.asLong(((Map<Object, Object>) s).get("iid"));
-                if (Long.valueOf(1025).equals(iid)) {
-                    seatServices = (List<Object>) services;
-                    seatTemplate = (Map<Object, Object>) s;
-                }
-                if (Long.valueOf(1029).equals(iid)) passengerSeat = (Map<Object, Object>) s;
-                if (Long.valueOf(563).equals(iid)) zoneTemplate = (Map<Object, Object>) s;
-                if (Long.valueOf(518).equals(iid)) driverTemp = (Map<Object, Object>) s;
-                if (Long.valueOf(513).equals(iid)) climateServices = (List<Object>) services;
+                Map<Object, Object> service = (Map<Object, Object>) s;
+                Long iid = OpackCodec.asLong(service.get("iid"));
+                if (Long.valueOf(1025).equals(iid)) driver = service;
+                if (Long.valueOf(1029).equals(iid)) passenger = service;
             }
         }
-        if (seatTemplate == null || climateServices == null) return null;
-        if (coolingLayout && (passengerSeat == null || zoneTemplate == null)) return null;
-        // the rear copies are made before the front seats are opened to cooling, so they stay heat only
-        if (coolingLayout && rowRear && !twoRear) {
-            seatServices.add(seatCopy(seatTemplate, 1033, "seat_2ndRow", 2, false, values));
-        } else {
-            seatServices.add(seatCopy(seatTemplate, 1033, "seat_2ndRow_left", 2, false, values));
-            seatServices.add(seatCopy(seatTemplate, 1037, "seat_2ndRow_right", 2, false, values));
-        }
-        if (coolingLayout) {
-            withCooling(seatTemplate);
-            withCooling(passengerSeat);
-            if (!twoRear) climateServices.add(rearZone(zoneTemplate, values));
-            if (rearZone && driverTemp != null) {
-                if (twoRear) {
-                    climateServices.add(rearTemperature(driverTemp, ClimateMap.REAR_TEMP, "seat_2ndRow_left", values));
-                    climateServices.add(rearTemperature(driverTemp, ClimateMap.REAR2_TEMP, "seat_2ndRow_right", values));
-                } else {
-                    climateServices.add(rearTemperature(driverTemp, values));
-                }
-            }
-        } else {
-            seatServices.add(seatCopy(seatTemplate, 1041, "seat_front_left", 3, true, values));
-            seatServices.add(seatCopy(seatTemplate, 1045, "seat_front_right", 3, true, values));
-        }
-        if (wheelHeater) climateServices.add(wheelService(seatTemplate, values));
+        if (driver == null || passenger == null) return null;
+        withCooling(driver);
+        withCooling(passenger);
         return OpackCodec.encode(list);
     }
 
@@ -561,47 +532,8 @@ final class VehicleState {
             byte[] with = withExtras(acc, values);
             if (with != null) {
                 acc = with;
-                boolean row = coolingLayout && rowRear && !twoRear;
-                long[] ids = row
-                    ? new long[] { ClimateMap.REAR_LEFT_LEVEL, ClimateMap.REAR_LEFT_ON, ClimateMap.WHEEL_LEVEL }
-                    : coolingLayout
-                    ? new long[] { ClimateMap.REAR_LEFT_LEVEL, ClimateMap.REAR_LEFT_ON, ClimateMap.REAR_RIGHT_LEVEL, ClimateMap.REAR_RIGHT_ON,
-                        ClimateMap.WHEEL_LEVEL }
-                    : new long[] { ClimateMap.REAR_LEFT_LEVEL, ClimateMap.REAR_LEFT_ON, ClimateMap.REAR_RIGHT_LEVEL, ClimateMap.REAR_RIGHT_ON,
-                        ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.DRIVER_VENT_ON, ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON,
-                        ClimateMap.WHEEL_LEVEL };
-                String[] label = row
-                    ? new String[] { "rearSeatsHeatingLevel", "rearSeatsHeatingOn", "steeringWheelHeatingLevel" }
-                    : coolingLayout
-                    ? new String[] { "rearLeftSeatHeatingLevel", "rearLeftSeatHeatingOn", "rearRightSeatHeatingLevel", "rearRightSeatHeatingOn",
-                        "steeringWheelHeatingLevel" }
-                    : new String[] { "rearLeftSeatHeatingLevel", "rearLeftSeatHeatingOn", "rearRightSeatHeatingLevel", "rearRightSeatHeatingOn",
-                        "driverSeatFanLevel", "driverSeatFanOn", "passengerSeatFanLevel", "passengerSeatFanOn", "steeringWheelHeatingLevel" };
-                for (int i = 0; i < ids.length; i++) {
-                    if (!wheelHeater && ids[i] == ClimateMap.WHEEL_LEVEL) continue;
-                    writable.add(ids[i]);
-                    shared.add(ids[i]);
-                    names.put(ids[i], label[i]);
-                }
-                if (coolingLayout) names.put(REAR_ZONE_ON, "rearZoneOn");
-                if (coolingLayout && rearZone) {
-                    names.put(ClimateMap.REAR_ON, twoRear ? "rearLeftTemperatureOn" : "rearTemperatureOn");
-                    names.put(ClimateMap.REAR_TARGET, twoRear ? "rearLeftTargetTemperature" : "rearTargetTemperature");
-                    if (twoRear) {
-                        names.put(ClimateMap.REAR2_ON, "rearRightTemperatureOn");
-                        names.put(ClimateMap.REAR2_TARGET, "rearRightTargetTemperature");
-                    }
-                }
-                out.log(twoRear
-                    ? "VS extra controls added (layout D): rear left and right seat heat, each with its own read-only rear zone, front seat cooling levels -1..-3"
-                    : row
-                    ? "VS extra controls added (layout C): rear seats' heat as one seat_2ndRow control + rear zone, front seat cooling levels -1..-3, steering wheel heater"
-                    : coolingLayout
-                    ? "VS extra controls added (layout B): rear seat heat + rear zone, front seat cooling levels -1..-3, steering wheel heater"
-                    : "VS extra controls added (layout A): rear seat heat, front seat ventilation (SeatFan), steering wheel heater");
-            } else {
-                out.log("VS extra controls not added: no seat heating or climate service to copy");
-            }
+                out.log("VS K5 front seat heating and ventilation: -3 through +3");
+            } else out.log("VS K5 front seat ventilation description unavailable");
         }
         String model = variant;
         if (model != null && !model.isEmpty()) {
