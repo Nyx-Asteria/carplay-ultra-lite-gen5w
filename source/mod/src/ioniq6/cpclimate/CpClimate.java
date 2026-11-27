@@ -152,7 +152,7 @@ public final class CpClimate extends ModEntry {
                 ParkedVideo park = new ParkedVideo(m);
                 if (!park.available()) { m.log("[video] Park getter missing; video withheld"); extraBits = 0; }
                 else {
-                    boolean sound = true; // merged with parked video; engine retains picture-only fallback
+                    boolean sound = !m.settingBoolean("parked_video_picture_only", false); // opt-in isolation; default retains audio fallback
                     writeNumber(dir, "cpc-video-nosound", sound ? 0 : 1, "video: picture only");
                     m.log("[video-audio] local player audio requested=" + sound + "; stock projection route untouched");
                     writeNumber(dir, "cpc-video-nopicture", 0, "video: picture enabled");

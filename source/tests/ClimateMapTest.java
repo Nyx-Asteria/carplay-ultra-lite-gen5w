@@ -385,6 +385,34 @@ public class ClimateMapTest {
         ClimateMap.Reading cool2 = car(1, 0, 0, 0, 2, 3, 2, 77, 0);
         cool2.driverSeat = 4;
         check("the car at cool 2: nothing more (the phone already has -2)", cs.fromCar(ClimateMap.toCarPlay(cool2)).isEmpty());
+        // RC7 separate blue SeatFan: do not echo a requested level until BCM confirms it.
+        VehicleState.coolingLayout = false;
+        VehicleState fs = new VehicleState(new VsChannel.Log() { public void log(String m) { } });
+        fs.car = new VehicleState.Car() { public void phoneWrote(Map<Long,Object> w, Map<Long,Object> state) { } };
+        long[][] pairs = {{ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.DRIVER_VENT_ON},
+                          {ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON}};
+        for (long[] pair : pairs) {
+            fs.handle(VehicleState.HIGH, VehicleState.wrap(VehicleState.dict("command", "registerRequest",
+                    "transactionID", 10L, "values", java.util.Arrays.asList(pair[0], pair[1]))));
+            Map<Long,Object> actual = new java.util.LinkedHashMap<Long,Object>();
+            actual.put(pair[0], 0L); actual.put(pair[1], false);
+            fs.fromCar(actual);
+            for (long level : new long[]{3,2,1,0}) {
+                List<VehicleState.Out> pending = fs.handle(VehicleState.HIGH,
+                        VehicleState.wrap(VehicleState.dict("command", "writeRequest", "transactionID", 11L,
+                                "values", VehicleState.dict(pair[0], level))));
+                check("SeatFan " + pair[0] + " level " + level + " waits for BCM", pending.size() == 1);
+                check("SeatFan stale feedback held", fs.fromCar(actual).isEmpty());
+                actual.put(pair[0], level); actual.put(pair[1], level != 0);
+                List<VehicleState.Out> confirmed = fs.fromCar(actual);
+                Object notified = confirmed.size() == 1 ? VehicleState.get(
+                        OpackCodec.decode((byte[]) VehicleState.get(OpackCodec.decode(confirmed.get(0).message), "pluginData")), "values") : null;
+                Map<?,?> nv = notified instanceof Map ? (Map<?,?>) notified : java.util.Collections.emptyMap();
+                check("SeatFan BCM confirms paired level and power " + pair[0] + "=" + level,
+                        Long.valueOf(level).equals(nv.get(pair[0])) && Boolean.valueOf(level != 0).equals(nv.get(pair[1])));
+                check("SeatFan repeated confirmed feedback deduplicated", fs.fromCar(actual).isEmpty());
+            }
+        }
         System.out.println(fails == 0 ? "ALL OK" : fails + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }
