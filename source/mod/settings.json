@@ -72,6 +72,86 @@
       "title": "AirPlay Picture Only (Diagnostic)",
       "description": "Disables the local AirPlay audio renderer from the start to isolate video decoding and rendering. Requires Parked AirPlay Video & Audio. All Park safety checks remain active.",
       "apply": "restart"
+    },
+    {
+      "key": "session_logging",
+      "type": "toggle",
+      "default": true,
+      "title": "Automatic Session Logging",
+      "description": "Retain bounded persistent logs independently of HMG-API rotation.",
+      "apply": "restart"
+    },
+    {
+      "key": "session_usb_export",
+      "type": "toggle",
+      "default": true,
+      "title": "Automatic USB Session Export",
+      "description": "Export completed session logs to USB when available.",
+      "apply": "restart"
+    },
+    {
+      "key": "diagnostic_climate",
+      "type": "toggle",
+      "default": false,
+      "title": "Climate Diagnostics",
+      "description": "Enable additional climate diagnostics. Sensitive payloads must remain excluded.",
+      "apply": "restart"
+    },
+    {
+      "key": "diagnostic_radio",
+      "type": "toggle",
+      "default": false,
+      "title": "FM / HD Radio Diagnostics",
+      "description": "Enable additional radio diagnostics. Sensitive payloads must remain excluded.",
+      "apply": "restart"
+    },
+    {
+      "key": "diagnostic_sxm",
+      "type": "toggle",
+      "default": false,
+      "title": "SiriusXM Diagnostics",
+      "description": "Enable additional sxm diagnostics. Sensitive payloads must remain excluded.",
+      "apply": "restart"
+    },
+    {
+      "key": "diagnostic_audio",
+      "type": "toggle",
+      "default": false,
+      "title": "Audio / Source Diagnostics",
+      "description": "Enable additional audio diagnostics. Sensitive payloads must remain excluded.",
+      "apply": "restart"
+    },
+    {
+      "key": "diagnostic_themes",
+      "type": "toggle",
+      "default": false,
+      "title": "Theme Diagnostics",
+      "description": "Enable additional themes diagnostics. Sensitive payloads must remain excluded.",
+      "apply": "restart"
+    },
+    {
+      "key": "diagnostic_airplay",
+      "type": "toggle",
+      "default": false,
+      "title": "AirPlay Diagnostics",
+      "description": "Enable additional airplay diagnostics. Sensitive payloads must remain excluded.",
+      "apply": "restart"
+    },
+    {
+      "key": "diagnostic_vs_raw",
+      "type": "toggle",
+      "default": false,
+      "title": "Vehicle Services Packet Diagnostics",
+      "description": "Enable additional vs_raw diagnostics. Sensitive payloads must remain excluded.",
+      "apply": "restart"
+    },
+    {
+      "key": "diagnostic_projection_raw",
+      "type": "toggle",
+      "default": false,
+      "title": "Projection Packet Diagnostics",
+      "description": "Enable additional projection_raw diagnostics. Sensitive payloads must remain excluded.",
+      "apply": "restart"
     }
   ]
 }
