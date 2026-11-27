@@ -10,14 +10,14 @@ Development candidate — not a claim of vehicle verification. Target: 2022 Kia 
 
 ## Climate and seats
 - For each front seat independently, test off → heat 1/2/3 → off, off → ventilation 1/2/3 → off, heat ↔ ventilation, and physical button changes.
-- Compare physical actuation, BCM readback and CarPlay rendering separately; test both immediate-feedback settings, one variable at a time.
+- Compare physical actuation, BCM readback and CarPlay rendering separately; test both immediate-feedback settings, one variable at a time. Include initial panel opening after a seat write, and reconnect during feedback reconciliation.
 - If using the optional combined four-step layout, verify -4 reaches high ventilation, -3/-2 medium, -1 low, and positive heating steps remain unchanged.
 - Test driver/passenger target temperature independently, sync on/off, Fahrenheit/Celsius, and reconnect. Record native callback state and raw passenger setpoint correlation.
 
 ## Radio, audio and Vehicle page
 - Test FM activation from CarPlay and OEM-first, seek, rapid tuning, catalog recovery, HD1 metadata/artwork and source switching. HD multicast control remains unverified.
 - Test SXM only with authorized subscription; compare catalog, display number/name, native tune, seek and song/artist/artwork. Do not bypass skip, lock or subscription restrictions.
-- Verify volume knob, steering keys, mute, Siri, call, navigation, FM and SXM source levels; OEM volume panel fallback must remain available.
+- Verify volume knob, steering keys, mute, Siri, call, navigation, FM and SXM source levels; OEM volume panel fallback must remain available. While parked, reconnect during rapid slider changes and verify old queued volume/mute commands do not act on the replacement session.
 - Compare read-only Bose status to OEM settings for CarPlay, FM and SXM; test source changes and reconnect. No setter is provided.
 - Verify range, odometer, units, shortcuts, optional Comfort controls and Vehicle page replay on reconnect; record missing or stale values.
 
