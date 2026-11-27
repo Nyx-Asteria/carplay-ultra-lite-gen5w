@@ -179,13 +179,19 @@ final class UiSyncChannel extends Thread {
                             at += size;
                             continue;
                         }
+                        boolean becameReady;
+                        boolean resetStarted;
                         synchronized (sync) {
+                            boolean wasReady = sync.ready;
+                            long previousSession = sync.session;
                             try {
                                 answers = sync.handle(body);
                             } catch (IllegalArgumentException e) {
                                 answers = java.util.Collections.emptyList();
                                 if (logged++ < MAX_LOGGED) out.log("SYNC unreadable message bytes=" + body.length);
                             }
+                            becameReady = !wasReady && sync.ready;
+                            resetStarted = previousSession != sync.session && sync.awaitingResetComplete;
                             picked = new java.util.ArrayList<String>(sync.choices);
                             sync.choices.clear();
                         }
@@ -205,6 +211,11 @@ final class UiSyncChannel extends Thread {
                             w.send(VsChannel.pack(VsChannel.ASYNC, VsChannel.COMMAND, 0, a));
                             if (logged++ < MAX_LOGGED) out.log("SYNC car: bytes=" + a.length);
                         }
+                        String display = panelId(body);
+                        String lane = display == null ? "legacy" : display;
+                        if (resetStarted) out.log("[theme-sync] panel=" + lane + " reset session=" + sync.session);
+                        if (becameReady) out.log("[theme-sync] panel=" + lane + " initialization replies written session="
+                                + sync.session + " version=" + sync.version + " replies=" + answers.size());
                         for (String c : picked) out.log("SYNC the phone picked " + c);
                     }
                     at += size;

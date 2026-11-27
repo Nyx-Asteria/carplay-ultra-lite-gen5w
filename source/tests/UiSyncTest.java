@@ -74,6 +74,18 @@ public class UiSyncTest {
                 out.size() == 1 && is(h, 0, 1, 0) && Long.valueOf(1).equals(n(h, "ssn")) && Long.valueOf(2).equals(n(h, "version"))
                         && "89858A51".equals(h.get("id")));
 
+        List<byte[]> retry = sync.handle(reset);
+        check("duplicate pending reset replays identical response without advancing sequence",
+                retry.size()==1 && Arrays.equals(out.get(0),retry.get(0)) && sync.session==1 && sync.nextTx==2);
+        UiSync replaced = new UiSync();
+        replaced.handle(reset);
+        byte[] newReset = framed(map("type",0L,"ssn",1L,"psn",1L,"id","different","version",3L));
+        List<byte[]> replacement = replaced.handle(newReset);
+        check("different reset identity starts fresh pending handshake",
+                replacement.size()==1 && replaced.session==2 && "different".equals(headerOf(replacement.get(0)).get("id")));
+        check("old reset completion cannot initialize replacement",
+                replaced.handle(framed(map("type",1L,"ssn",1L,"psn",1L))).isEmpty() && !replaced.ready);
+
         byte[] complete = framed(map("type", 1L, "ssn", 1L, "psn", 1L, "version", 3L));
         out = sync.handle(complete);
         check("reset complete: 3 answers (complete, allow layout change, give focus)", out.size() == 3);
