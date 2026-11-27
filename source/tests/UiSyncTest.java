@@ -382,10 +382,36 @@ public class UiSyncTest {
                         map("layoutIdentifier", UiSync.layout("Modular").id, "paletteIdentifier", "blue"))).size() == 1);
     }
 
+    static byte[] panelFrame(String display,long type) {
+        Map<Object,Object> frame=new LinkedHashMap<Object,Object>();
+        if(display!=null)frame.put("displayUUID",display);
+        frame.put("data",Bplist.encode(map("type",type,"ssn",1L,"psn",1L,"version",2L)));
+        return OpackCodec.encode(frame);
+    }
+
+    static void panelRouting() {
+        UiSync config=new UiSync();
+        config.wanted=UiSync.layout("Modular");
+        UiSyncChannel.PanelRouter router=new UiSyncChannel.PanelRouter(null,config);
+        byte[] clusterReset=panelFrame("Cluster_Display",0);
+        byte[] centerReset=panelFrame("Center_Display",0);
+        byte[] legacyReset=panelFrame(null,0);
+        UiSync cluster=router.select(clusterReset),center=router.select(centerReset),legacy=router.select(legacyReset);
+        check("connection routes center, cluster and absent display independently",cluster!=center&&center!=legacy&&legacy!=cluster);
+        cluster.handle(clusterReset);center.handle(centerReset);legacy.handle(legacyReset);
+        check("legacy response preserves missing display field",!((Map<?,?>)OpackCodec.decode(legacy.handle(panelFrame(null,1)).get(0))).containsKey("displayUUID"));
+        check("interleaved center completes without forcing layout",router.select(panelFrame("Center_Display",1)).handle(panelFrame("Center_Display",1)).size()==3);
+        check("interleaved cluster completes with configured layout",router.select(panelFrame("Cluster_Display",1)).handle(panelFrame("Cluster_Display",1)).size()==4);
+        check("all routed sessions ready",cluster.ready&&center.ready&&legacy.ready);
+        UiSyncChannel.PanelRouter reconnect=new UiSyncChannel.PanelRouter(null,config);
+        check("reconnect creates fresh state without mutating old connection",reconnect.select(centerReset)!=center&&center.ready);
+    }
+
     public static void main(String[] args) throws Exception {
         stateMachine();
         layoutRequest();
         independentConnections();
+        panelRouting();
         variant();
         plists(new File(args[1]), new File(args[2]));
         channel(new File(args[0]));
