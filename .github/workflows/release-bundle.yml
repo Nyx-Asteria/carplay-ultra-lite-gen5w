@@ -220,7 +220,18 @@ jobs:
           cp "docs/rc${VERSION##*.}-testing.md" out/release/TESTING.md
           cp CHANGELOG.md out/release/CHANGELOG.md
           printf '\n## Standalone TBT coexistence\nExplicitly disable WCP Integrated turn-by-turn, apply and restart before testing Standalone TBT. Keep Enable wireless CarPlay on; audio and Now Playing follow this master, and shared identity is independent. Remove the original Phone Projection TBT before installing the renamed fork. Never enable two navigation publishers.\n' >> out/release/TESTING.md
-          (cd out/release && sha256sum *.zip > SHA256SUMS.txt && zip -q CarPlay-Ultra-Lite-K5-$VERSION-testing-bundle.zip *.zip TESTING.md CHANGELOG.md SHA256SUMS.txt)
+          (
+            cd out/release
+            sha256sum *.zip > SHA256SUMS.txt
+            sha256sum --strict -c SHA256SUMS.txt
+            bundle="CarPlay-Ultra-Lite-K5-$VERSION-testing-bundle.zip"
+            zip -q "$bundle" *.zip TESTING.md CHANGELOG.md SHA256SUMS.txt
+            unzip -t "$bundle"
+            verify_dir=$(mktemp -d)
+            unzip -q "$bundle" -d "$verify_dir"
+            (cd "$verify_dir" && sha256sum --strict -c SHA256SUMS.txt)
+            rm -rf "$verify_dir"
+          )
       - uses: actions/upload-artifact@v4
         with:
           name: signed-packages
