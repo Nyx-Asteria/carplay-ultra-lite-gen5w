@@ -239,9 +239,17 @@ public final class CpClimate extends ModEntry {
                     uiSync=false;
                 }
             }
-            NativeProfile.writeUltra(m,dir,themedIds?2:cluster?1:0);
-            NativeProfile.writeFlag(m,dir,"cpc-uisync",uiSync,"uiSync (CarPlay theme layouts and palettes)");
-            NativeProfile.writeFlag(m,dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
+            // Evaluate every flag even after a failure so stale settings are cleared where possible.
+            boolean profileReady=NativeProfile.writeUltra(m,dir,themedIds?2:cluster?1:0);
+            profileReady &= NativeProfile.writeFlag(m,dir,"cpc-uisync",uiSync,"uiSync (CarPlay theme layouts and palettes)");
+            profileReady &= NativeProfile.writeFlag(m,dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
+            if(!profileReady) {
+                NativeProfile.writeUltra(m,dir,0);
+                NativeProfile.writeFlag(m,dir,"cpc-uisync",false,"uiSync");
+                NativeProfile.writeFlag(m,dir,"cpc-sync-independent",false,"independent uiSync");
+                runtimeLog("[native] display profile persistence failed; patch withheld");
+                return;
+            }
             runtimeLog("[theme] listener-gated profile cluster="+cluster+" themedIds="+themedIds+" uiSync="+uiSync);
             m.nativePatch(app, "libCarPlayCore.so");
             runtimeLog("[climate] profile=K5 front heat/vent -3..3, rear seats=false, ambient=false");

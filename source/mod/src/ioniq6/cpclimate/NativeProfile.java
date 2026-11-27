@@ -19,9 +19,10 @@ final class NativeProfile {
         CpClimate.runtimeLog("[native-profile] " + file.getName() + " written value=" + value.trim());
     }
 
-    private static void clearValue(File file) {
+    private static boolean clearValue(File file) {
         boolean removed = !file.exists() || file.delete();
         CpClimate.runtimeLog("[native-profile] " + file.getName() + " disabled; clear=" + (removed ? "ok" : "failed"));
+        return removed;
     }
 
     private static void writeFailed(File file, Exception error) {
@@ -59,8 +60,8 @@ final class NativeProfile {
     }
 
     /** an on/off experiment for the native /info hook: the file holds 1 while on */
-    static void writeFlag(ModContext mod, File dir, String name, boolean on, String what) {
-        writeNumber(mod, dir, name, on ? 1 : 0, what);
+    static boolean writeFlag(ModContext mod, File dir, String name, boolean on, String what) {
+        return writeNumber(mod, dir, name, on ? 1 : 0, what);
     }
 
     /** LIVI's /info feature bits that DiPO's lacks, without its audio ones (CARPLAY_AUDIO_FEATURES: bits 9, 11, 18, 20, 22, 26, 40) */
@@ -96,32 +97,34 @@ final class NativeProfile {
     }
 
     /** a small number for the native hooks; 0 deletes the file */
-    static void writeNumber(ModContext mod, File dir, String name, int value, String what) {
+    static boolean writeNumber(ModContext mod, File dir, String name, int value, String what) {
         File f = new File(dir, name);
         if (value == 0) {
-            clearValue(f);
-            return;
+            return clearValue(f);
         }
         try {
             writeValue(f, value + "\n");
             CpClimate.runtimeLog(what + " on (experiment)");
+            return true;
         } catch (Exception e) {
             writeFailed(f,e);
+            return false;
         }
     }
 
     /** the Ultra experiment for the native hooks (files/cpc-ultra: 1 virtual cluster, 2 with the theme's display ids) */
-    static void writeUltra(ModContext mod, File dir, int mode) {
+    static boolean writeUltra(ModContext mod, File dir, int mode) {
         File f = new File(dir, "cpc-ultra");
         if (mode == 0) {
-            clearValue(f);
-            return;
+            return clearValue(f);
         }
         try {
             writeValue(f, mode + "\n");
             CpClimate.runtimeLog("CarPlay Ultra virtual cluster on" + (mode == 2 ? ", with the theme's display ids" : "") + " (experiment)");
+            return true;
         } catch (Exception e) {
             writeFailed(f,e);
+            return false;
         }
     }
 
