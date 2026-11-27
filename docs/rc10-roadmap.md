@@ -35,3 +35,9 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 ## Compatibility
 - [ ] Vehicle test Nemesis 1.17.1 + RC10 and stock CCNC, especially OSD overlap, mounted framework and launcher shortcuts.
 - [ ] No projection scaling retest required by owner; STBT navigation tests separate.
+
+## RC11 stage 1 (owner requested; after RC10)
+- Inventory and refactor source by subsystem; preserve package identities and runtime behavior.
+- Consolidate development commits into meaningful reviewable units; preserve published release tags and create recovery refs before any history rewrite.
+- Review build and test infrastructure; verify identical artifacts or explain intentional differences.
+- Do not rewrite active RC10 history; agree migration scope before changing shared branch history.

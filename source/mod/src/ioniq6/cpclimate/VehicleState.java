@@ -907,8 +907,10 @@ final class VehicleState {
             if (reported.containsKey(pair[0]) || reported.containsKey(pair[1])) {
                 handledFans.add(pair[0]); handledFans.add(pair[1]);
                 // Never publish a partial or ill-typed pair as confirmed fan state.
-                if (!(level instanceof Long) || !(power instanceof Boolean)
-                        || ((Long)level) < 0 || ((Long)level) > 3) continue;
+                if (!validFanFeedback(level,power)) {
+                    out.log("[seat-fan] invalid BCM pair withheld iid="+pair[0]);
+                    continue;
+                }
                 actualSeats.put(pair[0], level);
                 actualSeats.put(pair[1], power);
             }
@@ -1018,6 +1020,13 @@ final class VehicleState {
         if (!held.isEmpty()) answer.put("values", held);
         if (!missing.isEmpty()) answer.put("errors", missing);
         return answer;
+    }
+
+    /** BCM reports a mutually consistent level and power pair; never publish a contradictory sample. */
+    static boolean validFanFeedback(Object level,Object power) {
+        return level instanceof Long && power instanceof Boolean
+                && (Long)level >= 0 && (Long)level <= 3
+                && ((Long)level > 0) == (Boolean)power;
     }
 
     private static final long[][] SEAT_FAN_PAIRS = {
