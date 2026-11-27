@@ -1,0 +1,47 @@
+name: Publish verified RC10
+on:
+  push:
+    branches: [k5-compatibility]
+    paths:
+      - '.github/workflows/publish-verified-rc10.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  publish:
+    if: github.event.head_commit.message == 'Publish verified RC10 bundle (owner approved)'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-packages
+          path: release
+          run-id: 45933954139
+          github-token: ${{ github.token }}
+      - name: Verify and publish the original signed artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET: 7b9ad7837ba494e282f5c9c697eddbd6bf920ab6
+        run: |
+          set -euo pipefail
+          run=$(gh api "repos/$GH_REPO/actions/runs/45933954139")
+          test "$(jq -r .conclusion <<< "$run")" = success
+          test "$(jq -r .head_sha <<< "$run")" = "$TARGET"
+          regression=$(gh api "repos/$GH_REPO/actions/runs/45933954131")
+          test "$(jq -r .conclusion <<< "$regression")" = success
+          test "$(jq -r .head_sha <<< "$regression")" = "$TARGET"
+          cd release
+          test "$(wc -l < SHA256SUMS.txt)" -eq 7
+          sha256sum --strict -c SHA256SUMS.txt
+          bundle=CarPlay-Ultra-Lite-K5-1.0.0-rc.10-testing-bundle.zip
+          unzip -t "$bundle"
+          temp=$(mktemp -d)
+          unzip -q "$bundle" -d "$temp"
+          (cd "$temp" && sha256sum --strict -c SHA256SUMS.txt)
+          cmp SHA256SUMS.txt "$temp/SHA256SUMS.txt"
+          test "$(find . -maxdepth 1 -name '*.zip' | wc -l)" -eq 8
+          gh release create v1.0.0-rc.10 ./*.zip SHA256SUMS.txt CHANGELOG.md TESTING.md --latest --target "$TARGET" --title "CarPlay Ultra-Lite K5 1.0.0-rc.10" --notes-file CHANGELOG.md
