@@ -6,7 +6,7 @@
  *    bottom edge, as LIVI sends by default: iOS only gives the dock its climate controls (a
  *    temperature at each end) in that layout; without a viewArea it draws the side dock
  *    ("No climate secondary dock frame").
- *    With a CarPlay size below 100 % (cp-climate's setting, in DiPO's files/cpc-size), the
+ *    With a CarPlay size below 100 % (delegated PPS setting, in DiPO's files/cpc-size), the
  *    main display's physical size is reported larger by 100/size, so iOS draws everything
  *    smaller and the screen holds more points (pixels unchanged).
  *  - The session SETUP reply gets "enabledFeatures": ["vehicleStateProtocol"] when the

@@ -431,28 +431,42 @@ final class ClimateMap {
                         : new Command(FRONT, FRONT_PASSENGER_F, toFahrenheit((Double) v) - 56, 0));
             } else if (iid == UPPER_ON || iid == LOWER_ON) {
                 vents = true;
-            } else if (iid == DRIVER_SEAT_LEVEL || iid == DRIVER_SEAT_ON) {
-                Command c = seat(SET_DRIVER_SEAT, iid == DRIVER_SEAT_ON, v, now.get(DRIVER_SEAT_LEVEL));
-                if (c != null && !(extras && !cooling() && c.b == 2 && number(now.get(DRIVER_VENT_LEVEL), 0) > 0)) out.add(c);
-            } else if (extras && !cooling() && (iid == DRIVER_VENT_LEVEL || iid == DRIVER_VENT_ON)) {
-                Command c = ventSeat(SET_DRIVER_SEAT, iid == DRIVER_VENT_ON, v, now.get(DRIVER_VENT_LEVEL), now.get(DRIVER_SEAT_LEVEL));
-                if (c != null) out.add(c);
-            } else if (extras && !cooling() && (iid == PASSENGER_VENT_LEVEL || iid == PASSENGER_VENT_ON)) {
-                Command c = ventSeat(SET_PASSENGER_SEAT, iid == PASSENGER_VENT_ON, v, now.get(PASSENGER_VENT_LEVEL), now.get(PASSENGER_SEAT_LEVEL));
-                if (c != null) out.add(c);
             } else if (extras && VehicleState.wheelHeater && iid == WHEEL_LEVEL && v instanceof Long) {
                 long level = (Long) v;
                 if (level == 0 || level == 1) out.add(new Command(WHEEL, (int)level, 0, 0));
-            } else if (iid == PASSENGER_SEAT_LEVEL || iid == PASSENGER_SEAT_ON) {
-                Command c = seat(SET_PASSENGER_SEAT, iid == PASSENGER_SEAT_ON, v, now.get(PASSENGER_SEAT_LEVEL));
-                if (c != null && !(extras && !cooling() && c.b == 2 && number(now.get(PASSENGER_VENT_LEVEL), 0) > 0)) out.add(c);
             }
         }
+        // One OEM step per physical seat per request. An explicit level must not be
+        // overwritten by a companion On write or an inactive opposite-mode zero.
+        addSeatCommand(out, written, now, SET_DRIVER_SEAT, DRIVER_SEAT_LEVEL, DRIVER_SEAT_ON, DRIVER_VENT_LEVEL, DRIVER_VENT_ON);
+        addSeatCommand(out, written, now, SET_PASSENGER_SEAT, PASSENGER_SEAT_LEVEL, PASSENGER_SEAT_ON, PASSENGER_VENT_LEVEL, PASSENGER_VENT_ON);
         if (vents) {
             boolean upper = Boolean.TRUE.equals(now.get(UPPER_ON)), lower = Boolean.TRUE.equals(now.get(LOWER_ON));
             if (upper || lower) out.add(new Command(VR, 6, upper && lower ? 2 : upper ? 1 : 3, 0));
         }
         return out;
+    }
+
+    static void addSeatCommand(List<Command> out, Map<Long,Object> written, Map<Long,Object> now,
+                               int code, long heatLevel, long heatOn, long ventLevel, long ventOn) {
+        boolean separate = extras && !cooling();
+        Command heat = written.containsKey(heatLevel)
+                ? seat(code, false, written.get(heatLevel), now.get(heatLevel))
+                : seat(code, true, written.get(heatOn), now.get(heatLevel));
+        Command vent = !separate ? null : written.containsKey(ventLevel)
+                ? ventSeat(code, false, written.get(ventLevel), now.get(ventLevel), now.get(heatLevel))
+                : ventSeat(code, true, written.get(ventOn), now.get(ventLevel), now.get(heatLevel));
+        if (separate && heat != null && heat.b == 2 && number(now.get(ventLevel), 0) > 0) heat = null;
+        // If both modes request activation, prefer an explicit nonzero level over
+        // an On-only request; reject genuinely ambiguous dual activation.
+        if (heat != null && heat.b != 2 && vent != null && vent.b != 2) {
+            boolean h = written.containsKey(heatLevel), v = written.containsKey(ventLevel);
+            if (h == v) return;
+            out.add(h ? heat : vent);
+        } else if (heat != null && heat.b != 2) out.add(heat);
+        else if (vent != null && vent.b != 2) out.add(vent);
+        else if (heat != null) out.add(heat);
+        else if (vent != null) out.add(vent);
     }
 
     static final long MAX_AC = 516;
