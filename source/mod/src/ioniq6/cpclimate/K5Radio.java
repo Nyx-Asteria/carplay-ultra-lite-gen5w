@@ -725,10 +725,16 @@ final class K5Radio {
                 try {
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
-                            || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
-                    if (!probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
+                            || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) {
+                        log.log("[radio] FM seek withheld: source ownership lost request="+request); return;
+                    }
+                    if (!probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) {
+                        log.log("[radio] FM seek superseded before tuner lookup request="+request); return;
+                    }
                     Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
-                    if (tuner == null || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
+                    if (tuner == null || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) {
+                        log.log("[radio] FM seek withheld: tuner available="+(tuner!=null)+" request="+request); return;
+                    }
                     java.lang.reflect.Method seek = Class.forName(RADIO_IFACE).getMethod(up ? "seekUp" : "seekDown");
                     if (seek.getReturnType() != void.class) {
                         log.log("[radio] FM seek withheld: unexpected return type="+seek.getReturnType().getName());
@@ -737,9 +743,11 @@ final class K5Radio {
                     // Recheck ownership after resolving the tuner, just as for direct tuning.
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38
-                            || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
+                            || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) {
+                        log.log("[radio] FM seek withheld: final ownership or generation check request="+request); return;
+                    }
                     seek.invoke(tuner);
-                    log.log("[radio] native FM " + (up ? "seekUp" : "seekDown") + " dispatched; awaiting frequency feedback");
+                    log.log("[radio] native FM " + (up ? "seekUp" : "seekDown") + " dispatched; awaiting frequency feedback request="+request+" previousKhz="+lastFmFrequency);
                 } catch (Throwable t) { log.log("[radio] FM seek failed: " + t.getClass().getSimpleName()); }
             }
         });
