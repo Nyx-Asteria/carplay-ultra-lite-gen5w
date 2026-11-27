@@ -34,6 +34,7 @@ final class CarAudio extends Thread {
     static final long[][] LINKS = { { VehicleState.VOLUME, 14 }, { 2311, 13 }, { 2314, 11 }, { 2321, 12 } };
 
     static volatile CarAudio instance;
+    private android.content.Context panelContext;
     /** sent to DiPO by VolumeKeys (system_server) right after a volume or mute key: read the levels now */
     static final String ACTION_CHANGED = "ioniq6.cpclimate.VOLUME_CHANGED";
     private final Object wake = new Object();
@@ -49,6 +50,7 @@ final class CarAudio extends Thread {
 
     /** listens for VolumeKeys' word that a key changed the volume, so CarPlay's slider moves at once */
     void listen(android.content.Context context) {
+        panelContext = context;
         if (context == null) return;
         try {
             context.registerReceiver(new android.content.BroadcastReceiver() {
@@ -196,7 +198,7 @@ final class CarAudio extends Thread {
                     woken = false;
                 }
                 VehicleState vs = state[0];
-                if (!active() || vs == null || !(lanes[0].isOpen() || lanes[1].isOpen())) { shown = null; observedGeneration = -1; synchronized (this) { observed.clear(); } sends.clear(); continue; }
+                if (!active() || vs == null || !(lanes[0].isOpen() || lanes[1].isOpen())) { shown = null; observedGeneration = -1; synchronized (this) { observed.clear(); } sends.clear(); VolumePanel.publishReady(panelContext, false); continue; }
                 long generation = CpClimate.sessionGeneration;
                 Map<Long, Object> fresh = new LinkedHashMap<Long, Object>();
                 StringBuilder seen = new StringBuilder();
@@ -218,6 +220,7 @@ final class CarAudio extends Thread {
                 synchronized (this) { observed.clear(); observed.addAll(fresh.keySet()); }
                 observedGeneration = generation;
                 shown = vs;
+                VolumePanel.publishReady(panelContext, panelReady() && mod.settingBoolean("suppress_stock_volume", true));
                 failures = 0;
             } catch (InterruptedException e) {
                 return;

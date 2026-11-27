@@ -1,0 +1,49 @@
+name: Development regression
+on:
+  push:
+    branches: [k5-compatibility]
+    paths:
+      - 'source/mod/src/**'
+      - 'source/tests/**'
+      - '.github/workflows/development-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Open-HMG/HMG-API
+          ref: a1830a83a8ad4bf3377be32e9064c5018947a2f6
+          path: .hmgapi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile and test without publishing
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -yq clang lld zip unzip mksh
+          (cd .hmgapi && ./build.sh sdk)
+          mkdir -p out/sdk out/tests
+          unzip -q .hmgapi/out/dist/hmgapi-mod-sdk-*.zip -d out/sdk
+          export HMGAPI_SDK="$PWD/out/sdk"
+          SDK="$HMGAPI_SDK"
+          AJ=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
+          sh "$SDK/bin/build-mod.sh" source/mod out/core out/work
+          CP="$PWD/out/work/classes:$AJ:$SDK/lib/hmgapi-runtime.jar:$SDK/lib/hmgapi-runtime-stubs.jar"
+          javac --release 8 -cp "$CP" -d out/tests source/tests/ClimateMapTest.java
+          java -cp "out/tests:$CP" ioniq6.cpclimate.ClimateMapTest
+          javac --release 8 -cp "$CP" -d out/tests source/tests/VolumePanelPolicyTest.java
+          java -cp "out/tests:$CP" ioniq6.cpclimate.VolumePanelPolicyTest
+          python3 - <<'PY'
+          import plistlib
+          with open('out/python.bplist','wb') as f:
+              plistlib.dump(dict(small=7,mid=300,wide=70000,huge=5000000000,neg=-2,s='Cluster_Display',u='Zürich ✓',t=True,f=False,d=bytes([1,2,3]),l=[1,'two'],n={'x':2},r=1.5,long='x'*40),f,fmt=plistlib.FMT_BINARY)
+          PY
+          javac --release 8 -cp "$CP" -d out/tests source/tests/UiSyncTest.java
+          java -cp "out/tests:$CP" ioniq6.cpclimate.UiSyncTest out/tests out/python.bplist out/java.bplist

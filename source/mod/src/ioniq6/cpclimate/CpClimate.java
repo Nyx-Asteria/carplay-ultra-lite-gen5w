@@ -274,6 +274,31 @@ public final class CpClimate extends ModEntry {
             }
         });
         m.hook(app.classLoader, "dipo.carplay.session_finalized", copy);
+        // Private K5 experiment: exact DiPO fingerprint and presentation-only method.
+        // Low-level hook is outside HookPlan; retain OEM behavior on any uncertainty.
+        if (app.context != null && "edc6f75f5ccf79b63dc85a0902b63d91".equals(ModContext.md5("/system/app/HKMC_DiPO.odex"))) {
+            try {
+                final android.content.Context mediaContext = app.context;
+                Class<?> service = hmgapi.hook.Hooks.findClass("com.daudio.app.dipo.service.DipoService", app.classLoader);
+                java.lang.reflect.Method osd = hmgapi.hook.Hooks.findMethodExact(service, "b", int.class, boolean.class);
+                if (osd.getReturnType() == void.class && java.lang.reflect.Modifier.isPrivate(osd.getModifiers())) {
+                    hmgapi.hook.Hooks.findAndHookMethod(service, "b", int.class, boolean.class, new MethodHook() {
+                        @Override protected void beforeHookedMethod(Param p) {
+                            try {
+                                if (!m.enabled() || !m.settingBoolean("k5_integration", true)
+                                        || !m.settingBoolean("suppress_stock_media", false)
+                                        || !sessionActive || !VolumePanel.foreground(mediaContext)) return;
+                                p.setResult(null);
+                            } catch (Throwable ignored) { /* Fail open. */ }
+                        }
+                    });
+                    m.log("[media-osd] exact K5 presentation hook installed (opt-in)");
+                }
+            } catch (Throwable t) {
+                m.log("[media-osd] hook unavailable; OEM retained: " + t);
+            }
+        }
+
         m.log("M4 in " + app.processName + "; restart-count guard removed");
     }
 
