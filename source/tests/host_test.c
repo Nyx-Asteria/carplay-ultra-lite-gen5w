@@ -677,6 +677,23 @@ int main(void) {
     cpc_info_hook(info);
     CHECK("parse failure: /info untouched and logged", info->n == 0 && strstr(lastlog, "didn't parse"));
     m_release(info);
+    /* Failed VSP decoding must leave an otherwise valid themed display stock. */
+    FILE *bad_vsp_flag = fopen(DIR "cpc-ultra", "w");
+    if (!bad_vsp_flag) { perror("cpc-ultra"); return 1; }
+    fputs("2\n", bad_vsp_flag); fclose(bad_vsp_flag);
+    info = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+    Arr *stock_displays = (Arr *)m_new_arr(0, 0, &cb_arr);
+    Dict *stock_main = display("stock-center", 1920, 720, 292, 110);
+    m_append(stock_displays, stock_main); m_release(stock_main);
+    Str *stock_key = str("displays");
+    m_set(info, stock_key, stock_displays); m_release(stock_key); m_release(stock_displays);
+    cpc_info_hook(info);
+    const Arr *after_bad_vsp = g(info, "displays");
+    CHECK("VSP parse failure preserves stock display identity and geometry",
+          info->n == 1 && after_bad_vsp == stock_displays && after_bad_vsp->n == 1
+          && !strcmp(s_of(g(after_bad_vsp->v[0], "uuid")), "stock-center")
+          && !g(after_bad_vsp->v[0], "viewAreas"));
+    m_release(info); remove(DIR "cpc-ultra");
     plist_fail = 0;
     CHECK("still no leaks", live == 0);
 

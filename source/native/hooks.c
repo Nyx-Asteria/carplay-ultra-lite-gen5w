@@ -614,7 +614,7 @@ static int add_alt_display(CF info, int themed) {
  * (-1: none), or -2 if vehicleStateProtocolInfo didn't parse */
 static CF vspi_from_file(void);   /* below, with the file helpers */
 
-static CFIndex add_additions(CF info, CF into, int cluster) {
+static CF load_vspi(void) {
     int err = 0;
     /* the Java side's description (cp-climate's accessories, as the vehicle state channel has them), or LIVI's */
     CF vspi = vspi_from_file();
@@ -622,8 +622,14 @@ static CFIndex add_additions(CF info, CF into, int cluster) {
         cpc_vspi, VSPI_LEN, &err);
     if (!vspi) {
         LOG("### cp-climate: vehicleStateProtocolInfo didn't parse: %d\n", err);
-        return -2;
+        return 0;
     }
+    return vspi;
+}
+
+static CFIndex add_additions(CF info, CF into, int cluster) {
+    CF vspi = load_vspi();
+    if (!vspi) return -2;
     put(into, &K_vspi, vspi);
     if (!CPC_PANELS) return -1;
     return add_display_panels(info, into, cluster);
@@ -934,6 +940,9 @@ __attribute__((visibility("hidden"))) void cpc_info_hook(CF info) {
         return;
     }
     if (get(info, &K_vspi)) return;
+    /* Validate the VSP payload before changing display or input identities. */
+    CF vspi = load_vspi();
+    if (!vspi) return;
     int pct = size_percent(), edge = dock_edge(), newer = newer_version(), extras = display_extras();
     int cluster = cluster_mode(), wide = widescreen_areas();
     if (newer) set(info, &K_sourceVersion, &K_liviVersion);
@@ -942,8 +951,8 @@ __attribute__((visibility("hidden"))) void cpc_info_hook(CF info) {
     int mode = ultra_mode();
     int ultra = mode && add_alt_display(info, mode == 2) ? mode : 0;
     if (ultra == 2 && livi_hid_mode()) add_livi_hid(info);
-    CFIndex panels = add_additions(info, info, cluster);
-    if (panels == -2) return;
+    put(info, &K_vspi, vspi);
+    CFIndex panels = CPC_PANELS ? add_display_panels(info, info, cluster) : -1;
     add_features(info);
     add_video_playback(info);
     save_airplay(info);
