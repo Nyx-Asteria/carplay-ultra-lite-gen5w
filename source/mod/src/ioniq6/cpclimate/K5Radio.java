@@ -157,6 +157,7 @@ final class K5Radio {
     // mIsBsmValidStaton (boolean). Keep the OEM spelling.
     private long lastListPoll;
     private String lastScanSummary = "";
+    private String lastPublishedFmSummary = "";
     private java.util.Set<Long> fmScan = java.util.Collections.emptySet();
     // Observed stations are a fallback, not a claimed complete RF scan.
     private final java.util.TreeMap<Long,String> observedFm = new java.util.TreeMap<Long,String>();
@@ -202,6 +203,7 @@ final class K5Radio {
         all.addAll(observedFm.keySet());
         java.util.List<Object> items = new java.util.ArrayList<Object>();
         for (Long khz : all) {
+            if(khz<87900 || khz>107900 || (khz-87900)%200!=0)continue;
             String label = String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0);
             java.util.Map<String,Object> item = new java.util.LinkedHashMap<String,Object>();
             item.put("identifier", Long.toString(khz));
@@ -242,6 +244,7 @@ final class K5Radio {
             sxmArt = null; currentSxmChannel = -1; fullSxm = null; sxmLive.clear();
             sxmKnownGeneration = -1; sxmKnownIds = java.util.Collections.emptySet();
             lastListPoll = 0; fmScan = java.util.Collections.emptySet();
+            observedFm.clear(); observedGeneration=-1; lastScanSummary=""; lastPublishedFmSummary="";
             fmTuner=null; fmAudio=null; sxmTuner=null; lastServiceHealth="";
             return values;
         }
@@ -269,6 +272,7 @@ final class K5Radio {
             if (observedGeneration != CpClimate.sessionGeneration) {
                 observedFm.clear(); fmScan = java.util.Collections.emptySet(); lastListPoll = 0;
                 observedGeneration = CpClimate.sessionGeneration;
+                lastScanSummary=""; lastPublishedFmSummary="";
             }
             if (fmActive) {
                 if (lastFmFrequency != khz) {
@@ -315,7 +319,13 @@ final class K5Radio {
                         log.log("[radio] station list unavailable: " + t.getClass().getSimpleName()+"; retained="+fmScan.size());
                     }
                 }
-                values.put(4118L, fmItemsFor(fmScan,observedFm));
+                java.util.List<Object> items=fmItemsFor(fmScan,observedFm);
+                values.put(4118L,items);
+                String summary="OEM="+fmScan.size()+" observed="+observedFm.size()+" merged="+items.size();
+                if(!summary.equals(lastPublishedFmSummary)){
+                    lastPublishedFmSummary=summary;
+                    log.log("[radio] FM published catalog "+summary);
+                }
             }
         } catch (Throwable t) {
             fmActive=false; sxmActive=false; sxmAvailable=false; fmAudio=null;
