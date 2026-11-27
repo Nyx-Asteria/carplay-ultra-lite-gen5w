@@ -41,11 +41,22 @@ final class VolumePanel {
                 thread.start();
                 final Handler handler = new Handler(thread.getLooper());
                 installPresentationHooks(mod, context, p.getResult(), handler);
+                installRadioTrace(mod, p.getResult());
+                installMetadataTrace(mod, p.getResult());
+                context.registerReceiver(new BroadcastReceiver() {
+                    @Override public void onReceive(Context c, Intent i) {
+                        long now = android.os.SystemClock.elapsedRealtime();
+                        long issued = i.getLongExtra("issued", -1);
+                        if (issued >= 0 && now >= issued && now - issued <= 5000)
+                            radioTraceUntil = issued + 120000L;
+                    }
+                }, new IntentFilter("ioniq6.cpclimate.RADIO_TRACE"), PERMISSION, handler);
                 mod.hook(null, "framework.window_manager_service.intercept_key", new MethodHook() {
                     @Override protected void afterHookedMethod(Param key) {
                         if (!mod.enabled() || !mod.settingBoolean("k5_integration", true)
                                 || key.args.length == 0 || !(key.args[0] instanceof KeyEvent)) return;
                         KeyEvent e = (KeyEvent)key.args[0];
+                        traceRadioKey(mod, e);
                         if (!isVolume(e.getKeyCode()) || e.getAction() != KeyEvent.ACTION_DOWN) return;
                         handler.post(new Runnable() { public void run() {
                             if (foreground(context)) context.sendBroadcast(new Intent(CarAudio.ACTION_CHANGED).setPackage("com.daudio.app.dipo"));
@@ -56,6 +67,101 @@ final class VolumePanel {
             }
         });
     }
+    // Passive, opt-in source tracing. Never modifies arguments or results.
+    private static volatile long radioTraceUntil;
+    private static boolean radioTrace(ModContext m) {
+        return verifiedPanel && m.enabled() && m.settingBoolean("k5_integration", true)
+                && android.os.SystemClock.elapsedRealtime() < radioTraceUntil;
+    }
+    private static void traceRadioKey(ModContext m, KeyEvent e) {
+        if (!radioTrace(m) || e.getRepeatCount() != 0) return;
+        for (String name : new String[]{"SEEK_UP", "SEEK_DOWN", "MEDIA_NEXT", "MEDIA_PREVIOUS"}) {
+            try {
+                if (KeyEvent.class.getField("KEYCODE_" + name).getInt(null) == e.getKeyCode())
+                    m.log("[radio-key] " + name + " code=" + e.getKeyCode() + " action=" + e.getAction()
+                            + " device=" + e.getDeviceId());
+            } catch (Throwable ignored) {}
+        }
+    }
+    private static void installMetadataTrace(final ModContext m, Object loader) {
+        if (!verifiedPanel) return;
+        try {
+            ClassLoader cl = (ClassLoader) Points.get(null, "framework.hkmc_loader.class_loader", loader);
+            if (cl == null) return;
+            traceMethod(m, cl, "com.hkmc.micom.RadioService", "onHDRadioID3TagChanged",
+                    int.class, int.class, String.class);
+            traceMethod(m, cl, "com.hkmc.micom.RadioService", "onHDRadioSISNameReceived",
+                    int.class, String.class);
+            traceMethod(m, cl, "com.hkmc.micom.RadioService", "onHDRadioID3AlbumArtReceived",
+                    byte[].class, String.class);
+            traceMethod(m, cl, "com.hkmc.micom.RadioService", "onRdsStationListReceived",
+                    int.class, int.class, int[].class, int[].class, int[].class, int[].class, int[].class);
+            traceMethod(m, cl, "com.hkmc.micom.InitialCarInfo", "setBoseCPMode", int.class);
+            traceMethod(m, cl, "com.hkmc.micom.InitialCarInfo", "setBoseCPState", int.class);
+            traceMethod(m, cl, "com.hkmc.micom.InitialCarInfo", "getBoseCPMode");
+            traceMethod(m, cl, "com.hkmc.micom.InitialCarInfo", "getBoseCPState");
+            traceMethod(m, cl, "com.hkmc.micom.MicomAudioService", "isBoseCPAvailable");
+        } catch (Throwable t) { m.log("[radio-meta] trace setup unavailable: " + t.getClass().getSimpleName()); }
+    }
+    private static void traceMethod(final ModContext m, ClassLoader cl, final String owner,
+                                    final String name, Class<?>... types) {
+        try {
+            Class<?> c = Hooks.findClass(owner, cl);
+            Hooks.findMethodExact(c, name, types);
+            Object[] args = new Object[types.length + 1];
+            System.arraycopy(types, 0, args, 0, types.length);
+            args[types.length] = new MethodHook() {
+                @Override protected void afterHookedMethod(Param p) {
+                    try {
+                        if (!radioTrace(m)) return;
+                        StringBuilder line = new StringBuilder("[radio-meta] ").append(name);
+                        for (Object value : p.args) {
+                            line.append(' ');
+                            if (value instanceof byte[]) line.append("bytes=").append(((byte[])value).length);
+                            else if (value instanceof int[]) {
+                                int[] array = (int[])value;
+                                line.append("count=").append(array.length).append(':')
+                                    .append(java.util.Arrays.toString(java.util.Arrays.copyOf(array, Math.min(32,array.length))));
+                            } else if (value instanceof String) {
+                                String str = ((String)value).replace('\n',' ').replace('\r',' ');
+                                line.append(str.substring(0,Math.min(str.length(),128)));
+                            } else if (value instanceof Number || value instanceof Boolean || value == null) line.append(value);
+                        }
+                        Object result = p.getResult();
+                        if (result instanceof Number || result instanceof Boolean) line.append(" result=").append(result);
+                        m.log(line.toString());
+                    } catch (Throwable ignored) {}
+                }
+            };
+            Hooks.findAndHookMethod(c, name, args);
+            m.log("[radio-meta] installed " + name);
+        } catch (Throwable t) { m.log("[radio-meta] unavailable " + name + ": " + t.getClass().getSimpleName()); }
+    }
+
+    private static void installRadioTrace(final ModContext m, Object loader) {
+        if (!verifiedPanel) return;
+        try {
+            ClassLoader cl = (ClassLoader) Points.get(null, "framework.hkmc_loader.class_loader", loader);
+            if (cl == null) return;
+            Class<?> service = Hooks.findClass("com.hkmc.micom.ModeManagerService", cl);
+            java.lang.reflect.Method method = Hooks.findMethodExact(service, "changeMode",
+                    int.class, String.class, String.class, boolean.class, boolean.class);
+            if (method.getReturnType() != boolean.class) return;
+            Hooks.findAndHookMethod(service, "changeMode", int.class, String.class, String.class,
+                    boolean.class, boolean.class, new MethodHook() {
+                @Override protected void afterHookedMethod(Param p) {
+                    try {
+                        if (!radioTrace(m)) return;
+                        // Only log the source selection parameters; no arbitrary payloads.
+                        m.log("[radio-mode] changeMode args=" + java.util.Arrays.toString(p.args)
+                                + " result=" + p.getResult());
+                    } catch (Throwable ignored) {}
+                }
+            });
+            m.log("[radio-mode] passive source trace installed");
+        } catch (Throwable t) { m.log("[radio-mode] trace unavailable: " + t.getClass().getSimpleName()); }
+    }
+
     // Exact private K5 test only. Low-level SDK hook does not participate in HookPlan;
     // migrate to declared replace points when HMG-API maps these OEM methods.
     private static void installPresentationHooks(final ModContext mod, final Context context,
