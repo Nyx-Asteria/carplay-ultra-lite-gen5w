@@ -50,6 +50,22 @@
       "apply": "restart"
     },
     {
+      "key": "ultra_independent_sync",
+      "type": "toggle",
+      "default": false,
+      "title": "Independent UI Sync Negotiation (Experimental)",
+      "description": "Allows offered UI Sync even when vehicleStateProtocol is not offered, preserving the stock enabled features. Requires UI Synchronization and Ultra Sidebars. Off retains legacy negotiation.",
+      "apply": "restart"
+    },
+    {
+      "key": "ultra_phone_managed_cluster",
+      "type": "toggle",
+      "default": false,
+      "title": "Phone-Managed Cluster Layout (Experimental)",
+      "description": "Lets the iPhone choose the initial cluster layout and palette instead of requesting Modular or a saved selection. Does not remove the virtual cluster. Requires UI Synchronization and Ultra Sidebars. Off restores existing layout requests.",
+      "apply": "restart"
+    },
+    {
       "key": "ultra_force_wallpaper",
       "type": "toggle",
       "default": false,

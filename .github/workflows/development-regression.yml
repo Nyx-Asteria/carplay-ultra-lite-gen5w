@@ -75,6 +75,8 @@ jobs:
           PY
           javac --release 8 -cp "$CP" -d out/tests source/tests/UiSyncTest.java
           java -cp "out/tests:$CP" ioniq6.cpclimate.UiSyncTest out/tests out/python.bplist out/java.bplist
+          javac --release 8 -d out/tests source/mod/tools/video/src/ioniq6/cpclimate/video/PlaybackReport.java source/mod/tools/video/tests/PlaybackReportTest.java
+          java -cp out/tests ioniq6.cpclimate.video.PlaybackReportTest
           sh source/mod/tools/video/fetch-libs.sh
           HMGAPI_MOD_CLASSES="$PWD/out/work/classes" HMGAPI_R8_CLASSPATH_ARGS="--classpath $SDK/lib/hmgapi-runtime.jar --classpath $SDK/lib/hmgapi-runtime-stubs.jar" sh source/mod/build.sh "$PWD/out/core"
           unzip -t out/core/hooks.jar

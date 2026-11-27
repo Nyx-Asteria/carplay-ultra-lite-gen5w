@@ -154,6 +154,22 @@ public class UiSyncTest {
         out = sync.handle(complete);
         check("a reopened channel asks for the layout again", out.size() == 4
                 && "0D38B526-1271-575D-8A92-393A86B718F9".equals(((Map<String, Object>) commandOf(headerOf(out.get(2))).get("data")).get("layoutID")));
+        UiSync phoneManaged = new UiSync(null, true);
+        phoneManaged.wanted = null;
+        phoneManaged.remember("Cluster_Display", UiSync.layout("DigiRing").id, "green", true);
+        phoneManaged.handle(reset);
+        List<byte[]> phoneOut=phoneManaged.handle(complete);
+        check("phone-managed cluster ignores saved initial layout and retains allow/focus",
+                phoneOut.size()==3
+                && Long.valueOf(UiSync.ALLOW_LAYOUT_CHANGE).equals(n(commandOf(headerOf(phoneOut.get(1))),"type"))
+                && Long.valueOf(UiSync.GIVE_FOCUS).equals(n(commandOf(headerOf(phoneOut.get(2))),"type"))
+                && phoneManaged.selected("Cluster_Display")==null);
+        phoneManaged.wanted=UiSync.layout("Modular");
+        phoneManaged.reopen();
+        phoneManaged.handle(reset);
+        List<byte[]> restored=phoneManaged.handle(complete);
+        check("legacy cluster policy restores saved layout request",restored.size()==4
+                && UiSync.layout("DigiRing").id.equals(((Map<String,Object>)commandOf(headerOf(restored.get(2))).get("data")).get("layoutID")));
         UiSync center = new UiSync(null, true);
         center.wanted = UiSync.layout("Modular");
         Map<Object, Object> panel = new LinkedHashMap<Object, Object>();

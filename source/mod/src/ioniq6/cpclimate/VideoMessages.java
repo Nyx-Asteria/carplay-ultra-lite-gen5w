@@ -161,7 +161,7 @@ final class VideoMessages extends Thread {
                             }
                             @SuppressWarnings("unchecked")
                             Map<String, Object> m = (Map<String, Object>) next[1];
-                            sendNow((Long) next[0], m);
+                            if ((Long)next[2] == CpClimate.sessionGeneration && CpClimate.videoAllowed()) sendNow((Long) next[0], m);
                         }
                     }
                 };
@@ -169,7 +169,9 @@ final class VideoMessages extends Thread {
                 sender.start();
             }
         }
-        if (!outbox.offer(new Object[] { sid, reply })) out.log("video: answer dropped, queue full");
+        if (!CpClimate.videoAllowed()) return;
+        long generation=CpClimate.sessionGeneration;
+        if (!outbox.offer(new Object[] { sid, reply, generation })) out.log("video: answer dropped, queue full");
     }
 
     final java.util.concurrent.LinkedBlockingQueue<Object[]> outbox = new java.util.concurrent.LinkedBlockingQueue<Object[]>(256);
@@ -177,6 +179,7 @@ final class VideoMessages extends Thread {
 
     private void sendNow(long sid, Map<String, Object> reply) {
         try {
+            if (!CpClimate.videoAllowed()) return;
             if (answers == null) answers = new DatagramSocket();
             byte[] d = datagram(sid, reply);
             answers.send(new DatagramPacket(d, d.length, InetAddress.getByName("127.0.0.1"), OUT_PORT));

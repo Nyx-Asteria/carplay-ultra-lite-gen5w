@@ -62,6 +62,7 @@ public final class CpClimate extends ModEntry {
     static volatile long sessionGeneration;
     static volatile boolean sessionActive;
     static CarPlayMedia media;
+    public static long videoSessionGeneration() { return sessionGeneration; }
     public static boolean videoAllowed() { return VideoUi.enabled && sessionActive && ParkedVideo.allowed(); }
 
     /** files/cpc-vspi.bplist: VehicleState.vspi for the native /info hook (removed if it can't be built) */
@@ -93,6 +94,11 @@ public final class CpClimate extends ModEntry {
     @Override
     public void appLoaded(ModContext m, LoadedApp app) {
         if ("com.tcc.iap2server".equals(app.packageName)) {
+            // Provider publication may occur after zygote preflight. Recheck in
+            // the consumer process before registering; keep stock fingerprints.
+            themePreflight=targetVerified && m.settingBoolean("ultra_theme",true)
+                    && m.settingBoolean("ultra_sidebars",true) && theme.available(m);
+            m.log("[theme] iAP2 process preflight="+themePreflight);
             if (themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true) && m.settingBoolean("ultra_sidebars", true)) {
                 theme.register(m);
             } else m.log("[theme] iAP2 contribution withheld by boot preflight/settings");
@@ -107,6 +113,9 @@ public final class CpClimate extends ModEntry {
         if (!DIPO.equals(app.packageName)) return;
         m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("k5_integration", true));
         if (!targetVerified) return;
+        themePreflight=m.settingBoolean("ultra_theme",true)
+                && m.settingBoolean("ultra_sidebars",true) && theme.available(m);
+        m.log("[theme] DiPO process preflight="+themePreflight+" (registry availability only)");
         boolean climate = m.settingBoolean("k5_integration", true);
         boolean any = climate || m.settingBoolean("parked_video", false) || m.settingBoolean("ultra_theme", true);
         if (!any) { m.log("[runtime] all CPUL features off; disable CPUL itself to use standalone PPS CarPlay scaling"); return; }
@@ -143,6 +152,7 @@ public final class CpClimate extends ModEntry {
             m.log("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
             boolean uiSync = themedIds && m.settingBoolean("ultra_ui_sync", false);                               // the theme's layouts, palettes and wallpapers
             writeFlag(dir, "cpc-uisync", uiSync, "uiSync (CarPlay theme layouts and palettes)");
+            writeFlag(dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
             writeFeatures(dir, features ? "livi_all" : "off");
             writeFlag(dir, "cpc-xfeat", enhanced, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
@@ -315,7 +325,9 @@ public final class CpClimate extends ModEntry {
             if (uiSync) {
                 boolean forceWallpaper = m.settingBoolean("ultra_force_wallpaper", false);
                 m.log("[theme] center Wallpaper layout request=" + forceWallpaper);
-                new UiSyncChannel(dir, log, UiSync.layout("Modular"), forceWallpaper).start();
+                boolean phoneManagedCluster=m.settingBoolean("ultra_phone_managed_cluster",false);
+                m.log("[theme] cluster layout policy="+(phoneManagedCluster?"phone-managed":"legacy Modular/saved"));
+                new UiSyncChannel(dir, log, phoneManagedCluster?null:UiSync.layout("Modular"), forceWallpaper).start();
             }
         }
         MethodHook copy = new MethodHook() {

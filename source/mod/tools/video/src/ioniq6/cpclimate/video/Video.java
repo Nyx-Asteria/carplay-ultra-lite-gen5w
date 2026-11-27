@@ -230,6 +230,11 @@ public final class Video {
         return Boolean.TRUE.equals(callCore("ioniq6.cpclimate.CpClimate", "videoAllowed", new Class<?>[0]));
     }
 
+    static long sessionGeneration() {
+        Object value=callCore("ioniq6.cpclimate.CpClimate","videoSessionGeneration",new Class<?>[0]);
+        return value instanceof Number?((Number)value).longValue():-1;
+    }
+
     public static void onParkLost(final String reason) {
         if (main == null) return;
         main.post(new Runnable() { public void run() {
@@ -244,10 +249,12 @@ public final class Video {
     /** a playback message from the phone (insertPlayQueueItem, setRate, seek, playbackInfo, ...) */
     public static void onMessage(final long sid, final Map<?, ?> m) {
         if (main == null) return;
+        final long generation=sessionGeneration();
         main.post(new Runnable() {
             @Override
             public void run() {
                 try {
+                    if(generation<0||generation!=sessionGeneration())return;
                     if (!parkAllowed()) { stop("Park or session unavailable"); return; }
                     handle(sid, m);
                 } catch (Throwable t) {
@@ -260,9 +267,11 @@ public final class Video {
     /** the phone asked the car to show the video (requestUI videoplayback:) */
     public static void onShowRequested() {
         if (main == null) return;
+        final long generation=sessionGeneration();
         main.post(new Runnable() {
             @Override
             public void run() {
+                if(generation<0||generation!=sessionGeneration())return;
                 if (!parkAllowed()) { stop("Park or session unavailable"); return; }
                 show();
             }
@@ -289,7 +298,10 @@ public final class Video {
         } else if ("stop".equals(type) || "removePlayQueueItem".equals(type)) {
             stop("phone: " + type);
         }
-        if ("request".equals(m.get("kind"))) send(answer(m));
+        if ("request".equals(m.get("kind"))) {
+            Map<String,Object> response=answer(m);
+            if(parkAllowed())callCore("ioniq6.cpclimate.VideoMessages","engineSend",new Class<?>[]{long.class,Map.class},sid,response);
+        }
     }
 
     static void insert(Map<?, ?> m) {
@@ -307,11 +319,11 @@ public final class Video {
         Object item = m.get("item");
         if (!(item instanceof Map)) return;
         Map<?, ?> it = (Map<?, ?>) item;
-        itemUuid = it.get("uuid");
+        Object nextUuid=it.get("uuid");
         Object loc = it.get("Content-Location");
         String url = loc instanceof String ? (String) loc : null;
         if (url == null || !(url.startsWith("http://") || url.startsWith("https://"))) {
-            log("video: item " + itemUuid + " isn't http(s) (" + (url == null ? "no URL" : url.substring(0, Math.min(12, url.length()))) + "), can't play it");
+            log("video: item " + nextUuid + " isn't http(s) (" + (url == null ? "no URL" : url.substring(0, Math.min(12, url.length()))) + "), can't play it");
             send(error(ERROR_INCOMPATIBLE_ASSET));
             return;
         }
@@ -353,6 +365,7 @@ public final class Video {
         MediaSource source = progressive ? new ProgressiveMediaSource.Factory(data).createMediaSource(media)
                 : new HlsMediaSource.Factory(data).setAllowChunklessPreparation(true).createMediaSource(media);
         release();
+        itemUuid=nextUuid;
         com.google.android.exoplayer2.DefaultRenderersFactory renderers = new Renderers(context);
         // Limit memory pressure on the K5; allow an initial frame sooner while retaining a longer rebuffer threshold.
         com.google.android.exoplayer2.DefaultLoadControl load = new com.google.android.exoplayer2.DefaultLoadControl.Builder()
@@ -426,9 +439,14 @@ public final class Video {
 
         @Override
         public void onRenderedFirstFrame(EventTime t, Object output, long renderTimeMs) {
+            if(player==null||!parkAllowed())return;
+            boolean initial=!firstFrame;
             firstFrame = true;
             if (videoShutter != null) videoShutter.setVisibility(View.GONE);
-            log("video: first picture shown");
+            if(initial){
+                PlaybackReport report=playbackReport();
+                log("video: first picture shown; rate="+report.rate+" ready="+report.ready+" position_ms="+report.position);
+            }
         }
 
         @Override
@@ -612,11 +630,12 @@ public final class Video {
         } else if ("property".equals(type) || "getProperty".equals(type)) {
             Object key = m.get("key") != null ? m.get("key") : m.get("property");
             if (key != null) r.put("key", key);
-            boolean ready = player != null && player.getPlaybackState() == Player.STATE_READY;
+            PlaybackReport report=playbackReport();
+            boolean ready=report.ready;
             if ("hasEnabledAudio".equals(key)) r.put("value", !noSound);
             else if ("muted".equals(key)) r.put("value", noSound || (player != null && player.getVolume() == 0f));
-            else if ("seekableTimeRanges".equals(key) && ready) r.put("value", Collections.singletonList(range(0, durationMs())));
-            else if ("loadedTimeRanges".equals(key) && ready) r.put("value", Collections.singletonList(range(0, player.getBufferedPosition())));
+            else if ("seekableTimeRanges".equals(key) && ready) r.put("value", report.seekable ? Collections.singletonList(range(0, report.duration)) : Collections.emptyList());
+            else if ("loadedTimeRanges".equals(key) && ready) r.put("value", Collections.singletonList(range(0, report.buffered)));
             r.put("kind", "response");
             r.put("type", "property");
         } else {
@@ -627,47 +646,53 @@ public final class Video {
         return r;
     }
 
+    // Both compatibility envelopes describe the same player. Preserve their
+    // distinct wire units while avoiding contradictory rate/readiness values.
+    static PlaybackReport playbackReport() {
+        boolean valid=player!=null&&player.getPlayerError()==null;
+        int state=valid?player.getPlaybackState():Player.STATE_IDLE;
+        return new PlaybackReport(valid,state==Player.STATE_READY,state==Player.STATE_ENDED,
+                valid&&player.getPlayWhenReady(),valid&&player.isPlaying(),
+                valid&&player.isCurrentMediaItemSeekable(),valid?player.getCurrentPosition():0,
+                valid?durationMs():0,valid?player.getBufferedPosition():0);
+    }
+
     static Map<String, Object> info() {
         Map<String, Object> info = new LinkedHashMap<String, Object>();
         if (itemUuid != null) info.put("item", dict("uuid", itemUuid));
-        boolean ready = player != null && (player.getPlaybackState() == Player.STATE_READY || player.getPlaybackState() == Player.STATE_ENDED);
-        boolean playing = player != null && player.isPlaying();
-        // the rate the phone asked for, also while loading or buffering (rate 0 there made the phone send setRate 0)
-        boolean wanted = player != null && player.getPlayWhenReady() && player.getPlayerError() == null;
-        info.put("rate", wanted ? 1.0 : 0.0);
+        PlaybackReport report=playbackReport();
+        boolean ready=report.ready;
+        info.put("rate", report.rate);
         info.put("readyToPlay", ready);
-        info.put("playbackLikelyToKeepUp", ready && player.getPlaybackState() == Player.STATE_READY);
+        info.put("playbackLikelyToKeepUp", report.keepUp);
         if (ready) {
-            long d = durationMs();
-            info.put("position", cmTime(player.getCurrentPosition()));
-            info.put("duration", cmTime(d));
-            info.put("seekableTimeRanges", Collections.singletonList(range(0, d)));
-            info.put("loadedTimeRanges", Collections.singletonList(range(0, player.getBufferedPosition())));
+            info.put("position", cmTime(report.position));
+            info.put("duration", cmTime(report.duration));
+            info.put("seekableTimeRanges", report.seekable ? Collections.singletonList(range(0, report.duration)) : Collections.emptyList());
+            info.put("loadedTimeRanges", Collections.singletonList(range(0, report.buffered)));
         }
         info.put("droppedVideoFrames", 0L);
         info.put("totalVideoFrames", 0L);
         info.put("decodedFrameCount", 0L);
-        info.put("playbackState", !ready ? "loading" : playing ? "playing" : "paused");
+        info.put("playbackState", report.state);
         info.put("interstitialInfo", new LinkedHashMap<String, Object>());
         return info;
     }
 
     static Map<String, Object> liviPlaybackInfo() {
         Map<String, Object> out = new LinkedHashMap<String, Object>();
-        boolean valid = player != null && player.getPlayerError() == null;
-        boolean ready = valid && (player.getPlaybackState() == Player.STATE_READY || player.getPlaybackState() == Player.STATE_ENDED);
-        long pos = valid ? Math.max(0, player.getCurrentPosition()) : 0;
-        long duration = valid ? durationMs() : 0;
-        long buffered = valid ? Math.max(pos, player.getBufferedPosition()) : pos;
+        PlaybackReport report=playbackReport();
+        boolean ready=report.ready;
+        long pos=report.position, duration=report.duration, buffered=report.buffered;
         out.put("duration", duration / 1000.0);
         out.put("position", pos / 1000.0);
-        out.put("rate", valid && player.isPlaying() ? 1.0 : 0.0);
+        out.put("rate", report.rate);
         out.put("readyToPlay", ready);
         out.put("playbackBufferEmpty", buffered <= pos && !ready);
         out.put("playbackBufferFull", duration > 0 && buffered >= duration);
-        out.put("playbackLikelyToKeepUp", ready);
+        out.put("playbackLikelyToKeepUp", report.keepUp);
         out.put("loadedTimeRanges", Collections.singletonList(dict("start", 0.0, "duration", buffered / 1000.0)));
-        out.put("seekableTimeRanges", valid && player.isCurrentMediaItemSeekable() && duration > 0
+        out.put("seekableTimeRanges", report.seekable
                 ? Collections.singletonList(dict("start", 0.0, "duration", duration / 1000.0))
                 : Collections.emptyList());
         if (itemUuid != null) out.put("uuid", itemUuid);
@@ -859,6 +884,7 @@ public final class Video {
         release();
         if (shown) hide(why);
         itemUuid = null;
+        streamId = -1;
         currentUrl = null;
         rateReceived = false;
         requestedPlaying = false;
@@ -868,9 +894,13 @@ public final class Video {
         firstFrame = false;
         if (videoShutter != null) videoShutter.setVisibility(View.VISIBLE);
         if (player != null) {
-            player.removeListener(listener);
-            player.release();
-            player = null;
+            // Detach analytics before releasing codecs and network loaders.
+            // The shared listener must not receive teardown events for an old item.
+            ExoPlayer old=player;
+            player=null;
+            old.removeListener(listener);
+            old.removeAnalyticsListener(steps);
+            old.release();
         }
     }
 

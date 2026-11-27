@@ -1,0 +1,3 @@
+# Independent uiSync negotiation
+
+Default off. Existing VSP-off branch remains stock unless the phone explicitly offers uiSync and both UI Synchronization and Independent UI Sync Negotiation are enabled. Experimental branch preserves stock enabledFeatures and adds only uiSync; no fabricated VSP, video or cluster capability. VSP-present path unchanged. Current LIVI setup.rs builds enabledFeatures separately; this is a local compatibility experiment, not a claim of exact LIVI parity. RC10 compare SETUP logs and center panel traffic with toggle off/on; if VSP is offered in both runs this toggle has no effect. Restart required.
