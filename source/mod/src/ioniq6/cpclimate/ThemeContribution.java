@@ -100,6 +100,7 @@ final class ThemeContribution {
                         if (service != mod.use(PROVIDER, SERVICE)) { service = null; next = "provider_changed"; }
                         if (service != previous || !next.equals(last)) {
                             mod.log("[theme] negotiation " + next);
+                            android.util.Log.i("CPULCrossProcess", "[theme] negotiation " + next);
                             previous = service;
                             last = next;
                         }

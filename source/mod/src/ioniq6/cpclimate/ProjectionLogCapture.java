@@ -48,6 +48,8 @@ final class ProjectionLogCapture extends Thread {
             int colon=body.indexOf(':',marker);
             if(colon<0)return null;
             String event=body.substring(colon+1).trim();
+            if(event.matches("\\[theme\\] negotiation (unavailable|generation_changed|readiness_changed|provider_changed|observation_failed)"))return event;
+            if(event.matches("\\[theme\\] negotiation generation=\\d{1,19} readiness=(UNAVAILABLE|REGISTERED|PREPARED|ARMED|ADVERTISED|FAILED) vehicleBuilt=(true|false) themeBuilt=(true|false) startRequested=(true|false) startArmed=(true|false) startSendCapability=(true|false) startReceiveCapability=(true|false)"))return event;
             if(event.matches("\\[radio-sxm\\] forwarded decoded eligible catalog count=\\d{1,3}(?: excluded=\\d{1,3})?"))return event;
             if(event.equals("[radio-sxm] catalog bridge withheld: sender permission unavailable")||
                event.equals("[radio-sxm] decoded catalog observer installed")||

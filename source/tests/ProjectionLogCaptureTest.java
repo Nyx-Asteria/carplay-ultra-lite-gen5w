@@ -19,6 +19,11 @@ public final class ProjectionLogCaptureTest {
         check(ProjectionLogCapture.classify("cp-climate: theme screen SETUP type 111 uuid=other displayUUID=Cluster_Display").contains("displayUUID=Cluster_Display"));
         check(ProjectionLogCapture.classify("cp-climate: theme screen SETUP type 110 uuid=secret displayUUID=private").equals("[projection-theme] screen SETUP type=110"));
         check(ProjectionLogCapture.classify("cp-climate: Ultra display registration: main=Center_Display, alternate=Cluster_Display, original count=1").contains("originalCount=1"));
+        String identity="[theme] negotiation generation=7 readiness=ADVERTISED vehicleBuilt=true themeBuilt=true startRequested=true startArmed=true startSendCapability=true startReceiveCapability=false";
+        check(identity.equals(ProjectionLogCapture.classify("I CPULCrossProcess: "+identity)));
+        check(ProjectionLogCapture.classify("I CPULCrossProcess: "+identity+" password=private")==null);
+        check(ProjectionLogCapture.classify("I CPULCrossProcess: "+identity.replace("ADVERTISED","private"))==null);
+        check("[theme] negotiation generation_changed".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation generation_changed")));
         System.out.println("ProjectionLogCaptureTest passed");
     }
 }
