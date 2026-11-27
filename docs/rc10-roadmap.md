@@ -54,3 +54,5 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [x] HMG-API vehicle shortcut: RC10 manifest confirms MAIN without LAUNCHER; explicit hmgapi.app.MainActivity fallback, resolve before launch. Nemesis entry point still needs evidence; vehicle verification pending.
 
 - [x] Passenger temperature dispatch uses same session-generation guards as seat commands, including immediately before Binder transaction. Existing Celsius/Fahrenheit conversion confirmed against ClimateMap; OEM setter unchanged. CI and vehicle validation pending.
+
+- [x] FM/SXM pending tunes require a live activation request; clear failed/expired/fingerprint/signature-mismatched activation requests before delayed tune. No new source IDs; CI and vehicle validation pending.
