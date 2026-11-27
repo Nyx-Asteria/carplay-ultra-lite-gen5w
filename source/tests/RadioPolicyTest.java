@@ -6,6 +6,9 @@ public final class RadioPolicyTest {
         if (!ok) throw new AssertionError(name);
     }
     public static void main(String[] args) {
+        check(K5Radio.currentRadioRequest(1,2,1,2), "current seek request");
+        check(!K5Radio.currentRadioRequest(1,2,2,2), "new source supersedes seek");
+        check(!K5Radio.currentRadioRequest(1,2,1,3), "new station supersedes seek");
         check(K5Radio.retainFmCache(15,0), "retain transient empty scan");
         check(!K5Radio.retainFmCache(0,0) && !K5Radio.retainFmCache(15,12), "accept new nonempty catalog");
         check(K5Radio.fmKhz(10030) == 100300, "Z100 frequency conversion");

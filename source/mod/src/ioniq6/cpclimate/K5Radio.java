@@ -657,33 +657,46 @@ final class K5Radio {
      * Recheck source ownership on the worker immediately before the OEM command. */
     private final java.util.concurrent.ExecutorService fmCommands =
             java.util.concurrent.Executors.newSingleThreadExecutor();
-    boolean seekFm(final boolean up) {
+    synchronized boolean seekFm(final boolean up) {
         if (!enabled() || !CpClimate.sessionActive || !fmActive) {
             log.log("[radio] seek refused: FM not active"); return false;
         }
         final long generation = CpClimate.sessionGeneration;
+        final long request = tuneRequest.incrementAndGet();
+        final long station = stationRequest.incrementAndGet();
+        sourceRequest.clear();
+        log.log("[radio] FM seek queued direction="+(up?"up":"down")+" request="+request);
         fmCommands.execute(new Runnable() {
             public void run() {
-                if (!probeActive(generation)) return;
+                if (!probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) {
+                    log.log("[radio] stale FM seek discarded request="+request); return;
+                }
                 try {
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
-                    if (!probeActive(generation)) return;
+                    if (!probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
                     Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
-                    if (tuner == null || !probeActive(generation)) return;
+                    if (tuner == null || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
                     java.lang.reflect.Method seek = Class.forName(RADIO_IFACE).getMethod(up ? "seekUp" : "seekDown");
-                    if (seek.getReturnType() != void.class) return;
+                    if (seek.getReturnType() != void.class) {
+                        log.log("[radio] FM seek withheld: unexpected return type="+seek.getReturnType().getName());
+                        return;
+                    }
                     // Recheck ownership after resolving the tuner, just as for direct tuning.
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38
-                            || !probeActive(generation)) return;
+                            || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
                     seek.invoke(tuner);
                     log.log("[radio] native FM " + (up ? "seekUp" : "seekDown") + " dispatched; awaiting frequency feedback");
                 } catch (Throwable t) { log.log("[radio] FM seek failed: " + t.getClass().getSimpleName()); }
             }
         });
         return true;
+    }
+
+    static boolean currentRadioRequest(long request,long station,long activeRequest,long activeStation) {
+        return request==activeRequest && station==activeStation;
     }
 
     /** US FM: odd 200 kHz channels, OEM frequency in 10 kHz units.
