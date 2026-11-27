@@ -24,6 +24,8 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
     final Handler main = new Handler(Looper.getMainLooper());
     int odometer = -1, range = -1, unit = -1;
     String last = "";
+    long deliveredGeneration = -1;
+    VehicleState deliveredState;
     final ComfortThresholds comfort;
     final K5Radio radio;
     final java.util.concurrent.ArrayBlockingQueue<String> adjustments = new java.util.concurrent.ArrayBlockingQueue<String>(16);
@@ -147,11 +149,19 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
                     CarAudio audio = CarAudio.instance;
                     fresh.put("audio.bose", audio == null ? VehiclePage.NONE : audio.boseStatus());
                     if(!CpClimate.sessionActive||generation!=CpClimate.sessionGeneration)continue;
-                    Map<Long,Object> changed = page.update(fresh);
-                    if (enabled() && radio.available()) changed.putAll(radio.refreshFm());
                     VehicleState current;
                     synchronized (state) { current = state[0]; }
-                    if (current != null && !changed.isEmpty() && CpClimate.sessionActive && generation==CpClimate.sessionGeneration) lanes[1].deliver(current.fromCar(changed));
+                    boolean replay = generation != deliveredGeneration || current != deliveredState;
+                    Map<Long,Object> changed = page.update(fresh,replay);
+                    if (enabled() && radio.available()) changed.putAll(radio.refreshFm());
+                    synchronized (state) {
+                        if (current != null && current == state[0] && !changed.isEmpty()
+                                && CpClimate.sessionActive && generation==CpClimate.sessionGeneration) {
+                            lanes[1].deliver(current.fromCar(changed));
+                            deliveredGeneration=generation;
+                            deliveredState=current;
+                        }
+                    }
                 }
                 if (!CpClimate.sessionActive) { adjustments.clear(); comfort.invalidate(); }
                 Thread.sleep(comfort.present() ? 1000 : 5000);
