@@ -23,6 +23,7 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 
 ## Radio
 - [ ] FM catalog publication, seek, metadata/artwork and direct activation reliability.
+- [x] Preserve nonempty FM cache on transient empty poll or list accessor failure while tuner remains available; log catalog subscription/notifier queue status (CI pending).
 - [ ] HD2–4 discovery and control only with verified protocol evidence.
 - [ ] SXM channel identity mapping, source activation, song/artist/artwork and seek validation.
 - [x] Reject live metadata callbacks for mismatched observed channel and out-of-order delivery (CI pending); early callbacks before tuner observation may be withheld, same-ID delayed callbacks remain ambiguous.

@@ -1283,6 +1283,10 @@ final class VehicleState {
             values.put(notifier, next);
             if (followed.contains(notifier)) changed.put(notifier, next);
         }
+        if (iid==4118L || iid==4134L) out.log("[radio-catalog] iid="+iid+" count="+(v instanceof List?((List<?>)v).size():-1)
+                +" listSubscribed="+followed.contains(iid)+" notifier="+notifier
+                +" notifierSubscribed="+(notifier!=null&&followed.contains(notifier))
+                +" queuedList="+changed.containsKey(iid)+" queuedNotifier="+(notifier!=null&&changed.containsKey(notifier)));
     }
 
     // ---- LIVI wire.rs ----

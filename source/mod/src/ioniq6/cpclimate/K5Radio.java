@@ -154,7 +154,7 @@ final class K5Radio {
         if (!(raw instanceof java.util.List)) {
             String summary = "unexpected cache type=" + (raw == null ? "null" : raw.getClass().getName());
             if (!summary.equals(lastScanSummary)) { lastScanSummary = summary; log.log("[radio] FM scan cache " + summary); }
-            return java.util.Collections.emptyList();
+            throw new IllegalStateException("unexpected FM cache type");
         }
         Class<?> type = Class.forName("com.hkmc.media.RadioAllBsmFreqInfo");
         java.lang.reflect.Field freq = type.getDeclaredField("mBsmFreq");
@@ -178,6 +178,8 @@ final class K5Radio {
         }
         return fmItemsFor(frequencies);
     }
+
+    static boolean retainFmCache(int previous,int next) { return previous>0 && next==0; }
 
     private java.util.List<Object> fmItemsFor(java.util.Set<Long> frequencies) {
         java.util.TreeSet<Long> all = new java.util.TreeSet<Long>(frequencies);
@@ -288,10 +290,11 @@ final class K5Radio {
                     try {
                         java.util.List<Object> next = readFmItems(fmTuner);
                         if (!next.equals(fmItems)) log.log("[radio] cached OEM FM station list size=" + next.size());
-                        fmItems = next;
+                        if (retainFmCache(fmItems.size(),next.size())) {
+                            log.log("[radio] empty FM cache; preserving previous stations count="+fmItems.size());
+                        } else fmItems = next;
                     } catch (Throwable t) {
-                        fmItems = java.util.Collections.emptyList();
-                        log.log("[radio] station list unavailable: " + t.getClass().getSimpleName());
+                        log.log("[radio] station list unavailable: " + t.getClass().getSimpleName()+"; retained="+fmItems.size());
                     }
                 }
                 java.util.Set<Long> cached = new java.util.TreeSet<Long>();

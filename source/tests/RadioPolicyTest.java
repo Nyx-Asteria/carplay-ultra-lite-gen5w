@@ -6,6 +6,8 @@ public final class RadioPolicyTest {
         if (!ok) throw new AssertionError(name);
     }
     public static void main(String[] args) {
+        check(K5Radio.retainFmCache(15,0), "retain transient empty scan");
+        check(!K5Radio.retainFmCache(0,0) && !K5Radio.retainFmCache(15,12), "accept new nonempty catalog");
         check(K5Radio.fmKhz(10030) == 100300, "Z100 frequency conversion");
         check(K5Radio.fmKhz(8750) == 87500, "lower tuner boundary");
         check(K5Radio.fmKhz(10800) == 108000, "upper tuner boundary");
