@@ -26,7 +26,9 @@ final class VideoUi {
     static volatile VsChannel.Log out;
     static volatile boolean enabled;
     static volatile Object carPlay;
-    private static volatile long borrowedAt;
+    private static Object borrowedService;
+    private static long borrowedGeneration = -1;
+    private static long borrowToken;
 
     /** wraps the session's listeners (again after DiPO adds new ones); safe to call on every session start */
     static synchronized void install(Object service, ClassLoader cl) {
@@ -147,26 +149,33 @@ final class VideoUi {
     }
 
     /** the video engine closed its window (its back button): CarPlay gets the screen back */
-    static void engineClosed() {
-        Object service = carPlay;
-        if (service != null && borrowedAt != 0) unborrow(service, "video closed");
+    public static synchronized void engineClosed(long generation) {
+        if (borrowedService != null && borrowedGeneration == generation)
+            unborrow(borrowedService, "video closed");
     }
 
     /** the phone wants to show a video: borrow the screen for it, as LIVI does; the engine shows it, else back after RETURN_MS */
-    static void onVideoRequested() {
+    static synchronized void onVideoRequested() {
         if (!CpClimate.videoAllowed()) { log("[video] request denied: fresh Park and active session required"); VideoMessages.stopEngine("Park not confirmed"); return; }
         log("video: the phone asked for " + URL + " (kept from DiPO); borrowing the screen for " + BORROW_ID);
         final Object service = carPlay;
         if (service == null) return;
+        final long generation = CpClimate.sessionGeneration;
         try {
             ClassLoader cl = service.getClass().getClassLoader();
             Object priority = enumValue(cl, "CarPlayTransferPriority", "UserInitiated");
             Object constraint = enumValue(cl, "CarPlayConstraint", "UserInitiated");
             Method borrow = service.getClass().getMethod("changeModeBorrowScreen",
                     priority.getClass(), constraint.getClass(), String.class);
+            if (!CpClimate.videoAllowed() || generation != CpClimate.sessionGeneration) return;
             borrow.invoke(service, priority, constraint, BORROW_ID);
-            final long at = System.currentTimeMillis();
-            borrowedAt = at;
+            borrowedService = service;
+            borrowedGeneration = generation;
+            final long token = ++borrowToken;
+            if (!CpClimate.videoAllowed() || generation != CpClimate.sessionGeneration) {
+                unborrow(service, "session or Park changed during borrow");
+                return;
+            }
             Method show = VideoMessages.engineShow;
             if (show != null) {
                 show.invoke(null);
@@ -181,20 +190,27 @@ final class VideoUi {
                         Thread.sleep(RETURN_MS);
                     } catch (InterruptedException ignored) {
                     }
-                    if (borrowedAt == at) unborrow(service, "stage 1 timer");
+                    synchronized (VideoUi.class) {
+                        if (borrowToken == token && borrowedService == service && borrowedGeneration == generation)
+                            unborrow(service, "stage 1 timer");
+                    }
                 }
             };
             back.setDaemon(true);
             back.start();
         } catch (Throwable t) {
             log("video: borrow failed: " + (t instanceof InvocationTargetException ? t.getCause() : t));
+            if (borrowedService == service && borrowedGeneration == generation)
+                unborrow(service, "borrow/show failure");
         }
     }
 
-    static void unborrow(Object service, String why) {
+    private static void unborrow(Object service, String why) {
         try {
             service.getClass().getMethod("changeModeUnborrowScreen", String.class).invoke(service, BORROW_ID);
-            borrowedAt = 0;
+            borrowedService = null;
+            borrowedGeneration = -1;
+            ++borrowToken;
             log("video: screen given back to CarPlay (" + why + ")");
         } catch (Throwable t) {
             log("video: unborrow failed: " + (t instanceof InvocationTargetException ? t.getCause() : t));

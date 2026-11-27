@@ -119,8 +119,9 @@ public final class Video {
         main.postDelayed(new Runnable() { public void run() {
             try {
                 if ((player != null || shown || itemUuid != null) && !parkAllowed()) {
+                    long owner = playbackGeneration;
                     stop("Park feedback stale or session ended");
-                    callCore("ioniq6.cpclimate.VideoUi", "engineClosed", new Class<?>[0]);
+                    closeScreen(owner);
                 }
             } finally { main.postDelayed(this, 250); }
         }}, 250);
@@ -247,11 +248,12 @@ public final class Video {
                 log("[video] stale stop ignored generation="+requestedGeneration+" owner="+playbackGeneration);
                 return;
             }
+            long owner = playbackGeneration >= 0 ? playbackGeneration : requestedGeneration;
             if (player != null || shown || itemUuid != null) {
                 log("[video] stopping: " + reason);
                 stop(reason);
             }
-            callCore("ioniq6.cpclimate.VideoUi", "engineClosed", new Class<?>[0]);
+            closeScreen(owner);
         }});
     }
 
@@ -916,7 +918,12 @@ public final class Video {
         if (window != null) window.setVisibility(View.GONE);
         shown = false;
         log("video: hidden (" + why + ")");
-        callCore("ioniq6.cpclimate.VideoUi", "engineClosed", new Class<?>[0]);
+        closeScreen(playbackGeneration);
+    }
+
+    static void closeScreen(long generation) {
+        if (generation >= 0)
+            callCore("ioniq6.cpclimate.VideoUi", "engineClosed", new Class<?>[]{long.class}, generation);
     }
 
     static void stop(String why) {
