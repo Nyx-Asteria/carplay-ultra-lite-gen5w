@@ -43,6 +43,7 @@ final class VsChannel extends Thread {
     final VsChannel[] lanes;
     private volatile Socket current;
     private Writer writer;
+    private VehicleState writerOwner;
     volatile ServerSocket server;
 
     /** the open connection's sending half; one at a time, as the cipher counts its frames */
@@ -110,11 +111,44 @@ final class VsChannel extends Thread {
         }
     }
 
+    /** Capture only writers belonging to the expected state. No socket I/O under the state lock. */
+    synchronized Writer writerFor(VehicleState owner) {
+        return owner != null && writerOwner == owner && writer != null && writer.sock == current ? writer : null;
+    }
+
+    static boolean sendCaptured(Writer w, byte[] message, Log out) {
+        if (w == null) return false;
+        try {
+            w.send(pack(ASYNC, COMMAND, 0, message));
+            return true;
+        } catch (Exception e) {
+            out.log("VS captured writer failed: " + e);
+            close(w.sock);
+            return false;
+        }
+    }
+
+    /** Never fall back to a new session's writer when an old socket closes. */
+    boolean deliverOwned(VehicleState owner, List<VehicleState.Out> answers) {
+        Writer[] captured = new Writer[2];
+        synchronized (state) {
+            if (owner == null || state[0] != owner) return false;
+            for (int i=0;i<2;i++) if (lanes[i]!=null) captured[i]=lanes[i].writerFor(owner);
+        }
+        if (captured[0]==null && captured[1]==null) return false;
+        boolean complete=true;
+        for (VehicleState.Out a : answers) {
+            if (!sendCaptured(captured[a.lane],a.message,out)
+                    && !sendCaptured(captured[1-a.lane],a.message,out)) complete=false;
+        }
+        return complete;
+    }
+
     /**
      * A session's two lanes connect within moments of each other, so a connection while the other
      * lane is closed, or has been open a while, starts a new session with a fresh VehicleState.
      */
-    void startSession() {
+    VehicleState startSession() {
         long now = System.currentTimeMillis();
         // one decision for both lanes, under the shared state's lock: the phone opens them within
         // milliseconds, so whichever comes second joins the session the first one started
@@ -122,13 +156,14 @@ final class VsChannel extends Thread {
             VehicleState current = state[0];
             if (current != null && now - current.startedAt < SESSION_PAIRING_MS) {
                 out.log("VS" + lane + " joins the session's vehicle state");
-                return;
+                return current;
             }
             VehicleState vs = new VehicleState(out);
             vs.car = car;
             vs.startedAt = now;
             state[0] = vs;
             out.log("VS" + lane + " new session: fresh vehicle state");
+            return vs;
         }
     }
 
@@ -174,9 +209,14 @@ final class VsChannel extends Thread {
             InputStream in = sock.getInputStream();
             OutputStream os = sock.getOutputStream();
             Writer w = new Writer(sock, os, cipher);
-            startSession();
-            synchronized (this) {
-                writer = w;
+            synchronized (state) {
+                if (current != sock) return;
+                VehicleState owner = startSession();
+                synchronized (this) {
+                    if (current != sock) return;
+                    writer = w;
+                    writerOwner = owner;
+                }
             }
             byte[] sealed = new byte[64 * 1024];
             int have = 0;
@@ -220,7 +260,10 @@ final class VsChannel extends Thread {
             out.log("VS" + lane + " connection ended: " + t);
         } finally {
             synchronized (this) {
-                if (writer != null && writer.sock == sock) writer = null;
+                if (writer != null && writer.sock == sock) {
+                    writer = null;
+                    writerOwner = null;
+                }
             }
             close(sock);
         }
