@@ -8,18 +8,23 @@ import java.io.FileWriter;
 final class NativeProfile {
     private NativeProfile() {}
 
+    // Keep the existing on-disk format and caller-specific failure handling.
+    private static void writeValue(File file, String value) throws java.io.IOException {
+        FileWriter writer = new FileWriter(file);
+        try {
+            writer.write(value);
+        } finally {
+            writer.close();
+        }
+    }
+
     /** the dock position setting, for the native /info hook (files/cpc-dock: 0 auto, 1 bottom, 2 side) */
     static void writeDock(ModContext mod, File dir, String dock) {
         File f = new File(dir, "cpc-dock");
         try {
             int edge = Integer.parseInt(dock.trim());
             if (edge < 0 || edge > 4) edge = 1;
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(edge + "\n");
-            } finally {
-                w.close();
-            }
+            writeValue(f, edge + "\n");
             mod.log("CarPlay dock edge " + edge);
         } catch (Exception e) {
             f.delete();
@@ -35,12 +40,7 @@ final class NativeProfile {
             return;
         }
         try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write("1\n");
-            } finally {
-                w.close();
-            }
+            writeValue(f, "1\n");
             mod.log("CarPlay receiver version 950.7.1 in /info (experiment)");
         } catch (Exception e) {
             f.delete();
@@ -77,12 +77,7 @@ final class NativeProfile {
             return;
         }
         try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(Long.toHexString(bits) + "\n");
-            } finally {
-                w.close();
-            }
+            writeValue(f, Long.toHexString(bits) + "\n");
             mod.log("/info feature bits 0x" + Long.toHexString(bits) + " (" + v + ") on (experiment)");
         } catch (Exception e) {
             f.delete();
@@ -97,12 +92,7 @@ final class NativeProfile {
             return;
         }
         try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(value + "\n");
-            } finally {
-                w.close();
-            }
+            writeValue(f, value + "\n");
             mod.log(what + " on (experiment)");
         } catch (Exception e) {
             f.delete();
@@ -117,12 +107,7 @@ final class NativeProfile {
             return;
         }
         try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(mode + "\n");
-            } finally {
-                w.close();
-            }
+            writeValue(f, mode + "\n");
             mod.log("CarPlay Ultra virtual cluster on" + (mode == 2 ? ", with the theme's display ids" : "") + " (experiment)");
         } catch (Exception e) {
             f.delete();
@@ -138,12 +123,7 @@ final class NativeProfile {
             return;
         }
         try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(v + "\n");
-            } finally {
-                w.close();
-            }
+            writeValue(f, v + "\n");
             mod.log("Apple widescreen view areas, start " + ("2".equals(v) ? "right" : "whole") + " (experiment)");
         } catch (Exception e) {
             f.delete();
@@ -162,12 +142,7 @@ final class NativeProfile {
             return;
         }
         try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(code + "\n");
-            } finally {
-                w.close();
-            }
+            writeValue(f, code + "\n");
             mod.log("instrument panel: " + v + " (experiment)");
         } catch (Exception e) {
             f.delete();
