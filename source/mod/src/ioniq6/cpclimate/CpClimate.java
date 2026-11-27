@@ -101,8 +101,9 @@ public final class CpClimate extends ModEntry {
                     && m.settingBoolean("ultra_sidebars",true) && theme.available(m);
             m.log("[theme] iAP2 process preflight="+themePreflight);
             if (themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true) && m.settingBoolean("ultra_sidebars", true)) {
-                theme.register(m);
+                if (theme.register(m)) theme.observe(m);
             } else {
+                theme.stopObservation();
                 theme.unregister(m);
                 m.log("[theme] iAP2 contribution withheld by boot preflight/settings");
             }
@@ -407,7 +408,7 @@ public final class CpClimate extends ModEntry {
     }
 
     @Override public void onEnabled(ModContext m, boolean enabled) {
-        if (!enabled) { theme.unregister(m); sessionActive = false; sessionGeneration++; VideoMessages.stopEngine("mod disabled"); if(sessionLogging!=null) sessionLogging.finish("mod disabled"); }
+        if (!enabled) { theme.stopObservation(); theme.unregister(m); sessionActive = false; sessionGeneration++; VideoMessages.stopEngine("mod disabled"); if(sessionLogging!=null) sessionLogging.finish("mod disabled"); }
         m.log("[runtime] enabled=" + enabled + "; restart required to change advertised capabilities");
     }
 
