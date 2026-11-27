@@ -55,6 +55,10 @@ public final class RadioPolicyTest {
         check(!K5Radio.sxmCatalogCandidate(10,sxmKnown,sxmExcluded),"duplicate channel omitted");
         check(!K5Radio.sxmCatalogCandidate(-1,sxmKnown,sxmExcluded),"invalid channel omitted");
         check(K5Radio.sxmCatalogCandidate(30,sxmKnown,sxmExcluded),"eligible full catalog candidate");
+        check(K5Radio.retainSxmSnapshot(0,0,true),"transient empty catalog retained");
+        check(!K5Radio.retainSxmSnapshot(0,3,true),"explicit all-excluded catalog replaces old catalog");
+        check(!K5Radio.retainSxmSnapshot(1,0,true),"eligible catalog replaces old catalog");
+        check(!K5Radio.retainSxmSnapshot(0,0,false),"no previous catalog to retain");
         System.out.println("Radio policy regressions passed");
     }
 }
