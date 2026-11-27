@@ -1059,6 +1059,15 @@ final class VehicleState {
                 ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON}) {
             if (values.containsKey(iid)) seatBefore.put(iid, values.get(iid));
         }
+        // Capture pending levels before this write mutates requestedSeats. An On-only
+        // follow-up must retain the preceding explicit level even before BCM catches up.
+        Map<Long,Object> pendingSeatLevels = new TreeMap<Long,Object>();
+        for (long iid : new long[]{ClimateMap.DRIVER_SEAT_LEVEL, ClimateMap.PASSENGER_SEAT_LEVEL,
+                ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_LEVEL}) {
+            Long since = heldSince.get(iid);
+            if (since != null && System.currentTimeMillis() - since < HOLD_MS
+                    && requestedSeats.containsKey(iid)) pendingSeatLevels.put(iid, requestedSeats.get(iid));
+        }
         for (Map.Entry<Object, Object> e : written.entrySet()) {
             Long iid = OpackCodec.asLong(e.getKey());
             if (iid == null) continue;
@@ -1117,6 +1126,17 @@ final class VehicleState {
             Map<Long,Object> commandState = new TreeMap<Long,Object>(values);
             commandState.putAll(seatBefore);
             commandState.putAll(actualSeats);
+            // Only reuse a pending level for an explicit same-mode On-only request.
+            // Opposite-mode suppression continues to use actual BCM state.
+            for (long[] pair : new long[][]{
+                    {ClimateMap.DRIVER_SEAT_LEVEL, ClimateMap.DRIVER_SEAT_ON},
+                    {ClimateMap.PASSENGER_SEAT_LEVEL, ClimateMap.PASSENGER_SEAT_ON},
+                    {ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.DRIVER_VENT_ON},
+                    {ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON}}) {
+                if (Boolean.TRUE.equals(sent.get(pair[1])) && !sent.containsKey(pair[0])
+                        && pendingSeatLevels.containsKey(pair[0]))
+                    commandState.put(pair[0], pendingSeatLevels.get(pair[0]));
+            }
             c.phoneWrote(sent, commandState);
         }
         List<Out> answers = new ArrayList<Out>();

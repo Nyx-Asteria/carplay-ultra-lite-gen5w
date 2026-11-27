@@ -510,6 +510,32 @@ public class ClimateMapTest {
             bcm.put(hl,2L);bcm.put(ho,true);bcm.put(vl,0L);bcm.put(vo,false);ts.fromCar(bcm);
             check("confirmed heat and ventilation off "+hl,Long.valueOf(2).equals(ts.values.get(hl))&&Long.valueOf(0).equals(ts.values.get(vl)));
         }
+        // Separate level and On writes can arrive before the physical seat changes.
+        for (boolean immediateFeedback : new boolean[]{false,true}) {
+            VehicleState.seatHeatImmediateFeedback = immediateFeedback;
+            VehicleState.seatFanImmediateFeedback = immediateFeedback;
+            for (long[] pair : new long[][]{
+                    {ClimateMap.DRIVER_SEAT_LEVEL,ClimateMap.DRIVER_SEAT_ON,8},
+                    {ClimateMap.PASSENGER_SEAT_LEVEL,ClimateMap.PASSENGER_SEAT_ON,8},
+                    {ClimateMap.DRIVER_VENT_LEVEL,ClimateMap.DRIVER_VENT_ON,5},
+                    {ClimateMap.PASSENGER_VENT_LEVEL,ClimateMap.PASSENGER_VENT_ON,5}}) {
+                final List<ClimateMap.Command> captured = new java.util.ArrayList<ClimateMap.Command>();
+                VehicleState pending = new VehicleState(new VsChannel.Log(){public void log(String m){}});
+                pending.car = new VehicleState.Car(){public void phoneWrote(Map<Long,Object> w,Map<Long,Object> state){
+                    captured.addAll(ClimateMap.commands(w,state,2));
+                }};
+                pending.fromCar(ClimateMap.toCarPlay(car(1,0,0,0,2,3,2,77,0)));
+                pending.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest",
+                        "transactionID",40L,"values",VehicleState.dict(pair[0],3L))));
+                captured.clear();
+                pending.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest",
+                        "transactionID",41L,"values",VehicleState.dict(pair[1],true))));
+                check("pending level survives On-only follow-up "+pair[0]+" immediate="+immediateFeedback,
+                        captured.size()==1 && captured.get(0).b==pair[2]);
+            }
+        }
+        VehicleState.seatHeatImmediateFeedback = true;
+        VehicleState.seatFanImmediateFeedback = false;
         System.out.println(fails == 0 ? "ALL OK" : fails + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }
