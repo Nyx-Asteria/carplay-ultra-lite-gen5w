@@ -505,6 +505,7 @@ final class K5Radio {
             java.lang.reflect.Field skipped = type.getDeclaredField("mIsSkipped");
             subscribed.setAccessible(true); skipped.setAccessible(true);
             java.util.Set<Integer> known = new java.util.HashSet<Integer>();
+            java.util.Set<Integer> excluded = new java.util.HashSet<Integer>();
             java.util.List<Object> items = new java.util.ArrayList<Object>();
             for (int i = 0; i < Math.min(100, java.lang.reflect.Array.getLength(records)); i++) {
                 Object entry = java.lang.reflect.Array.get(records, i);
@@ -513,8 +514,12 @@ final class K5Radio {
                 if (!(raw instanceof Number)) continue;
                 int channel = ((Number)raw).intValue();
                 if (channel >= 0) sxmMetadata.put(channel, new String[] {channelText(type, entry, "mChannelLongName"), "", ""});
-                if (channel < 0 || !channelFlag(subscribed.get(entry), true)
-                        || !channelFlag(skipped.get(entry), false) || known.contains(channel)) continue;
+                if (channel < 0) continue;
+                if (!channelFlag(subscribed.get(entry), true) || !channelFlag(skipped.get(entry), false)) {
+                    excluded.add(channel);
+                    continue;
+                }
+                if (known.contains(channel)) continue;
                 // The DL322 binder exposes isChannelLocked(int): int.
                 // Only an explicit zero permits direct tuning; do not bypass parental locks.
                 if (!sxmUnlocked(sxmTuner, channel)) continue;
@@ -532,7 +537,7 @@ final class K5Radio {
                 // Favor fresh per-channel favorites metadata over the older full catalog.
                 for (int i = 0; i < snapshot.ids.length; i++) {
                     int channel = snapshot.ids[i];
-                    if (channel < 0 || known.contains(channel)) continue;
+                    if (!sxmCatalogCandidate(channel,known,excluded)) continue;
                     if (!sxmUnlocked(sxmTuner, channel)) continue;
                     known.add(channel);
                     String name = snapshot.names[i];
@@ -546,6 +551,12 @@ final class K5Radio {
                     // Full catalog is a name snapshot, not authoritative live track metadata.
                     if (!sxmMetadata.containsKey(channel)) sxmMetadata.put(channel, new String[]{name, "", ""});
                 }
+            }
+            // Conflicting duplicate OEM records must fail closed regardless of order.
+            known.removeAll(excluded);
+            for (java.util.Iterator<Object> it=items.iterator();it.hasNext();) {
+                java.util.Map<?,?> item=(java.util.Map<?,?>)it.next();
+                if(excluded.contains(Integer.valueOf((String)item.get("identifier"))))it.remove();
             }
             sxmItems = items;
             sxmKnownIds = java.util.Collections.unmodifiableSet(known);
@@ -568,6 +579,10 @@ final class K5Radio {
     }
     // OEM channel records have been observed with numeric 0/1 flags.
     // Accept boolean representations too; unknown values are not authorization.
+    static boolean sxmCatalogCandidate(int channel,java.util.Set<Integer> known,java.util.Set<Integer> excluded) {
+        return channel>=0 && !known.contains(channel) && !excluded.contains(channel);
+    }
+
     static boolean channelFlag(Object value, boolean expected) {
         if (value instanceof Boolean) return ((Boolean)value).booleanValue() == expected;
         if (value instanceof Number) {

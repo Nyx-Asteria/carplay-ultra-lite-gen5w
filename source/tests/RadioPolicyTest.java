@@ -49,6 +49,12 @@ public final class RadioPolicyTest {
         check(replacement.size()==1&&replacement.contains(102300L),"nonempty OEM scan replaces prior scan");
         check(K5Radio.fmItemsFor(replacement,observed).size()==3,"observations remain separate after replacement");
         check(K5Radio.fmItemsFor(java.util.Collections.<Long>emptySet(),observed).size()==2,"observed-only fallback");
+        java.util.Set<Integer> sxmKnown=java.util.Collections.singleton(10);
+        java.util.Set<Integer> sxmExcluded=java.util.Collections.singleton(20);
+        check(!K5Radio.sxmCatalogCandidate(20,sxmKnown,sxmExcluded),"full catalog cannot restore excluded channel");
+        check(!K5Radio.sxmCatalogCandidate(10,sxmKnown,sxmExcluded),"duplicate channel omitted");
+        check(!K5Radio.sxmCatalogCandidate(-1,sxmKnown,sxmExcluded),"invalid channel omitted");
+        check(K5Radio.sxmCatalogCandidate(30,sxmKnown,sxmExcluded),"eligible full catalog candidate");
         System.out.println("Radio policy regressions passed");
     }
 }
