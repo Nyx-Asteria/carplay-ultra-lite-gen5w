@@ -154,6 +154,14 @@ public class UiSyncTest {
         out = sync.handle(complete);
         check("a reopened channel asks for the layout again", out.size() == 4
                 && "0D38B526-1271-575D-8A92-393A86B718F9".equals(((Map<String, Object>) commandOf(headerOf(out.get(2))).get("data")).get("layoutID")));
+        UiSync center = new UiSync();
+        center.wanted = UiSync.layout("Modular");
+        Map<Object, Object> panel = new LinkedHashMap<Object, Object>();
+        panel.put("displayUUID", "Center_Display");
+        panel.put("data", Bplist.encode(map("type", 0L, "ssn", 1L, "psn", 1L, "version", 3L)));
+        center.handle(OpackCodec.encode(panel));
+        panel.put("data", Bplist.encode(map("type", 1L, "ssn", 1L, "psn", 1L, "version", 3L)));
+        check("center display does not receive cluster layout request", center.handle(OpackCodec.encode(panel)).size() == 3);
         boolean ids = true;
         for (UiSync.Layout l : UiSync.THEME_LAYOUTS)
             ids &= l.id.length() == 36 && l.zone.length() == 36 && l.component.length() == 36 && !l.palette.isEmpty();

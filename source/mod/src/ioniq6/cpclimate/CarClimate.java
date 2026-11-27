@@ -10,8 +10,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * M4: the car's climate on CarPlay, both ways. Once a second (while the phone is on a vehicle
- * state stream) it reads DATCService's voice-control status flags and USMService's seat heat
- * states, adds the temperatures DATCService's callback reports, and hands the result
+ * state stream) it reads DATCService's voice-control status flags and the front seat heat
+ * states via BCM feedback, adds the temperatures DATCService's callback reports, and hands the result
  * (ClimateMap) to the session's VehicleState, which tells the phone what changed. What the phone
  * writes comes back as phoneWrote and goes to the car, in order, on a thread of its own, as
  * the commands ClimateMap.commands chooses (the ones tested on the car on 2026-11-07).
@@ -42,8 +42,8 @@ final class CarClimate extends Thread implements VehicleState.Car {
     static final int txGetStatus = CarApi.code(CarApi.DATC, "getVRClimateStatus", "(I)F");
     static final int txSetStatus = CarApi.code(CarApi.DATC, "setVRClimateStatus", "(III)V");
     static final int txSetFront = CarApi.code(CarApi.DATC, "setFrontClimateControl", "(II)V");
-    static final int txDriverSeat = CarApi.code(CarApi.USM, "getFrontSeatHeat_DrvState", "()I");
-    static final int txPassengerSeat = CarApi.code(CarApi.USM, "getFrontSeatHeat_AstState", "()I");
+    static final int txDriverSeat = CarApi.code(CarApi.BCM, "getDrvSeatHeatState", "()I");
+    static final int txPassengerSeat = CarApi.code(CarApi.BCM, "getAstSeatHeatState", "()I");
     static final int txSetDriverSeat = CarApi.code(CarApi.USM, "setFrontSeatHeatDrvStep", "(I)V");
     static final int txSetPassengerSeat = CarApi.code(CarApi.USM, "setFrontSeatHeatAstStep", "(I)V");
     static final int txRear = CarApi.code(CarApi.VR, "set_RrDefogger_Cmd_AVN", "(I)V");
@@ -57,19 +57,12 @@ final class CarClimate extends Thread implements VehicleState.Car {
     static final int txGetAmbBlue = CarApi.code(CarApi.USM, "getDualLight_BottomBlue", "()I");
     /** the ambient_test setting (CpClimate) */
     static volatile boolean ambientTest;
-    /**
-     * the extra seat and wheel controls (setting extra_seats): the rear seats' heat state and setters (2 off, 6 low,
-     * 8 high; the front seats' ventilation is states 3-5 of the front seats' own calls) and the steering wheel
-     * heater: its two indicator steps (both 1 while on, both 0 off) and a setter that TOGGLES it (tested on the car
-     * 2026-11-09: 1 turned it on, 0 did nothing, 1 again turned it off)
-     */
+    /** Legacy rear seat methods (not used on K5); front wheel uses explicit VRService control. */
     static final int txRearLeftSeat = CarApi.code(CarApi.USM, "getRearSeatHeat_LeftState", "()I");
     static final int txRearRightSeat = CarApi.code(CarApi.USM, "getRearSeatHeat_RightState", "()I");
     static final int txSetRearLeft = CarApi.code(CarApi.USM, "setRearSeatHeatLeftStep", "(I)V");
     static final int txSetRearRight = CarApi.code(CarApi.USM, "setRearSeatHeatRightStep", "(I)V");
-    static final int txWheelStep1 = CarApi.code(CarApi.USM, "getSWRC_SteeringwheelHeatIndStep1", "()I");
-    static final int txWheelStep2 = CarApi.code(CarApi.USM, "getSWRC_SteeringwheelHeatIndStep2", "()I");
-    static final int txSetWheel = CarApi.code(CarApi.USM, "setSWRC_SteeringwheelWarmerSet", "(I)V");
+    static final int txSetWheel = CarApi.code(CarApi.VR, "set_StrgWhlHeated_Cmd_AVN", "(I)V");
     /** the listeners are answered by hand, so only when they are exactly the ones this was written for */
     static final boolean datcListenerOk = CarApi.DATC_LISTENER_PRINT.equals(CarApi.fingerprint(CarApi.DATC_LISTENER));
     static final boolean bcmListenerOk = CarApi.BCM_LISTENER_PRINT.equals(CarApi.fingerprint(CarApi.BCM_LISTENER));
@@ -86,6 +79,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
     private final Binder bodyToken = new Binder();
     private IBinder bcm;
     private boolean bodyTried;
+    private long lastBodyAttempt;
 
     /**
      * BCMService's listener, answered exactly as the stock com.hkmc.bcm.IBCMListener.Stub (automotive.jar,
@@ -263,7 +257,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
                 data.writeInt(c.b);
                 if (c.kind == ClimateMap.VR) data.writeInt(c.c);
             }
-            b.transact(code, data, reply, 0);
+            if (!b.transact(code, data, reply, 0)) throw new IllegalStateException("vehicle transaction rejected");
             reply.readException();
         } finally {
             data.recycle();
@@ -296,8 +290,13 @@ final class CarClimate extends Thread implements VehicleState.Car {
 
     /** registers the BCMService listener once (only with the rear_defrost setting on) */
     void watchBody() {
-        if (bodyTried) return;
+        if (bcm != null && bcm.isBinderAlive()) return;
+        if (bodyTried && !bcmListenerOk) return;
+        if (bodyTried && android.os.SystemClock.elapsedRealtime() - lastBodyAttempt < 5000) return;
         bodyTried = true;
+        lastBodyAttempt = android.os.SystemClock.elapsedRealtime();
+        bcm = null;
+        body.wheel = body.defogger = -1;
         if (!bcmListenerOk || txRegisterBcm < 0) {
             out.log("CAR body listener left out: " + (bcmListenerOk ? "no registerBCMListener" : "IBCMListener differs from the one cp-climate answers")
                     + "; the rear window button still works, without the car's state");
@@ -310,7 +309,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
             data.writeInterfaceToken(BCM_IFACE);
             data.writeStrongBinder(body);
             data.writeStrongBinder(bodyToken);
-            b.transact(txRegisterBcm, data, reply, 0);
+            if (!b.transact(txRegisterBcm, data, reply, 0)) throw new IllegalStateException("BCM listener registration rejected");
             reply.readException();
             bcm = b;
             out.log("CAR body listener registered, rear defroster " + body.defogger);
@@ -390,16 +389,16 @@ final class CarClimate extends Thread implements VehicleState.Car {
         r.passengerC = temps.passengerC;
         r.passengerF = temps.passengerF;
         r.passengerState = temps.passengerState;
-        IBinder usm = service(USM);
-        if (usm != null) {
-            r.driverSeat = seat(usm, txDriverSeat);
-            r.passengerSeat = seat(usm, txPassengerSeat);
-            if (VehicleState.wheelHeater) r.wheel = wheelOn(usm);
-            // K5: no rear seat actuators.
+        // Same OEM feedback path as HMG-API Hub/Comfort: BCM, not USM.
+        IBinder seatBody = service(BCM);
+        if (seatBody != null) {
+            r.driverSeat = validSeatState(bodyInt(seatBody, txDriverSeat));
+            r.passengerSeat = validSeatState(bodyInt(seatBody, txPassengerSeat));
         }
-        if (rearDefrost) {
+        if (rearDefrost || VehicleState.wheelHeater) {
             watchBody();
-            r.rearDefog = body.defogger;
+            if (rearDefrost) r.rearDefog = body.defogger;
+            if (VehicleState.wheelHeater && (body.wheel == 0 || body.wheel == 1)) r.wheel = body.wheel;
         }
         return r;
     }
@@ -494,42 +493,36 @@ final class CarClimate extends Thread implements VehicleState.Car {
         return true;
     }
 
-    /** when this last pressed the wheel heater's toggle (elapsedRealtime, 0 never) and for which state */
-    volatile long wheelPressedAt;
-    volatile boolean wheelPressedFor;
-    static final long WHEEL_SETTLE_MS = 8000;
+    /** HMG-API's explicit VRService wheel command and verified BCM callback feedback. */
+    static boolean wheelAvailable() { return txSetWheel >= 0 && bcmListenerOk && txRegisterBcm >= 0; }
 
-    /** the steering wheel heater's state: 1 if either indicator step is lit, 0 if both are dark, -1 if neither could be read */
-    static boolean wheelAvailable() { return txSetWheel >= 0 && txWheelStep1 >= 0 && txWheelStep2 >= 0; }
+    static int validSeatState(int raw) { return raw >= 2 && raw <= 8 ? raw : -1; }
 
-    static int wheelOn(IBinder usm) {
-        int s1 = seat(usm, txWheelStep1), s2 = seat(usm, txWheelStep2);
-        if (s1 < 0 || s2 < 0) return -1;
-        return s1 > 0 || s2 > 0 ? 1 : 0;
-    }
-
-    /**
-     * The steering wheel heater on or off. The car's call is a toggle (a press), so it is sent only when the
-     * indicator says the heater isn't already as wanted; false if there was nothing to do.
-     */
-    boolean setWheel(boolean want) throws Exception {
-        if (txSetWheel < 0 || txWheelStep1 < 0) throw new IllegalStateException("this firmware has no steering wheel heater calls");
-        IBinder usm = service(USM);
-        if (usm == null) throw new IllegalStateException("no " + USM);
-        int now = wheelOn(usm);
-        // the indicator follows a press only after several seconds (2026-11-11: on at :57.6, lit at :03.1); right
-        // after a press of ours, what that press asked for is the state, or an off 2 s after an on is skipped
-        long sincePress = android.os.SystemClock.elapsedRealtime() - wheelPressedAt;
-        if (wheelPressedAt != 0 && sincePress < WHEEL_SETTLE_MS) now = wheelPressedFor ? 1 : 0;
-        if (now < 0) throw new IllegalStateException("the steering wheel heater's state can't be read");
-        if ((now == 1) == want) return false;
-        wheelPressedAt = android.os.SystemClock.elapsedRealtime();
-        wheelPressedFor = want;
+    static int bodyInt(IBinder b, int code) {
+        if (code < 0) return -1;
         Parcel data = Parcel.obtain(), reply = Parcel.obtain();
         try {
-            data.writeInterfaceToken(USM_IFACE);
-            data.writeInt(1);
-            usm.transact(txSetWheel, data, reply, 0);
+            data.writeInterfaceToken(BCM_IFACE);
+            if (!b.transact(code, data, reply, 0)) return -1;
+            reply.readException();
+            return reply.readInt();
+        } catch (Throwable t) {
+            return -1;
+        } finally {
+            data.recycle();
+            reply.recycle();
+        }
+    }
+
+    boolean setWheel(boolean want) throws Exception {
+        if (!wheelAvailable()) throw new IllegalStateException("wheel command or verified feedback unavailable");
+        IBinder vr = service(VR_SERVICE);
+        if (vr == null) throw new IllegalStateException("no " + VR_SERVICE);
+        Parcel data = Parcel.obtain(), reply = Parcel.obtain();
+        try {
+            data.writeInterfaceToken(VR_IFACE);
+            data.writeInt(want ? 1 : 0);
+            if (!vr.transact(txSetWheel, data, reply, 0)) throw new IllegalStateException("wheel transaction rejected");
             reply.readException();
         } finally {
             data.recycle();

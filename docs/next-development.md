@@ -1,0 +1,29 @@
+# Next testing release — development notes
+
+## Theme appearance (center display only)
+- Goal: populate native Theme Selector with all compatible assets, Midnight initial default, user choice retained.
+- First experiment: request the existing, source-backed Modular/blue layout during the virtual cluster handshake, only for Cluster_Display. This is a bootstrap hypothesis, not proof of center-screen palette support. Midnight identifier and center-display layout metadata are not verified; do not invent them or claim the selector is fixed.
+- No physical cluster changes. Preserve current wireless provider, display IDs and DBX cabin model.
+
+## Climate
+- Current combined seat range -3..3 is advertised but single-stage heating and missing ventilation are reported; feedback reads -1. Need OEM dump and actual service metadata to determine correct getters and layout.
+- Wheel control overlaps HVAC and does not actuate hardware. Initial defensive fix records a pending press only after the binder transaction returns successfully. This is not hardware confirmation.
+- Investigate separate seat fan services and explicit layout metadata against original schema before editing production service types.
+
+## Deferred / dependencies
+- Session teardown crashes deferred at user's request; do not change working wireless negotiation.
+- Native volume/media popup suppression and radio integration require firmware dump (SystemUI, Mobis_SystemPopup, HKMC_MediaGate, framework2, media_cmd and OEM USM classes if available).
+- Parked video remains unverified; keep safety interlock.
+- Do not publish until changes reviewed and tested. Keep current release version during development.
+
+## Seat implementation checkpoint
+- Upstream feature/climate-and-video at 70e3ba245987e5b9c7b9f1ae75a024a383e5fe08 provides Layout A: SeatFan service 0x22000002, FanLevel 0x31000012, front service bases 1041/1045. Restore front-only schema and feedback/command mapping, no rear services.
+- Actual K5FirmwareDump.zip DEX method tables confirm IUSMService getFrontSeatHeat_DrvState/AstState ()I and setFrontSeatHeatDrvStep/AstStep (I)V. Service bytecode delegates setters to sendFrontSeatHeat(II)V with driver selector 0 and passenger selector 1. Getter implementations use selector values 0x114 and 0x115. This establishes the interface, not the hardware state/step semantics. BCM has distinct seat status listener interfaces; investigate callback values before substituting feedback.
+- Separate UI is an experiment, not validated on iOS. Hardware feedback returning -1 and single-stage actuation still require investigation. Do not assume matching method signatures prove correct runtime behavior.
+- Order: seats, wheel, then themes; Midnight initial default, retain user selection.
+
+## Hardware control checkpoint — Comfort reference
+- ComfortEngine delegates seat_heat, seat_vent and wheel_heat to HMG-API. HMG-API a1830a83 Hub.java / Commands.java use BCM getDrvSeatHeatState/getAstSeatHeatState, USM setFrontSeatHeatDrvStep/setFrontSeatHeatAstStep, and VR set_StrgWhlHeated_Cmd_AVN(int) with BCM onRemoteTeleHeatingStatusChanged feedback.
+- Those symbol names and transaction field strings exist in the uploaded K5 automotive.odex. Reuse CPUL's existing Binder transport, checked method descriptors and listener fingerprint; do not assume Comfort app's daemon-client authentication works inside the DiPO hook process.
+- Replace USM seat reads with BCM; filter unknown states outside 2..8. Replace wheel toggle with explicit VR 0/1, no guessed optimistic indicator; use existing verified BCM callback and retry registration after failure. Seat setter names unchanged (same as Comfort).
+- No on-car validation yet. Wheel placement and theme selection still outstanding; Midnight remains required initial appearance.

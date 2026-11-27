@@ -120,6 +120,10 @@ final class ClimateMap {
         if (off && blankWhenOff) blankTargets(v);
         seat(v, r.driverSeat, DRIVER_SEAT_LEVEL, DRIVER_SEAT_ON);
         seat(v, r.passengerSeat, PASSENGER_SEAT_LEVEL, PASSENGER_SEAT_ON);
+        if (extras && !VehicleState.coolingLayout) {
+            ventSeat(v, r.driverSeat, DRIVER_VENT_LEVEL, DRIVER_VENT_ON);
+            ventSeat(v, r.passengerSeat, PASSENGER_VENT_LEVEL, PASSENGER_VENT_ON);
+        }
         if (extras && VehicleState.wheelHeater && r.wheel >= 0) v.put(WHEEL_LEVEL, r.wheel > 0 ? 1L : 0L);
         return v;
     }
@@ -429,13 +433,19 @@ final class ClimateMap {
                 vents = true;
             } else if (iid == DRIVER_SEAT_LEVEL || iid == DRIVER_SEAT_ON) {
                 Command c = seat(SET_DRIVER_SEAT, iid == DRIVER_SEAT_ON, v, now.get(DRIVER_SEAT_LEVEL));
+                if (c != null && !(extras && !cooling() && c.b == 2 && number(now.get(DRIVER_VENT_LEVEL), 0) > 0)) out.add(c);
+            } else if (extras && !cooling() && (iid == DRIVER_VENT_LEVEL || iid == DRIVER_VENT_ON)) {
+                Command c = ventSeat(SET_DRIVER_SEAT, iid == DRIVER_VENT_ON, v, now.get(DRIVER_VENT_LEVEL), now.get(DRIVER_SEAT_LEVEL));
+                if (c != null) out.add(c);
+            } else if (extras && !cooling() && (iid == PASSENGER_VENT_LEVEL || iid == PASSENGER_VENT_ON)) {
+                Command c = ventSeat(SET_PASSENGER_SEAT, iid == PASSENGER_VENT_ON, v, now.get(PASSENGER_VENT_LEVEL), now.get(PASSENGER_SEAT_LEVEL));
                 if (c != null) out.add(c);
             } else if (extras && VehicleState.wheelHeater && iid == WHEEL_LEVEL && v instanceof Long) {
                 long level = (Long) v;
                 if (level == 0 || level == 1) out.add(new Command(WHEEL, (int)level, 0, 0));
             } else if (iid == PASSENGER_SEAT_LEVEL || iid == PASSENGER_SEAT_ON) {
                 Command c = seat(SET_PASSENGER_SEAT, iid == PASSENGER_SEAT_ON, v, now.get(PASSENGER_SEAT_LEVEL));
-                if (c != null) out.add(c);
+                if (c != null && !(extras && !cooling() && c.b == 2 && number(now.get(PASSENGER_VENT_LEVEL), 0) > 0)) out.add(c);
             }
         }
         if (vents) {

@@ -200,7 +200,7 @@ public final class CpClimate extends ModEntry {
             ClimateMap.blankWhenOff = true;
             VehicleState.ventCard = "driver";
             VehicleState.coolingMin = -3;
-            String layout = "b";
+            String layout = "a"; // upstream separate SeatFan services for front ventilation
             VehicleState.coolingLayout = "b".equals(layout) || "c".equals(layout) || "d".equals(layout);
             VehicleState.rowRear = "c".equals(layout);
             VehicleState.twoRear = "d".equals(layout);
@@ -247,8 +247,8 @@ public final class CpClimate extends ModEntry {
                 new IapChannel(dir, log, iapBridge).start();
             }
             // the uiSync experiment: the theme's layout/palette channel, answered by UiSync
-            // the car asks for no layout, so the phone keeps what was picked on its Themes page
-            if (uiSync) new UiSyncChannel(dir, log, UiSync.layout("off")).start();
+            // Bootstrap the known Modular layout; palette selection is still subject to asset verification.
+            if (uiSync) new UiSyncChannel(dir, log, UiSync.layout("Modular")).start();
         }
         MethodHook copy = new MethodHook() {
             @Override
