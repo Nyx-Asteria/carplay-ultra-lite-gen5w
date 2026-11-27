@@ -62,12 +62,22 @@ final class UiSyncChannel extends Thread {
                     + (sync.wanted == null ? "not requested" : sync.wanted.name + " " + sync.wanted.palette) + ", force center Wallpaper=" + sync.legacyCenterLayout + ")");
             while (true) {
                 final Socket sock = s.accept();
-                new Thread("cp-climate-uisync-conn") {
+                // Capture keys at admission, not when the worker eventually runs.
+                // A subsequent SETUP must not replace this socket's cipher.
+                final ChaChaPoly cipher = snapshotCipher(dir);
+                if (cipher == null) {
+                    out.log("SYNC no complete keys at socket admission: closed");
+                    VsChannel.close(sock);
+                    continue;
+                }
+                Thread worker = new Thread("cp-climate-uisync-conn") {
                     @Override
                     public void run() {
-                        serve(sock);
+                        serve(sock, cipher);
                     }
-                }.start();
+                };
+                worker.setDaemon(true);
+                worker.start();
             }
         } catch (Throwable t) {
             out.log("[listener] uiSync listener stopped: " + t.getClass().getSimpleName());
@@ -121,7 +131,22 @@ final class UiSyncChannel extends Thread {
         }
     }
 
-    void serve(Socket sock) {
+    static ChaChaPoly snapshotCipher(File dir) {
+        byte[] keys = IapChannel.readKeys(dir, KEYS);
+        if (keys == null) return null;
+        byte[] rd = new byte[32], wr = new byte[32];
+        try {
+            System.arraycopy(keys, 8, rd, 0, 32);
+            System.arraycopy(keys, 40, wr, 0, 32);
+            return new ChaChaPoly(rd, wr);
+        } finally {
+            java.util.Arrays.fill(keys, (byte)0);
+            java.util.Arrays.fill(rd, (byte)0);
+            java.util.Arrays.fill(wr, (byte)0);
+        }
+    }
+
+    void serve(Socket sock, ChaChaPoly cipher) {
         // Sequence numbers and reset state belong to this authenticated connection.
         // A reconnect must not reset an older connection's handshake.
         final PanelRouter router=new PanelRouter(new File(dir,"cpc-theme-preferences.properties"),sync);
@@ -129,15 +154,6 @@ final class UiSyncChannel extends Thread {
         int logged = 0, packages = 0;
         java.util.Set<String> seenPanels = new java.util.HashSet<String>();
         try {
-            byte[] keys = IapChannel.readKeys(dir, KEYS);
-            if (keys == null) {
-                out.log("SYNC no keys from the SETUP: closed");
-                return;
-            }
-            byte[] rd = new byte[32], wr = new byte[32];
-            System.arraycopy(keys, 8, rd, 0, 32);
-            System.arraycopy(keys, 40, wr, 0, 32);
-            ChaChaPoly cipher = new ChaChaPoly(rd, wr);
             InputStream in = sock.getInputStream();
             VsChannel.Writer w = new VsChannel.Writer(sock, sock.getOutputStream(), cipher);
             byte[] sealed = new byte[64 * 1024];

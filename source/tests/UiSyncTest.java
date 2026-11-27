@@ -515,7 +515,34 @@ public class UiSyncTest {
         }finally{file.delete();}
     }
 
+    static void admissionCipherSnapshot(File parent) throws Exception {
+        File dir = new File(parent, "sync-admission-"+System.nanoTime());
+        check("create isolated admission test directory",dir.mkdir());
+        File file = new File(dir,UiSyncChannel.KEYS);
+        try {
+            check("missing key record cannot admit socket",UiSyncChannel.snapshotCipher(dir)==null);
+            byte[] first=new byte[72], second=new byte[72];
+            Arrays.fill(first,(byte)17);Arrays.fill(second,(byte)42);
+            FileOutputStream out=new FileOutputStream(file);
+            try{out.write(first);}finally{out.close();}
+            ChaChaPoly admitted=UiSyncChannel.snapshotCipher(dir);
+            out=new FileOutputStream(file);
+            try{out.write(second);}finally{out.close();}
+            ChaChaPoly next=UiSyncChannel.snapshotCipher(dir);
+            byte[] payload=new byte[]{1,2,3};
+            byte[] oldKey=Arrays.copyOfRange(first,8,40),newKey=Arrays.copyOfRange(second,8,40);
+            byte[] oldFrame=new ChaChaPoly(oldKey,oldKey).seal(payload);
+            byte[] newFrame=new ChaChaPoly(newKey,newKey).seal(payload);
+            ByteArrayOutputStream plain=new ByteArrayOutputStream();
+            check("admitted cipher survives subsequent publication",admitted!=null && admitted.open(oldFrame,oldFrame.length,plain)==oldFrame.length && Arrays.equals(payload,plain.toByteArray()));
+            plain.reset();
+            check("next admission uses replacement keys",next!=null && next.open(newFrame,newFrame.length,plain)==newFrame.length && Arrays.equals(payload,plain.toByteArray()));
+            check("new admission rejects old key frame",UiSyncChannel.snapshotCipher(dir).open(oldFrame,oldFrame.length,new ByteArrayOutputStream())<0);
+        } finally {file.delete();dir.delete();}
+    }
+
     public static void main(String[] args) throws Exception {
+        admissionCipherSnapshot(new File(args[0]));
         keyRecordLength(new File(args[0]));
         for(int i=0;i<VsData.NAME_IIDS.length;i++) {
             check("navigation logging classification iid="+VsData.NAME_IIDS[i],VehicleState.navigationCharacteristic(VsData.NAME_IIDS[i])==(i<16));
