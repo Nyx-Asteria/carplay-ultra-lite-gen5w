@@ -147,8 +147,7 @@ public final class CpClimate extends ModEntry {
             writeFlag(dir, "cpc-iap", false, "iAPChannel");
             // the theme's vehicle: the Aston Martin DBX unless the vehicle_variant test setting picks another
             // (the Climate app shows a placeholder instead of its car picture with DBX; which model it needs is a test)
-            String model = "DBX";
-            VehicleState.variant = variant && !"none".equals(model) ? model : "";
+            VehicleState.variant = variant ? "DBX" : "";
             m.log("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
             boolean uiSync = themedIds && m.settingBoolean("ultra_ui_sync", false);                               // the theme's layouts, palettes and wallpapers
             writeFlag(dir, "cpc-uisync", uiSync, "uiSync (CarPlay theme layouts and palettes)");
@@ -156,7 +155,7 @@ public final class CpClimate extends ModEntry {
             writeFeatures(dir, features ? "livi_all" : "off");
             writeFlag(dir, "cpc-xfeat", enhanced, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
-            // Stage 2 is not validated: do not offer video even if an old setting is saved.
+            // Video is opt-in and requires a compatible Park getter and initialized engine.
             int extraBits = m.settingBoolean("parked_video", false) && app.context != null ? 1 : 0;
             if (extraBits != 0) {
                 ParkedVideo park = new ParkedVideo(m);
@@ -197,15 +196,13 @@ public final class CpClimate extends ModEntry {
             VehicleState.ambientTest = CarClimate.ambientTest = false;
             VehicleState.sxmSchemaTest = m.settingBoolean("k5_integration", true)
                     && m.settingBoolean("sxm_schema_test", false);
-            // the extra seat and wheel controls (off): rear seat heat, front seat ventilation, steering wheel heater
+            // Front-seat and wheel controls follow the K5 integration setting.
             VehicleState.extras = ClimateMap.extras = climate;
             VehicleState.seatFanImmediateFeedback = climate && m.settingBoolean("seat_fan_immediate_feedback", false);
             VehicleState.seatHeatImmediateFeedback = m.settingBoolean("seat_heat_immediate_feedback", true);
             m.log("[seat-fan] immediate feedback experiment=" + VehicleState.seatFanImmediateFeedback + "; heating immediate=" + VehicleState.seatHeatImmediateFeedback);
             VehicleState.climateEnabled = climate;
-            // A: ventilation as separate SeatFan services; B: as the seats' own cooling levels, plus a rear zone
-            // the driver card has room for three buttons: AUTO, vent position, seat (2026-11-10: more were drawn on top
-            // of each other). The wheel heater and the per-seat power are off unless turned on.
+            // Keep the front-seat layout and expose wheel heating only when OEM methods are available.
             VehicleState.wheelHeater = climate && CarClimate.wheelAvailable();
             m.log("[wheel] OEM methods available=" + VehicleState.wheelHeater);
             VehicleState.zonePower = false;
@@ -213,10 +210,10 @@ public final class CpClimate extends ModEntry {
             ClimateMap.blankWhenOff = true;
             VehicleState.ventCard = "driver";
             VehicleState.coolingMin = -3;
-            String layout = "a"; // upstream separate SeatFan services for front ventilation
-            VehicleState.coolingLayout = "b".equals(layout) || "c".equals(layout) || "d".equals(layout);
-            VehicleState.rowRear = "c".equals(layout);
-            VehicleState.twoRear = "d".equals(layout);
+            // K5 uses separate front SeatFan services; no rear-seat services.
+            VehicleState.coolingLayout = false;
+            VehicleState.rowRear = false;
+            VehicleState.twoRear = false;
             // /info's copy of the car (the phone builds its car from it): cp-climate's description, not LIVI's
             K5Vehicle vehicle = null;
             if (app.context != null && (m.settingBoolean("k5_integration", true))) {
@@ -469,22 +466,7 @@ public final class CpClimate extends ModEntry {
 
     /** an on/off experiment for the native /info hook: the file holds 1 while on */
     static void writeFlag(File dir, String name, boolean on, String what) {
-        File f = new File(dir, name);
-        if (!on) {
-            f.delete();
-            return;
-        }
-        try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write("1\n");
-            } finally {
-                w.close();
-            }
-            mod.log(what + " on (experiment)");
-        } catch (Exception e) {
-            f.delete();
-        }
+        writeNumber(dir, name, on ? 1 : 0, what);
     }
 
     /** LIVI's /info feature bits that DiPO's lacks, without its audio ones (CARPLAY_AUDIO_FEATURES: bits 9, 11, 18, 20, 22, 26, 40) */
