@@ -157,11 +157,11 @@ final class K5Radio {
     // mIsBsmValidStaton (boolean). Keep the OEM spelling.
     private long lastListPoll;
     private String lastScanSummary = "";
-    private java.util.List<Object> fmItems = java.util.Collections.emptyList();
+    private java.util.Set<Long> fmScan = java.util.Collections.emptySet();
     // Observed stations are a fallback, not a claimed complete RF scan.
     private final java.util.TreeMap<Long,String> observedFm = new java.util.TreeMap<Long,String>();
     private long observedGeneration = -1;
-    private java.util.List<Object> readFmItems(Object tuner) throws Exception {
+    private java.util.Set<Long> readFmScan(Object tuner) throws Exception {
         Object raw = Class.forName(RADIO_IFACE).getMethod("getRadioAllBsmFreqList").invoke(tuner);
         if (!(raw instanceof java.util.List)) {
             String summary = "unexpected cache type=" + (raw == null ? "null" : raw.getClass().getName());
@@ -188,12 +188,16 @@ final class K5Radio {
             lastScanSummary = scanSummary;
             log.log("[radio] FM scan cache " + scanSummary);
         }
-        return fmItemsFor(frequencies);
+        return frequencies;
     }
 
     static boolean retainFmCache(int previous,int next) { return previous>0 && next==0; }
 
-    private java.util.List<Object> fmItemsFor(java.util.Set<Long> frequencies) {
+    static java.util.Set<Long> selectFmScan(java.util.Set<Long> previous,java.util.Set<Long> next) {
+        return retainFmCache(previous.size(),next.size()) ? previous : new java.util.TreeSet<Long>(next);
+    }
+
+    static java.util.List<Object> fmItemsFor(java.util.Set<Long> frequencies,java.util.Map<Long,String> observedFm) {
         java.util.TreeSet<Long> all = new java.util.TreeSet<Long>(frequencies);
         all.addAll(observedFm.keySet());
         java.util.List<Object> items = new java.util.ArrayList<Object>();
@@ -236,7 +240,7 @@ final class K5Radio {
             stationName = null; stationArtwork = null; clearTags(); lastFmFrequency = -1;
             sxmArt = null; currentSxmChannel = -1; fullSxm = null; sxmLive.clear();
             sxmKnownGeneration = -1; sxmKnownIds = java.util.Collections.emptySet();
-            lastListPoll = 0; fmItems = java.util.Collections.emptyList();
+            lastListPoll = 0; fmScan = java.util.Collections.emptySet();
             fmTuner=null; fmAudio=null; sxmTuner=null; lastServiceHealth="";
             return values;
         }
@@ -249,7 +253,7 @@ final class K5Radio {
                 khz=fmKhz(readInt(fmTuner,RADIO_IFACE,"getLastFMFrequency"));
                 if(khz<=0)fmTuner=null;
             }
-            catch(Throwable t){fmTuner=null; lastListPoll=0; fmItems=java.util.Collections.emptyList();}
+            catch(Throwable t){fmTuner=null; lastListPoll=0; fmScan=java.util.Collections.emptySet();}
             int mode = readInt(fmAudio, CarAudio.IFACE, "getAudioMode");
             int stream = readInt(fmAudio, CarAudio.IFACE, "getCurStreamType");
             if(mode<0||stream<0)fmAudio=null;
@@ -261,7 +265,7 @@ final class K5Radio {
             refreshSxm(values);
             if (!fmActive) { stationName = null; stationArtwork = null; clearTags(); lastFmFrequency = -1; }
             if (observedGeneration != CpClimate.sessionGeneration) {
-                observedFm.clear(); fmItems = java.util.Collections.emptyList(); lastListPoll = 0;
+                observedFm.clear(); fmScan = java.util.Collections.emptySet(); lastListPoll = 0;
                 observedGeneration = CpClimate.sessionGeneration;
             }
             if (fmActive) {
@@ -300,22 +304,16 @@ final class K5Radio {
                 if (lastListPoll == 0 || now - lastListPoll >= 10000) {
                     lastListPoll = now;
                     try {
-                        java.util.List<Object> next = readFmItems(fmTuner);
-                        if (!next.equals(fmItems)) log.log("[radio] cached OEM FM station list size=" + next.size());
-                        if (retainFmCache(fmItems.size(),next.size())) {
-                            log.log("[radio] empty FM cache; preserving previous stations count="+fmItems.size());
-                        } else fmItems = next;
+                        java.util.Set<Long> next = readFmScan(fmTuner);
+                        if (!next.equals(fmScan)) log.log("[radio] cached OEM FM station list size=" + next.size());
+                        if (retainFmCache(fmScan.size(),next.size()))
+                            log.log("[radio] empty FM cache; preserving previous stations count="+fmScan.size());
+                        fmScan = selectFmScan(fmScan,next);
                     } catch (Throwable t) {
-                        log.log("[radio] station list unavailable: " + t.getClass().getSimpleName()+"; retained="+fmItems.size());
+                        log.log("[radio] station list unavailable: " + t.getClass().getSimpleName()+"; retained="+fmScan.size());
                     }
                 }
-                java.util.Set<Long> cached = new java.util.TreeSet<Long>();
-                for (Object item : fmItems) {
-                    if (!(item instanceof java.util.Map)) continue;
-                    Object frequency = ((java.util.Map<?,?>)item).get("frequency");
-                    if (frequency instanceof Long) cached.add((Long)frequency);
-                }
-                values.put(4118L, fmItemsFor(cached));
+                values.put(4118L, fmItemsFor(fmScan,observedFm));
             }
         } catch (Throwable t) {
             fmActive=false; sxmActive=false; sxmAvailable=false; fmAudio=null;

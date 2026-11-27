@@ -37,6 +37,18 @@ public final class RadioPolicyTest {
         check(K5Radio.metadataNewEnough(100300,1,101,100300,1,100),"new callback accepted");
         check(K5Radio.metadataNewEnough(100500,1,99,100300,1,100),"new frequency independent");
         check(K5Radio.metadataNewEnough(100300,2,99,100300,1,100),"new session independent");
+        java.util.Set<Long> scan=new java.util.TreeSet<Long>(java.util.Arrays.asList(99100L,100300L));
+        java.util.Map<Long,String> observed=new java.util.TreeMap<Long,String>();
+        observed.put(100300L,"Z100");observed.put(101100L,"Observed");
+        java.util.Set<Long> retained=K5Radio.selectFmScan(scan,java.util.Collections.<Long>emptySet());
+        check(retained.equals(scan),"empty OEM scan preserves actual OEM frequencies even with observed stations");
+        java.util.List<Object> items=K5Radio.fmItemsFor(retained,observed);
+        check(items.size()==3,"merge OEM and observed without duplicates");
+        check("Z100".equals(((java.util.Map<?,?>)items.get(1)).get("mediaItemName")),"observed name on OEM station");
+        java.util.Set<Long> replacement=K5Radio.selectFmScan(retained,java.util.Collections.singleton(102300L));
+        check(replacement.size()==1&&replacement.contains(102300L),"nonempty OEM scan replaces prior scan");
+        check(K5Radio.fmItemsFor(replacement,observed).size()==3,"observations remain separate after replacement");
+        check(K5Radio.fmItemsFor(java.util.Collections.<Long>emptySet(),observed).size()==2,"observed-only fallback");
         System.out.println("Radio policy regressions passed");
     }
 }
