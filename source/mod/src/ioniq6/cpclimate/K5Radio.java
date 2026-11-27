@@ -346,7 +346,7 @@ final class K5Radio {
             if (!sxmAvailable || !sxmActive) { currentSxmChannel = -1; sxmArt = null; sxmLive.clear(); return; }
             if (currentSxmChannel != channel) {
                 sxmArt = null;
-                sxmLive.channelChanged(CpClimate.sessionGeneration,channel);
+                sxmLive.channelChanged(CpClimate.sessionGeneration,channel,android.os.SystemClock.elapsedRealtime());
                 currentSxmChannel = channel;
             }
             if (sxmArt != null && sxmArt.generation != CpClimate.sessionGeneration) sxmArt = null;

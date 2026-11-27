@@ -1089,6 +1089,25 @@ final class VehicleState {
             if (immediate && !same(before, v) && followed.contains(iid)) changed.put(iid, v);
             if (frontSeatValue(iid)) out.log("[seat-feedback] write iid=" + iid + " valueType=" + (v == null ? "null" : v.getClass().getSimpleName()) + " immediate=" + immediate + " subscribed=" + followed.contains(iid) + " queued=" + changed.containsKey(iid));
         }
+        // An optimistic SeatFan notification must not expose a contradictory
+        // level/power pair. Keep the request for OEM arbitration, but publish
+        // only a complete consistent pair (otherwise wait for BCM confirmation).
+        if (car != null && seatFanImmediateFeedback) {
+            for (long[] pair : SEAT_FAN_PAIRS) {
+                if (!changed.containsKey(pair[0]) && !changed.containsKey(pair[1])) continue;
+                Object level=values.get(pair[0]), power=values.get(pair[1]);
+                if (!validFanFeedback(level,power)) {
+                    for (long iid : pair) {
+                        changed.remove(iid);
+                        if (actualSeats.containsKey(iid)) values.put(iid,actualSeats.get(iid));
+                        else if (seatBefore.containsKey(iid)) values.put(iid,seatBefore.get(iid));
+                        else values.remove(iid);
+                    }
+                } else {
+                    for (long iid : pair) if (followed.contains(iid)) changed.put(iid,values.get(iid));
+                }
+            }
+        }
         VehiclePage page = vehiclePage;
         if (page != null) {
             Map<Long, Object> pageWrites = new LinkedHashMap<Long, Object>();
@@ -1136,6 +1155,23 @@ final class VehicleState {
                 if (Boolean.TRUE.equals(sent.get(pair[1])) && !sent.containsKey(pair[0])
                         && pendingSeatLevels.containsKey(pair[0]))
                     commandState.put(pair[0], pendingSeatLevels.get(pair[0]));
+            }
+            // A separate off write for the old mode must not undo a pending
+            // activation of the opposite mode while BCM still reports the old mode.
+            if (extras && !coolingLayout) {
+                for (long[] pair : new long[][]{
+                        {ClimateMap.DRIVER_SEAT_LEVEL, ClimateMap.DRIVER_SEAT_ON, ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.DRIVER_VENT_ON},
+                        {ClimateMap.PASSENGER_SEAT_LEVEL, ClimateMap.PASSENGER_SEAT_ON, ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON}}) {
+                    for (int i=0;i<4;i+=2) {
+                        int opposite=2-i;
+                        boolean off=Boolean.FALSE.equals(sent.get(pair[i+1])) || Long.valueOf(0).equals(sent.get(pair[i]));
+                        Object pending=pendingSeatLevels.get(pair[opposite]);
+                        if (off && !sent.containsKey(pair[opposite]) && !sent.containsKey(pair[opposite+1])
+                                && pending instanceof Long && (Long)pending>0
+                                && !Boolean.FALSE.equals(requestedSeats.get(pair[opposite+1])))
+                            commandState.put(pair[opposite],pending);
+                    }
+                }
             }
             c.phoneWrote(sent, commandState);
         }

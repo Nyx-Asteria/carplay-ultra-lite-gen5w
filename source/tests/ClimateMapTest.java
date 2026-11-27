@@ -536,6 +536,68 @@ public class ClimateMapTest {
         }
         VehicleState.seatHeatImmediateFeedback = true;
         VehicleState.seatFanImmediateFeedback = false;
+        // The phone may turn off the former mode in a separate packet after activating the new mode.
+        for (boolean immediateFeedback : new boolean[]{false,true}) {
+            VehicleState.seatHeatImmediateFeedback=immediateFeedback;
+            VehicleState.seatFanImmediateFeedback=immediateFeedback;
+            for (long[] pair : new long[][]{
+                    {ClimateMap.DRIVER_SEAT_LEVEL,ClimateMap.DRIVER_SEAT_ON,ClimateMap.DRIVER_VENT_LEVEL,ClimateMap.DRIVER_VENT_ON},
+                    {ClimateMap.PASSENGER_SEAT_LEVEL,ClimateMap.PASSENGER_SEAT_ON,ClimateMap.PASSENGER_VENT_LEVEL,ClimateMap.PASSENGER_VENT_ON}}) {
+                for (int direction=0;direction<4;direction+=2) {
+                    final List<ClimateMap.Command> commands=new java.util.ArrayList<ClimateMap.Command>();
+                    VehicleState vs2=new VehicleState(new VsChannel.Log(){public void log(String m){}});
+                    vs2.car=new VehicleState.Car(){public void phoneWrote(Map<Long,Object> w,Map<Long,Object> state){
+                        commands.addAll(ClimateMap.commands(w,state,2));
+                    }};
+                    int old=direction, next=2-direction;
+                    Map<Long,Object> bcm2=new java.util.LinkedHashMap<Long,Object>();
+                    bcm2.put(pair[old],2L);bcm2.put(pair[old+1],true);
+                    bcm2.put(pair[next],0L);bcm2.put(pair[next+1],false);
+                    vs2.fromCar(bcm2);
+                    vs2.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest","transactionID",50L,
+                            "values",VehicleState.dict(pair[next],3L,pair[next+1],true))));
+                    check("new seat mode activation "+pair[next],commands.size()==1&&commands.get(0).b==(next==0?8:5));
+                    commands.clear();
+                    vs2.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest","transactionID",51L,
+                            "values",VehicleState.dict(pair[old+1],false))));
+                    check("old mode off cannot cancel pending opposite activation "+pair[old]+" immediate="+immediateFeedback,commands.isEmpty());
+                }
+            }
+        }
+        VehicleState.seatHeatImmediateFeedback=true;
+        VehicleState.seatFanImmediateFeedback=false;
+        // Immediate feedback must never publish a contradictory ventilation pair.
+        VehicleState.seatFanImmediateFeedback=true;
+        for (long[] pair : pairs) {
+            VehicleState ps=new VehicleState(new VsChannel.Log(){public void log(String m){}});
+            final List<ClimateMap.Command> pc=new java.util.ArrayList<ClimateMap.Command>();
+            ps.car=new VehicleState.Car(){public void phoneWrote(Map<Long,Object> w,Map<Long,Object> state){
+                pc.addAll(ClimateMap.commands(w,state,2));
+            }};
+            ps.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","registerRequest","transactionID",60L,
+                    "values",java.util.Arrays.asList(pair[0],pair[1]))));
+            Map<Long,Object> sample=new java.util.LinkedHashMap<Long,Object>();
+            sample.put(pair[0],0L);sample.put(pair[1],false);ps.fromCar(sample);
+            List<VehicleState.Out> alone=ps.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest",
+                    "transactionID",61L,"values",VehicleState.dict(pair[0],3L))));
+            check("optimistic incomplete fan pair withheld "+pair[0],alone.size()==1&&VehicleState.validFanFeedback(ps.values.get(pair[0]),ps.values.get(pair[1])));
+            check("withholding feedback does not withhold OEM command "+pair[0],pc.size()==1&&pc.get(0).b==5);
+            sample.put(pair[0],3L);sample.put(pair[1],true);
+            check("BCM still confirms both fan values "+pair[0],ps.fromCar(sample).size()==1&&Long.valueOf(3).equals(ps.values.get(pair[0])));
+            List<VehicleState.Out> off=ps.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest",
+                    "transactionID",62L,"values",VehicleState.dict(pair[1],false))));
+            check("optimistic contradictory off withheld "+pair[0],off.size()==1&&VehicleState.validFanFeedback(ps.values.get(pair[0]),ps.values.get(pair[1])));
+        }
+        VehicleState.seatFanImmediateFeedback=false;
+        ClimateMap.Reading snap=new ClimateMap.Reading();
+        ClimateMap.TemperatureSample first=new ClimateMap.TemperatureSample(20,65535,25,77,65535,100);
+        ClimateMap.TemperatureSample second=new ClimateMap.TemperatureSample(21,65535,26,79,65535,200);
+        snap.applyTemperatureSample(first);
+        check("temperature sample consistent",snap.driverC==20 && snap.passengerC==25 && snap.passengerF==77 && snap.temperatureSample.passenger.at==100);
+        snap.applyTemperatureSample(second);
+        check("temperature sample replacement consistent",snap.driverC==21 && snap.passengerC==26 && snap.passengerF==79 && snap.temperatureSample.passenger.at==200);
+        snap.applyTemperatureSample(null);
+        check("temperature sample reset on service reconnect",Float.isNaN(snap.driverC)&&Float.isNaN(snap.passengerC)&&Float.isNaN(snap.passengerF)&&snap.passengerState==-1&&snap.temperatureSample==null);
         System.out.println(fails == 0 ? "ALL OK" : fails + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }

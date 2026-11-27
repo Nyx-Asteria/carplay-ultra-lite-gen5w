@@ -38,7 +38,26 @@ final class ClimateMap {
     static final int TEMP_NORMAL = 0xffff;
 
     /** one reading of the car */
+    /** Immutable callback snapshot shared by the climate reader and command diagnostics. */
+    static final class TemperatureSample {
+        final float driverC;
+        final int driverState;
+        final PassengerTempTrace.Sample passenger;
+        TemperatureSample(float dc,int ds,float pc,float pf,int ps,long at){
+            driverC=dc;driverState=ds;passenger=new PassengerTempTrace.Sample(pc,pf,ps,at);
+        }
+    }
+
     static final class Reading {
+        TemperatureSample temperatureSample;
+        void applyTemperatureSample(TemperatureSample s){
+            temperatureSample=s;
+            driverC=s==null?Float.NaN:s.driverC;
+            driverState=s==null?-1:s.driverState;
+            passengerC=s==null?Float.NaN:s.passenger.c;
+            passengerF=s==null?Float.NaN:s.passenger.f;
+            passengerState=s==null?-1:s.passenger.state;
+        }
         float on = Float.NaN, auto = Float.NaN, ac = Float.NaN, defrost = Float.NaN, intake = Float.NaN;
         float fan = Float.NaN, mode = Float.NaN, driverF = Float.NaN, passengerRaw = Float.NaN, sync = Float.NaN;
         /** from the temperature callback: °C, °F and the display state, or NaN before the first one */
