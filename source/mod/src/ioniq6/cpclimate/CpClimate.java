@@ -142,7 +142,7 @@ public final class CpClimate extends ModEntry {
             NativeProfile.writeVersion(m, dir, ultra ? "950" : "off");                             // receiver version 950.7.1 in /info
             NativeProfile.writeFlag(m, dir, "cpc-extras", ultra, "LIVI display extras");
             NativeProfile.writeCluster(m, dir, "full");                            // the instrument panel with its plugin (climate overlay)
-            NativeProfile.writeWide(m, dir, "0");
+            String wide=NativeProfile.wideMode(m.settingString("ultra_widescreen_areas","0"));
             boolean iapBridge = false, iap = false;               // iAP over CarPlay: an experiment, off
             NativeProfile.writeFlag(m, dir, "cpc-iap", false, "iAPChannel");
             // the theme's vehicle: the Aston Martin DBX unless the vehicle_variant test setting picks another
@@ -240,17 +240,19 @@ public final class CpClimate extends ModEntry {
                 }
             }
             // Evaluate every flag even after a failure so stale settings are cleared where possible.
-            boolean profileReady=NativeProfile.writeUltra(m,dir,themedIds?2:cluster?1:0);
+            boolean profileReady=NativeProfile.writeWide(m,dir,wide);
+            profileReady &= NativeProfile.writeUltra(m,dir,themedIds?2:cluster?1:0);
             profileReady &= NativeProfile.writeFlag(m,dir,"cpc-uisync",uiSync,"uiSync (CarPlay theme layouts and palettes)");
             profileReady &= NativeProfile.writeFlag(m,dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
             if(!profileReady) {
+                NativeProfile.writeWide(m,dir,"0");
                 NativeProfile.writeUltra(m,dir,0);
                 NativeProfile.writeFlag(m,dir,"cpc-uisync",false,"uiSync");
                 NativeProfile.writeFlag(m,dir,"cpc-sync-independent",false,"independent uiSync");
                 runtimeLog("[native] display profile persistence failed; patch withheld");
                 return;
             }
-            runtimeLog("[theme] listener-gated profile cluster="+cluster+" themedIds="+themedIds+" uiSync="+uiSync);
+            runtimeLog("[theme] listener-gated profile cluster="+cluster+" themedIds="+themedIds+" uiSync="+uiSync+" widescreen="+wide);
             m.nativePatch(app, "libCarPlayCore.so");
             runtimeLog("[climate] profile=K5 front heat/vent -3..3, rear seats=false, ambient=false");
             CarClimate car = climate ? new CarClimate(state, lanes, log) : null;

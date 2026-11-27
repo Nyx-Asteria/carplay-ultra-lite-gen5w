@@ -129,18 +129,22 @@ final class NativeProfile {
     }
 
     /** the Apple widescreen view areas experiment (files/cpc-wide: 1 start whole, 2 start right) */
-    static void writeWide(ModContext mod, File dir, String value) {
+    static String wideMode(String value) {
+        return "1".equals(value) || "2".equals(value) ? value : "0";
+    }
+    static boolean writeWide(ModContext mod, File dir, String value) {
         File f = new File(dir, "cpc-wide");
-        String v = value.trim();
+        String v = wideMode(value);
         if (!"1".equals(v) && !"2".equals(v)) {
-            clearValue(f);
-            return;
+            return clearValue(f);
         }
         try {
             writeValue(f, v + "\n");
             CpClimate.runtimeLog("Apple widescreen view areas, start " + ("2".equals(v) ? "right" : "whole") + " (experiment)");
+            return true;
         } catch (Exception e) {
             writeFailed(f,e);
+            return false;
         }
     }
 

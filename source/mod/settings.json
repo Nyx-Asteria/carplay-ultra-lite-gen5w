@@ -66,6 +66,28 @@
       "apply": "restart"
     },
     {
+      "key": "ultra_widescreen_areas",
+      "type": "choice",
+      "default": "0",
+      "title": "Widescreen View Areas (Experimental)",
+      "description": "Independent of Ultra Sidebars. Adds whole and right-hand view areas where supported; existing OEM/PPS view areas are preserved. Restart required.",
+      "apply": "restart",
+      "options": [
+        {
+          "value": "0",
+          "title": "Disabled"
+        },
+        {
+          "value": "1",
+          "title": "Start whole display"
+        },
+        {
+          "value": "2",
+          "title": "Start right-hand area"
+        }
+      ]
+    },
+    {
       "key": "sxm_schema_test",
       "type": "toggle",
       "default": false,
