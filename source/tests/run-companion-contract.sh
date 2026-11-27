@@ -39,3 +39,17 @@ python3 "$root/source/tests/companion_recipe_ranges.py" \
   "$root/source/mod/recipes/carplay-climate-m1.recipe" \
   "$wcp/wireless-carplay-aa/recipes/carplay-core-wifi.recipe" \
   "$wcp/wireless-carplay-aa/recipes/carplay-core-frames-ef49c09b.recipe"
+
+# Optional STBT and PPS checkouts: both must be supplied together.
+if [ "$#" -gt 1 ]; then
+  stbt="$(cd "${2:?STBT checkout required}" && pwd)"
+  pps="$(cd "${3:?PPS checkout required}" && pwd)"
+  test "$(git -C "$stbt" rev-parse HEAD)" = e8770256ff6679546c483af43aed3f7a6b19b998
+  test "$(git -C "$pps" rev-parse HEAD)" = bd57be364d95d9542b5aaf81269fa2b8dc1d35e2
+  test -z "$(git -C "$stbt" status --porcelain)"
+  test -z "$(git -C "$pps" status --porcelain)"
+  python3 "$root/source/tests/companion_recipe_ranges.py" \
+    "$wcp/wireless-carplay-aa/recipes/carplay-identification-fc7.recipe" \
+    "$stbt/recipes/lane-notify-guard.recipe"
+  python3 "$root/source/tests/companion_ownership.py" "$root" "$wcp" "$stbt" "$pps"
+fi
