@@ -46,6 +46,8 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
         if (radio.available()) radio.describe(page);
         comfort = new ComfortThresholds(context, mod, log);
         if (comfort.present()) comfort.describe(page);
+        if (mod.settingBoolean("k5_integration", true))
+            page.line("Vehicle", "audio.bose", "Bose Centerpoint (diagnostic)", "speaker.wave.3");
         page.listener = this;
         log.log("[vehicle] K5 page initialized; shortcuts=" + shortcuts.keySet());
     }
@@ -125,6 +127,8 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
                         comfort.refresh(fresh);
                     }
                     if (radio.available()) fresh.put("radio.status", radio.diagnosticStatus());
+                    CarAudio audio = CarAudio.instance;
+                    fresh.put("audio.bose", audio == null ? VehiclePage.NONE : audio.boseStatus());
                     Map<Long,Object> changed = page.update(fresh);
                     if (enabled() && radio.available()) changed.putAll(radio.refreshFm());
                     VehicleState current;

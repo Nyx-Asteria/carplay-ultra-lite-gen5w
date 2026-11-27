@@ -83,22 +83,35 @@ final class CarAudio extends Thread {
     private final int txSoundSetting = CarApi.code(IFACE, "getSoundSetting", "(I)I");
     private long lastBosePoll = -1, lastBoseGeneration = -1;
     private String lastBose = "";
+    private volatile String boseReading = VehiclePage.NONE;
+    private volatile long boseGeneration = -1, boseReadAt = -1;
+    private int lastBoseStream = -1;
+    String boseStatus() {
+        long age = android.os.SystemClock.elapsedRealtime() - boseReadAt;
+        return active() && boseGeneration == CpClimate.sessionGeneration && age >= 0 && age <= 10000 ? boseReading : VehiclePage.NONE;
+    }
     private void probeBose(long generation, int stream) {
         if (txSoundAvailability < 0 || txSoundSetting < 0) return;
         long now = android.os.SystemClock.elapsedRealtime();
-        if (generation == lastBoseGeneration && now - lastBosePoll < 5000) return;
+        if (generation == lastBoseGeneration && stream == lastBoseStream && now - lastBosePoll < 5000) return;
+        lastBoseStream = stream;
         if (generation != lastBoseGeneration) lastBose = "";
         lastBoseGeneration = generation;
         lastBosePoll = now;
         try {
-            int availability = call(txSoundAvailability, BOSE_CP);
-            int setting = call(txSoundSetting, BOSE_CP);
+            int availability = callSoundRead(txSoundAvailability);
+            int setting = callSoundRead(txSoundSetting);
             String sample = "stream=" + stream + " availability=" + availability + " setting=" + setting;
+            boseReading = "Availability " + availability + " / Setting " + setting;
+            boseGeneration = generation;
+            boseReadAt = android.os.SystemClock.elapsedRealtime();
             if (!sample.equals(lastBose)) {
                 lastBose = sample;
                 out.log("[audio-bose] Centerpoint " + sample);
             }
         } catch (Throwable t) {
+            boseReading = VehiclePage.NONE;
+            boseGeneration = -1;
             String sample = "unavailable: " + t.getClass().getSimpleName();
             if (!sample.equals(lastBose)) { lastBose = sample; out.log("[audio-bose] " + sample); }
         }
@@ -273,6 +286,21 @@ final class CarAudio extends Thread {
                 if (failures++ < 5) out.log("[audio] read failed: " + t);
             }
         }
+    }
+
+    // Do not interpret an empty binder reply as a valid zero-valued sound setting.
+    private int callSoundRead(int code) throws Exception {
+        IBinder binder = CarClimate.service(SERVICE);
+        if (binder == null) throw new IllegalStateException("audio service missing");
+        Parcel data = Parcel.obtain(), reply = Parcel.obtain();
+        try {
+            data.writeInterfaceToken(IFACE);
+            data.writeInt(BOSE_CP);
+            if (!binder.transact(code, data, reply, 0)) throw new IllegalStateException("sound read rejected");
+            reply.readException();
+            if (reply.dataAvail() < 4) throw new IllegalStateException("sound read empty");
+            return reply.readInt();
+        } finally { data.recycle(); reply.recycle(); }
     }
 
     /** a call taking ints and answering an int, a boolean or nothing (0) */

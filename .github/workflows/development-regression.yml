@@ -52,6 +52,8 @@ jobs:
           java -cp "out/tests:$CP" ioniq6.cpclimate.ClimateMapTest
           javac --release 8 -cp "$CP" -d out/tests source/tests/VolumePanelPolicyTest.java
           java -cp "out/tests:$CP" ioniq6.cpclimate.VolumePanelPolicyTest
+          javac --release 8 -cp "$CP" -d out/tests source/tests/RadioPolicyTest.java
+          java -cp "out/tests:$CP" ioniq6.cpclimate.RadioPolicyTest
           python3 - <<'PY'
           import plistlib
           with open('out/python.bplist','wb') as f:

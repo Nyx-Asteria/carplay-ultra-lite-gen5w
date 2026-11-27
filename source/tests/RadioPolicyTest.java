@@ -1,0 +1,32 @@
+package ioniq6.cpclimate;
+
+/** Pure radio mapping regressions; no OEM service or Android runtime required. */
+public final class RadioPolicyTest {
+    private static void check(boolean ok, String name) {
+        if (!ok) throw new AssertionError(name);
+    }
+    public static void main(String[] args) {
+        check(K5Radio.fmKhz(10030) == 100300, "Z100 frequency conversion");
+        check(K5Radio.fmKhz(8750) == 87500, "lower tuner boundary");
+        check(K5Radio.fmKhz(10800) == 108000, "upper tuner boundary");
+        check(K5Radio.fmKhz(8749) == -1 && K5Radio.fmKhz(10801) == -1, "reject out of band");
+        check(K5Radio.fmKhz(-1) == -1, "reject missing frequency");
+        check(K5Radio.logoMatchesFrequency("0000102049_Z100_10030.logo", 100300), "matching station logo");
+        check(!K5Radio.logoMatchesFrequency("0000102049_Z100_10030.logo", 100500), "reject wrong station logo");
+        check(!K5Radio.logoMatchesFrequency(null, 100300), "reject missing filename");
+        check(!K5Radio.logoMatchesFrequency("10030.logo", 100300), "reject unknown filename format");
+        check(K5Radio.channelFlag(1, true) && K5Radio.channelFlag(0, false), "OEM numeric flags");
+        check(K5Radio.channelFlag(Boolean.TRUE, true) && K5Radio.channelFlag(Boolean.FALSE, false), "boolean flags");
+        check(!K5Radio.channelFlag(-1, false) && !K5Radio.channelFlag(2, true), "reject unknown flags");
+        check(!K5Radio.channelFlag(null, false) && !K5Radio.channelFlag("1", true), "reject invalid flag types");
+        check(!K5Radio.channelFlag(0.5, true), "reject fractional flags");
+        check(!K5Radio.supportedArtwork(null) && !K5Radio.supportedArtwork(new byte[7]), "reject absent/truncated artwork");
+        check(K5Radio.supportedArtwork(new byte[]{(byte)137,80,78,71,13,10,26,10}), "PNG signature");
+        check(K5Radio.supportedArtwork(new byte[]{(byte)255,(byte)216,(byte)255,0,0,0,0,0}), "JPEG signature");
+        check(!K5Radio.supportedArtwork(new byte[8]), "reject unknown image format");
+        byte[] oversized = new byte[131073];
+        oversized[0]=(byte)255; oversized[1]=(byte)216; oversized[2]=(byte)255;
+        check(!K5Radio.supportedArtwork(oversized), "reject oversized artwork");
+        System.out.println("Radio policy regressions passed");
+    }
+}
