@@ -25,10 +25,10 @@ final class NativeProfile {
             int edge = Integer.parseInt(dock.trim());
             if (edge < 0 || edge > 4) edge = 1;
             writeValue(f, edge + "\n");
-            mod.log("CarPlay dock edge " + edge);
+            CpClimate.runtimeLog("CarPlay dock edge " + edge);
         } catch (Exception e) {
             f.delete();
-            mod.log("CarPlay dock: bottom (" + e + ")");
+            CpClimate.runtimeLog("CarPlay dock: bottom (" + e + ")");
         }
     }
 
@@ -41,7 +41,7 @@ final class NativeProfile {
         }
         try {
             writeValue(f, "1\n");
-            mod.log("CarPlay receiver version 950.7.1 in /info (experiment)");
+            CpClimate.runtimeLog("CarPlay receiver version 950.7.1 in /info (experiment)");
         } catch (Exception e) {
             f.delete();
         }
@@ -78,7 +78,7 @@ final class NativeProfile {
         }
         try {
             writeValue(f, Long.toHexString(bits) + "\n");
-            mod.log("/info feature bits 0x" + Long.toHexString(bits) + " (" + v + ") on (experiment)");
+            CpClimate.runtimeLog("/info feature bits 0x" + Long.toHexString(bits) + " (" + v + ") on (experiment)");
         } catch (Exception e) {
             f.delete();
         }
@@ -93,7 +93,7 @@ final class NativeProfile {
         }
         try {
             writeValue(f, value + "\n");
-            mod.log(what + " on (experiment)");
+            CpClimate.runtimeLog(what + " on (experiment)");
         } catch (Exception e) {
             f.delete();
         }
@@ -108,7 +108,7 @@ final class NativeProfile {
         }
         try {
             writeValue(f, mode + "\n");
-            mod.log("CarPlay Ultra virtual cluster on" + (mode == 2 ? ", with the theme's display ids" : "") + " (experiment)");
+            CpClimate.runtimeLog("CarPlay Ultra virtual cluster on" + (mode == 2 ? ", with the theme's display ids" : "") + " (experiment)");
         } catch (Exception e) {
             f.delete();
         }
@@ -124,7 +124,7 @@ final class NativeProfile {
         }
         try {
             writeValue(f, v + "\n");
-            mod.log("Apple widescreen view areas, start " + ("2".equals(v) ? "right" : "whole") + " (experiment)");
+            CpClimate.runtimeLog("Apple widescreen view areas, start " + ("2".equals(v) ? "right" : "whole") + " (experiment)");
         } catch (Exception e) {
             f.delete();
         }
@@ -143,7 +143,7 @@ final class NativeProfile {
         }
         try {
             writeValue(f, code + "\n");
-            mod.log("instrument panel: " + v + " (experiment)");
+            CpClimate.runtimeLog("instrument panel: " + v + " (experiment)");
         } catch (Exception e) {
             f.delete();
         }

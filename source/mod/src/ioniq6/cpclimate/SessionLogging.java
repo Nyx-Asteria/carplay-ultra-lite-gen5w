@@ -60,7 +60,12 @@ final class SessionLogging {
         if(generation>=0)closeNow(endingReason==null?"superseded by new session":endingReason);
         policy.reset(); generation=id; sessionStartedAt=System.currentTimeMillis();
         if(writer!=null)writer.start(id,metadata);
-        for(PreSessionEvents.Event e:preSession.drain(sessionStartedAt,previousEndedAt)) logAt(e.message,e.at);
+        for(PreSessionEvents.Event e:preSession.drain(sessionStartedAt,previousEndedAt)) {
+            Category category=category(e.message);
+            Level level=level(e.message,category);
+            String safe=policy.accept(level,category,e.message,System.nanoTime()/1000000L);
+            if(writer!=null && safe!=null)writer.recordAt(generation,level,category,safe,e.at);
+        }
     }
     synchronized void finish(String reason) {
         if(generation<0||endingAt>=0)return;
@@ -93,7 +98,9 @@ final class SessionLogging {
         return s.contains("closed")||s.contains("ended")||s.contains("failed")||s.contains("stopped")||s.contains("disconnect")||s.contains("finaliz");
     }
     synchronized void log(String message) {
-        logAt(message,System.currentTimeMillis());
+        long now=System.currentTimeMillis();
+        if(writer!=null && generation<0)preSession.add(message,now,now,previousEndedAt);
+        logAt(message,now);
     }
     private void logAt(String message,long at) {
         Category category=category(message);
