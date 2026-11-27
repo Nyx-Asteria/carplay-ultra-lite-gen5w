@@ -60,9 +60,18 @@ final class ProjectionLogCapture extends Thread {
         if(body.contains("Modes changed"))return "[projection] mode transition reported";
         if(body.contains("cp-climate:")) {
             m=NATIVE.matcher(body);if(m.find())return "[projection-packet] native stream type="+m.group(1);
-            m=SCREEN.matcher(body);if(m.find())return "[projection-theme] screen SETUP type="+m.group(1);
+            m=SCREEN.matcher(body);if(m.find()){
+                String result="[projection-theme] screen SETUP type="+m.group(1);
+                Matcher ids=Pattern.compile("uuid=(Center_Display|Cluster_Display|absent|other) displayUUID=(Center_Display|Cluster_Display|absent|other)(?:$|\\s)").matcher(body);
+                if(ids.find())result+=" uuid="+ids.group(1)+" displayUUID="+ids.group(2);
+                return result;
+            }
             if(body.contains("Ultra display metadata supplemented"))return "[projection-theme] display metadata supplemented";
-            if(body.contains("Ultra display registration"))return "[projection-theme] display registration reported";
+            if(body.contains("Ultra display registration")){
+                Matcher registration=Pattern.compile("main=(Center_Display|stock UUID), alternate=(Cluster_Display|virtual UUID), original count=(\\d{1,3})(?:$|\\s)").matcher(body);
+                if(registration.find())return "[projection-theme] display registration main="+registration.group(1)+" alternate="+registration.group(2)+" originalCount="+registration.group(3);
+                return "[projection-theme] display registration reported";
+            }
             if(body.contains("type 130"))return "[projection-packet] type 130 reported";
             String features=featureEvent(body);if(features!=null)return features;
             if(body.contains("SETUP reply has enabledFeatures"))return "[projection-theme] enabled features unavailable";

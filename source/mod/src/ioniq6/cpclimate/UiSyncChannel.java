@@ -68,10 +68,33 @@ final class UiSyncChannel extends Thread {
         }catch(RuntimeException ignored){return null;}
     }
 
+    /** Shared by the transport and host tests; one router per authenticated connection. */
+    static final class PanelRouter {
+        private final java.util.Map<String,UiSync> panels=new java.util.HashMap<String,UiSync>();
+        private final File preferences;
+        private final UiSync configuration;
+        PanelRouter(File preferences,UiSync configuration) {
+            this.preferences=preferences;this.configuration=configuration;
+        }
+        UiSync select(byte[] body) {
+            String id=panelId(body);
+            if(id==null)id="legacy";
+            UiSync state=panels.get(id);
+            if(state==null){
+                state=new UiSync(preferences,true);
+                state.wanted=configuration.wanted;
+                state.legacyCenterLayout=configuration.legacyCenterLayout;
+                state.reopen();
+                panels.put(id,state);
+            }
+            return state;
+        }
+    }
+
     void serve(Socket sock) {
         // Sequence numbers and reset state belong to this authenticated connection.
         // A reconnect must not reset an older connection's handshake.
-        final java.util.Map<String,UiSync> panels=new java.util.HashMap<String,UiSync>();
+        final PanelRouter router=new PanelRouter(new File(dir,"cpc-theme-preferences.properties"),sync);
         out.log("SYNC connection opened");
         int logged = 0, packages = 0;
         java.util.Set<String> seenPanels = new java.util.HashSet<String>();
@@ -120,22 +143,7 @@ final class UiSyncChannel extends Thread {
                         byte[] body = java.util.Arrays.copyOfRange(p, at + VsChannel.HEADER, at + size);
                         List<byte[]> answers;
                         List<String> picked;
-                        String panelId=panelId(body);
-                        if(panelId==null){
-                            // Preserve the existing handling for frames lacking a recognized display.
-                            panelId="legacy";
-                        }
-                        UiSync sync=panels.get(panelId);
-                        if(sync==null){
-                            // Distinct display identities may negotiate on one connection.
-                            // Use the existing preference file for each display to avoid
-                            // changing its on-disk format; merge on writes in UiSync.
-                            sync=new UiSync(new File(dir,"cpc-theme-preferences.properties"),true);
-                            sync.wanted=this.sync.wanted;
-                            sync.legacyCenterLayout=this.sync.legacyCenterLayout;
-                            sync.reopen();
-                            panels.put(panelId,sync);
-                        }
+                        UiSync sync=router.select(body);
                         synchronized (sync) {
                             try {
                                 answers = sync.handle(body);

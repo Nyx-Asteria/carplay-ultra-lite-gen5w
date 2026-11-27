@@ -12,6 +12,9 @@ public final class ProjectionLogCaptureTest {
         check(enabled.contains("uiSync=1")&&enabled.contains("altScreen=0"));
         check(ProjectionLogCapture.classify("cp-climate: SETUP reply has enabledFeatures [vehicleStateProtocol, secret=private]").equals("[projection-theme] enabled features unrecognized"));
         check(ProjectionLogCapture.classify("cp-climate: SETUP independent uiSync enabled; stock features preserved, VSP not offered").contains("independent uiSync enabled"));
+        check(ProjectionLogCapture.classify("cp-climate: theme screen SETUP type 111 uuid=other displayUUID=Cluster_Display").contains("displayUUID=Cluster_Display"));
+        check(ProjectionLogCapture.classify("cp-climate: theme screen SETUP type 110 uuid=secret displayUUID=private").equals("[projection-theme] screen SETUP type=110"));
+        check(ProjectionLogCapture.classify("cp-climate: Ultra display registration: main=Center_Display, alternate=Cluster_Display, original count=1").contains("originalCount=1"));
         System.out.println("ProjectionLogCaptureTest passed");
     }
 }

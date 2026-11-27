@@ -32,10 +32,10 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [x] Reject live metadata callbacks for mismatched observed channel and out-of-order delivery (CI pending); early callbacks before tuner observation may be withheld, same-ID delayed callbacks remain ambiguous.
 
 ## AirPlay and themes
-- [ ] First-frame session collapse: correlate WCP/CPUL timestamps and playback state; fix generation race in Park-loss stop.
+- [ ] First-frame session collapse: correlate WCP/CPUL timestamps and playback state; generation-aware queued stop protection implemented (CI pending).
 - [ ] Keep parked-only restriction, no DRM bypass.
 - [ ] Center display negotiation, Midnight/wallpaper and theme catalog; isolate experiments.
-- [ ] UI Sync interleaving/no-display tests and legacy compatibility; no physical cluster changes requested.
+- [x] Test actual UI Sync panel router with interleaved center/cluster/legacy frames and independent reconnects (CI pending); no physical cluster changes requested.
 
 ## Compatibility
 - [ ] Vehicle test Nemesis 1.17.1 + RC10 and stock CCNC, especially OSD overlap, mounted framework and launcher shortcuts.
@@ -46,3 +46,7 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - Consolidate development commits into meaningful reviewable units; preserve published release tags and create recovery refs before any history rewrite.
 - Review build and test infrastructure; verify identical artifacts or explain intentional differences.
 - Do not rewrite active RC10 history; agree migration scope before changing shared branch history.
+
+- [x] AirPlay player-specific listeners and generation-bound audio fallback; CI pending.
+
+- [x] Preserve safe display registration and screen SETUP identities in native/session diagnostics; no arbitrary peer UUIDs (CI pending).

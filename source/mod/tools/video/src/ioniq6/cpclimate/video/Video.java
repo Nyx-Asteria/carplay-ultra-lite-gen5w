@@ -64,6 +64,8 @@ public final class Video {
     static boolean firstFrame;
     static Object itemUuid;
     static long streamId = -1;
+    // Main-thread ownership, independent of the generation at which a stop was queued.
+    static long playbackGeneration = -1;
     static boolean shown;
     static String currentUrl;
     static boolean requestedPlaying;
@@ -135,9 +137,11 @@ public final class Video {
         fallbackPending = true;
         final ExoPlayer failed = player;
         final long attempt = audioAttempt;
+        final long generation = playbackGeneration;
         main.post(new Runnable() { public void run() {
+            if (failed != player || attempt != audioAttempt || generation != sessionGeneration()) return;
             fallbackPending = false;
-            if (failed != player || attempt != audioAttempt || !parkAllowed()) return;
+            if (!parkAllowed()) return;
             long position = Math.max(0, failed.getCurrentPosition());
             boolean play = failed.getPlayWhenReady();
             Map<Object,Object> request = new LinkedHashMap<Object,Object>();
@@ -237,13 +241,23 @@ public final class Video {
 
     public static void onParkLost(final String reason) {
         if (main == null) return;
+        final long requestedGeneration=sessionGeneration();
         main.post(new Runnable() { public void run() {
+            if (VideoSessionPolicy.ignoreStop(requestedGeneration,sessionGeneration(),playbackGeneration,parkAllowed())) {
+                log("[video] stale stop ignored generation="+requestedGeneration+" owner="+playbackGeneration);
+                return;
+            }
             if (player != null || shown || itemUuid != null) {
                 log("[video] stopping: " + reason);
                 stop(reason);
             }
             callCore("ioniq6.cpclimate.VideoUi", "engineClosed", new Class<?>[0]);
         }});
+    }
+
+    private static void claimPlayback(long generation) {
+        if(playbackGeneration>=0 && playbackGeneration!=generation) stop("previous playback session");
+        playbackGeneration=generation;
     }
 
     /** a playback message from the phone (insertPlayQueueItem, setRate, seek, playbackInfo, ...) */
@@ -256,6 +270,7 @@ public final class Video {
                 try {
                     if(generation<0||generation!=sessionGeneration())return;
                     if (!parkAllowed()) { stop("Park or session unavailable"); return; }
+                    claimPlayback(generation);
                     handle(sid, m);
                 } catch (Throwable t) {
                     log("video: message " + m.get("type") + " failed: " + t);
@@ -273,6 +288,7 @@ public final class Video {
             public void run() {
                 if(generation<0||generation!=sessionGeneration())return;
                 if (!parkAllowed()) { stop("Park or session unavailable"); return; }
+                claimPlayback(generation);
                 show();
             }
         });
@@ -393,6 +409,8 @@ public final class Video {
         startCpuTrace();
         player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), false);
         log("[video-audio] ExoPlayer media attributes; local audio renderer=" + !noSound + "; focus management disabled");
+        listener = listenerFor(player, playbackGeneration);
+        steps = analyticsFor(player, playbackGeneration);
         player.addListener(listener);
         player.addAnalyticsListener(steps);
         player.setMediaSource(source, startMs);
@@ -406,31 +424,38 @@ public final class Video {
     }
 
     /** the player's steps that touch the head unit's hardware or the network, for the trace */
-    static final com.google.android.exoplayer2.analytics.AnalyticsListener steps = new com.google.android.exoplayer2.analytics.AnalyticsListener() {
+    static com.google.android.exoplayer2.analytics.AnalyticsListener steps;
+    static com.google.android.exoplayer2.analytics.AnalyticsListener analyticsFor(final ExoPlayer owner, final long generation) {
+        return new com.google.android.exoplayer2.analytics.AnalyticsListener() {
         @Override
         public void onVideoInputFormatChanged(EventTime t, com.google.android.exoplayer2.Format f,
                 com.google.android.exoplayer2.decoder.DecoderReuseEvaluation r) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             log("video: picture format " + f.sampleMimeType + " " + f.width + "x" + f.height + " " + f.codecs + " (opening the decoder)");
         }
 
         @Override
         public void onVideoDecoderInitialized(EventTime t, String name, long initializedTimestampMs, long initializationDurationMs) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             log("video: picture decoder " + name + " opened in " + initializationDurationMs + " ms");
         }
 
         @Override
         public void onAudioInputFormatChanged(EventTime t, com.google.android.exoplayer2.Format f,
                 com.google.android.exoplayer2.decoder.DecoderReuseEvaluation r) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             log("video: sound format " + f.sampleMimeType + " " + f.channelCount + "ch " + f.sampleRate + " Hz (opening the decoder)");
         }
 
         @Override
         public void onAudioDecoderInitialized(EventTime t, String name, long initializedTimestampMs, long initializationDurationMs) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             log("video: sound decoder " + name + " opened in " + initializationDurationMs + " ms");
         }
 
         @Override
         public void onAudioPositionAdvancing(EventTime t, long start) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             if (!audioClockSeen && !noSound) {
                 audioClockSeen = true;
                 log("[video-audio] local audio output clock advancing; audible output not yet verified");
@@ -439,6 +464,7 @@ public final class Video {
 
         @Override
         public void onRenderedFirstFrame(EventTime t, Object output, long renderTimeMs) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             if(player==null||!parkAllowed())return;
             boolean initial=!firstFrame;
             firstFrame = true;
@@ -451,11 +477,13 @@ public final class Video {
 
         @Override
         public void onLoadStarted(EventTime t, com.google.android.exoplayer2.source.LoadEventInfo info, com.google.android.exoplayer2.source.MediaLoadData data) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             trace("load " + data.dataType + " " + host(info.uri.toString()) + " " + tail(info.uri.getPath()));
         }
 
         @Override
         public void onLoadCompleted(EventTime t, com.google.android.exoplayer2.source.LoadEventInfo info, com.google.android.exoplayer2.source.MediaLoadData data) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             long media = data.mediaStartTimeMs != C.TIME_UNSET && data.mediaEndTimeMs != C.TIME_UNSET ? data.mediaEndTimeMs - data.mediaStartTimeMs : -1;
             long kbps = info.loadDurationMs > 0 ? info.bytesLoaded * 8 / info.loadDurationMs : -1;
             trace("loaded " + info.bytesLoaded + " B in " + info.loadDurationMs + " ms (" + kbps + " kbit/s)"
@@ -465,11 +493,13 @@ public final class Video {
 
         @Override
         public void onAudioUnderrun(EventTime t, int bufferSize, long bufferSizeMs, long elapsedSinceLastFeedMs) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             trace("audio underrun (buffer " + bufferSizeMs + " ms, " + elapsedSinceLastFeedMs + " ms since fed)");
         }
 
         @Override
         public void onAudioSinkError(EventTime t, Exception e) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             trace("audio sink error: " + e);
             audioFallback("audio sink " + e.getClass().getSimpleName());
         }
@@ -477,14 +507,18 @@ public final class Video {
         @Override
         public void onLoadError(EventTime t, com.google.android.exoplayer2.source.LoadEventInfo info, com.google.android.exoplayer2.source.MediaLoadData data,
                 IOException e, boolean cancelled) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             log("video: load failed " + tail(info.uri.getPath()) + ": " + e);
         }
 
         @Override
         public void onDroppedVideoFrames(EventTime t, int dropped, long elapsedMs) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             trace("dropped " + dropped + " frames in " + elapsedMs + " ms");
         }
     };
+
+    }
 
     // ---- CPU use in the trace: whether the download is held back by the network or by the head unit's CPU ----
 
@@ -547,9 +581,12 @@ public final class Video {
         return slash >= 0 && slash < path.length() - 1 ? path.substring(slash + 1) : path;
     }
 
-    static final Player.Listener listener = new Player.Listener() {
+    static Player.Listener listener;
+    static Player.Listener listenerFor(final ExoPlayer owner, final long generation) {
+        return new Player.Listener() {
         @Override
         public void onIsPlayingChanged(boolean isPlaying) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             // stopped only to buffer: still playing as far as the phone is concerned (a "paused" made it pause, 2026-11-11)
             if (!isPlaying && player != null && player.getPlayWhenReady() && player.getPlayerError() == null
                     && player.getPlaybackState() != Player.STATE_ENDED) {
@@ -566,6 +603,7 @@ public final class Video {
 
         @Override
         public void onPlaybackStateChanged(int state) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             log("video: player " + (state == Player.STATE_BUFFERING ? "buffering" : state == Player.STATE_READY ? "ready"
                     : state == Player.STATE_ENDED ? "ended" : "idle")
                     + (player == null ? "" : " position=" + player.getCurrentPosition() + " buffered=" + player.getBufferedPosition()
@@ -575,6 +613,7 @@ public final class Video {
 
         @Override
         public void onPlayerError(PlaybackException e) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             Throwable c = e.getCause();
             log("video: player error " + e.getErrorCodeName() + ": " + e.getMessage() + (c != null ? " / " + c : ""));
             if (!noSound && e.errorCode >= 5000 && e.errorCode < 6000) { audioFallback("player audio output error " + e.getErrorCodeName()); if (fallbackPending) return; }
@@ -591,6 +630,7 @@ public final class Video {
 
         @Override
         public void onTracksChanged(com.google.android.exoplayer2.Tracks tracks) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             // what the file has and what this head unit can decode (it has H.264 in hardware, no HEVC, no AC3/DTS)
             StringBuilder b = new StringBuilder("video: tracks:");
             for (com.google.android.exoplayer2.Tracks.Group g : tracks.getGroups()) {
@@ -608,9 +648,11 @@ public final class Video {
 
         @Override
         public void onVideoSizeChanged(VideoSize size) {
+            if (owner != player || generation != sessionGeneration() || !parkAllowed()) return;
             layoutSurface(size.width, size.height, size.pixelWidthHeightRatio);
         }
     };
+    }
 
     // ---- answers ----
 
@@ -888,6 +930,7 @@ public final class Video {
         currentUrl = null;
         rateReceived = false;
         requestedPlaying = false;
+        playbackGeneration = -1;
     }
 
     static void release() {
@@ -898,8 +941,10 @@ public final class Video {
             // The shared listener must not receive teardown events for an old item.
             ExoPlayer old=player;
             player=null;
-            old.removeListener(listener);
-            old.removeAnalyticsListener(steps);
+            if(listener!=null)old.removeListener(listener);
+            if(steps!=null)old.removeAnalyticsListener(steps);
+            listener=null;
+            steps=null;
             old.release();
         }
     }
