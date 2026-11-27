@@ -100,8 +100,11 @@ public final class CpClimate extends ModEntry {
             themePreflight=targetVerified && m.settingBoolean("ultra_theme",true)
                     && m.settingBoolean("ultra_sidebars",true) && theme.available(m);
             m.log("[theme] iAP2 process preflight="+themePreflight);
-            if (themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true) && m.settingBoolean("ultra_sidebars", true)) {
-                if (theme.register(m)) theme.observe(m);
+            if (targetVerified && m.enabled() && m.settingBoolean("ultra_theme", true) && m.settingBoolean("ultra_sidebars", true)) {
+                // Publication/configuration may lag appLoaded. Keep observing and
+                // retry registration even if the initial attempt is unsuccessful.
+                theme.register(m);
+                theme.observe(m);
             } else {
                 theme.stopObservation();
                 theme.unregister(m);

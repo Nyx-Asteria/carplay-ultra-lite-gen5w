@@ -24,6 +24,10 @@ public final class ProjectionLogCaptureTest {
         check(ProjectionLogCapture.classify("I CPULCrossProcess: "+identity+" password=private")==null);
         check(ProjectionLogCapture.classify("I CPULCrossProcess: "+identity.replace("ADVERTISED","private"))==null);
         check("[theme] negotiation generation_changed".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation generation_changed")));
+        String snapshot=identity.replace("negotiation ","negotiation snapshot ");
+        check(snapshot.equals(ProjectionLogCapture.classify("I CPULCrossProcess: "+snapshot)));
+        check(ProjectionLogCapture.classify("I CPULCrossProcess: "+snapshot+" secret=private")==null);
+        check("[theme] negotiation snapshot unavailable".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation snapshot unavailable")));
         System.out.println("ProjectionLogCaptureTest passed");
     }
 }

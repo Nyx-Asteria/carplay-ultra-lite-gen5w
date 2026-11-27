@@ -71,6 +71,7 @@ final class ThemeContribution {
             public void run() {
                 String last = null;
                 Object previous = null;
+                long lastSnapshot = android.os.SystemClock.elapsedRealtime();
                 try {
                     while (!Thread.currentThread().isInterrupted()) {
                         if (!mod.enabled() || !mod.settingBoolean("ultra_theme", true)
@@ -98,11 +99,21 @@ final class ThemeContribution {
                             catch (LinkageError e) { next = "observation_failed"; }
                         }
                         if (service != mod.use(PROVIDER, SERVICE)) { service = null; next = "provider_changed"; }
-                        if (service != previous || !next.equals(last)) {
-                            mod.log("[theme] negotiation " + next);
-                            android.util.Log.i("CPULCrossProcess", "[theme] negotiation " + next);
-                            previous = service;
-                            last = next;
+                        // A late-starting DiPO reader may miss the initial transition.
+                        // Periodically emit a fresh observation, never replay old evidence.
+                        synchronized (ThemeContribution.this) {
+                            if (observer != Thread.currentThread()) return;
+                            long now = android.os.SystemClock.elapsedRealtime();
+                            if (service != previous || !next.equals(last)) {
+                                mod.log("[theme] negotiation " + next);
+                                android.util.Log.i("CPULCrossProcess", "[theme] negotiation " + next);
+                                previous = service;
+                                last = next;
+                                lastSnapshot = now;
+                            } else if (now - lastSnapshot >= 10000) {
+                                android.util.Log.i("CPULCrossProcess", "[theme] negotiation snapshot " + next);
+                                lastSnapshot = now;
+                            }
                         }
                         Thread.sleep(2000);
                     }
