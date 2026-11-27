@@ -323,11 +323,9 @@ public final class CpClimate extends ModEntry {
             // the uiSync experiment: the theme's layout/palette channel, answered by UiSync
             // Bootstrap the known Modular layout; palette selection is still subject to asset verification.
             if (uiSync) {
-                boolean forceWallpaper = m.settingBoolean("ultra_force_wallpaper", false);
-                runtimeLog("[theme] center Wallpaper layout request=" + forceWallpaper);
-                boolean phoneManagedCluster=m.settingBoolean("ultra_phone_managed_cluster",false);
-                runtimeLog("[theme] cluster layout policy="+(phoneManagedCluster?"phone-managed":"legacy Modular/saved"));
-                new UiSyncChannel(dir, log, phoneManagedCluster?null:UiSync.layout("Modular"), forceWallpaper).start();
+                // RC11: phone owns layout/palette selection on both displays, including upgrades with old saved flags.
+                runtimeLog("[theme] center and virtual cluster layout policy=phone-managed");
+                new UiSyncChannel(dir, log, null, false).start();
             }
         }
         MethodHook copy = new MethodHook() {
