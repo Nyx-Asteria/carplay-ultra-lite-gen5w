@@ -31,3 +31,5 @@ Reviewed the actual SDK pin [daa0837](https://github.com/Open-HMG/HMG-API/tree/d
 ## Experimental WCP RC7 follow-up
 
 The revised WCP scope at d0e26a6 reopens FileTransfer implementation, not the approved CPUL source pin. Future WCP CarPlayUpdateData transport must be audited against CPUL's existing unsupported-stream branch at 0x11718 (verify 0x11710+20), /info and SETUP hooks; previous range audit cannot certify future recipes. See [coexistence relay](theme-pairing-validation.md#wcp-relay-important-native-coexistence-boundary). Default off, no dependency on incomplete experimental code.
+
+Single-owner architecture accepted from WCP proposal 34206057: CPUL owns shared native INFO/SETUP/stream dispatch, WCP owns FileTransfer policy and application protocol. No interface or native adapter implemented. Future matched-recipe audit must include WCP's new overlap guard, not assume old pin covers new code.
