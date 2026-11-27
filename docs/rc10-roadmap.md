@@ -72,3 +72,5 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [x] Theme contribution handles provider replacement and attempts rollback on registration callback failure (WCP IdentityRegistry inserts before notifying). Native activation still unverified; no theme identity or protocol change. CI pending.
 
 - [x] Distinguish confirmed registry contribution from uncertain ownership after failed registration/withdrawal; uncertain state must be withdrawn successfully before re-registration. CI pending; native activation remains separate.
+
+- [x] Extract production theme ownership state and regression-test confirmed, uncertain, replacement and withdrawal transitions in the shared CI suite. Reflective provider/native integration still needs runtime validation.

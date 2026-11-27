@@ -12,9 +12,8 @@ final class ThemeContribution {
     private static final String PROVIDER = "wireless-carplay-aa";
     private static final String API = "hmgapi.mods.wireless.api.CarPlayIdentification";
     private static final String SERVICE = "carplay-identification";
-    private Object registered;
+    private final ThemeOwnership ownership = new ThemeOwnership();
     private Method remove;
-    private boolean confirmed;
 
     boolean available(ModContext mod) {
         try {
@@ -29,8 +28,8 @@ final class ThemeContribution {
         try {
             Object service = mod.use(PROVIDER, SERVICE);
             if (service == null) { mod.log("[theme] shared identity service unavailable"); return false; }
-            if (registered == service && confirmed) return true;
-            if (registered != null && !unregister(mod)) return false;
+            if (ownership.confirmed(service)) return true;
+            if (ownership.owner() != null && !unregister(mod)) return false;
             Class<?> api = Class.forName(API, false, service.getClass().getClassLoader());
             if (!api.isInstance(service) || api.getField("API_VERSION").getInt(null) != 2) { mod.log("[theme] incompatible shared identity API"); return false; }
             Class<?> theme = Class.forName(API + "$ThemeIdentity", false, api.getClassLoader());
@@ -43,9 +42,8 @@ final class ThemeContribution {
             catch (NoSuchMethodException stock) { /* original v2 provider */ }
             // The provider stores the contribution before invoking its change callback.
             // Retain withdrawal ownership even if that callback throws after insertion.
-            registered = service;
+            ownership.begin(service);
             remove = unregister;
-            confirmed = false;
             try {
             if (registration != null) {
                 registration.invoke(service, mod.id, value, start);
@@ -61,7 +59,7 @@ final class ThemeContribution {
                 unregister(mod);
                 throw e;
             }
-            confirmed = true;
+            ownership.confirm();
             mod.log("Ultra theme contribution accepted by registry (native activation unverified)");
             return true;
         } catch (Exception e) {
@@ -74,11 +72,11 @@ final class ThemeContribution {
     }
 
     synchronized boolean unregister(ModContext mod) {
-        if (registered == null) return true;
-        confirmed = false;
+        if (ownership.owner() == null) return true;
+        ownership.uncertain();
         try {
-            remove.invoke(registered, mod.id);
-            registered = null;
+            remove.invoke(ownership.owner(), mod.id);
+            ownership.clear();
             remove = null;
             mod.log("[theme] contribution withdrawn");
             return true;
