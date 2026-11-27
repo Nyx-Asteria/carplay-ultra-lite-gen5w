@@ -124,6 +124,8 @@ final class K5Radio {
     private Object sxmTuner;
     private static final String SXM_IFACE = "com.hkmc.media.sxm65h.ISXM65HService";
     private Object fmTuner, fmAudio;
+    private String lastServiceHealth="";
+    private void serviceHealth(String state){if(!state.equals(lastServiceHealth)){lastServiceHealth=state;log.log("[radio-service] "+state);}}
     private static final String RADIO_IFACE = "com.hkmc.media.IRadioService";
 
     /** North American OEM FM values are in 10 kHz units. Reject unknown/out-of-band readings. */
@@ -221,16 +223,25 @@ final class K5Radio {
             sxmArt = null; currentSxmChannel = -1; fullSxm = null;
             sxmKnownGeneration = -1; sxmKnownIds = java.util.Collections.emptySet();
             lastListPoll = 0; fmItems = java.util.Collections.emptyList();
+            fmTuner=null; fmAudio=null; sxmTuner=null; lastServiceHealth="";
             return values;
         }
         try {
             if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) { fmActive = false; sxmActive = false; sxmAvailable = false; return values; }
-            if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
             if (fmAudio == null) fmAudio = service(CarAudio.SERVICE, CarAudio.IFACE);
-            long khz = fmKhz(readInt(fmTuner, RADIO_IFACE, "getLastFMFrequency"));
+            long khz=-1;
+            try {
+                if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
+                khz=fmKhz(readInt(fmTuner,RADIO_IFACE,"getLastFMFrequency"));
+                if(khz<=0)fmTuner=null;
+            }
+            catch(Throwable t){fmTuner=null; lastListPoll=0; fmItems=java.util.Collections.emptyList();}
             int mode = readInt(fmAudio, CarAudio.IFACE, "getAudioMode");
             int stream = readInt(fmAudio, CarAudio.IFACE, "getCurStreamType");
+            if(mode<0||stream<0)fmAudio=null;
+            serviceHealth("FM="+(fmTuner!=null&&khz>0)+" audio="+(fmAudio!=null)+" mode="+mode+" stream="+stream);
             // RC4 observed FM mode 2 / stream 38, AM mode 1 / stream 39.
+            activationLog(activationTrace.sample(CpClimate.sessionGeneration,tuneRequest.get(),mode,stream,android.os.SystemClock.elapsedRealtime()));
             fmActive = khz > 0 && mode == 2 && stream == 38;
             sxmActive = mode == 4 && stream == 41;
             refreshSxm(values);
@@ -291,7 +302,13 @@ final class K5Radio {
                 }
                 values.put(4118L, fmItemsFor(cached));
             }
-        } catch (Throwable t) { fmActive = false; sxmActive = false; sxmAvailable = false; fmTuner = null; fmAudio = null; sxmTuner = null; }
+        } catch (Throwable t) {
+            fmActive=false; sxmActive=false; sxmAvailable=false; fmAudio=null;
+            stationName=null; stationArtwork=null; clearTags(); lastFmFrequency=-1;
+            currentSxmChannel=-1; sxmArt=null;
+            activationLog(activationTrace.sample(CpClimate.sessionGeneration,tuneRequest.get(),-1,-1,android.os.SystemClock.elapsedRealtime()));
+            serviceHealth("audio sample unavailable: "+t.getClass().getSimpleName());
+        }
         return values;
     }
 
@@ -304,6 +321,7 @@ final class K5Radio {
             if (sxmTuner == null) sxmTuner = service(serviceName("SXM65H_SERVICE"), SXM_IFACE);
             int channel = readInt(sxmTuner, SXM_IFACE, "getLastTunedChannelID");
             sxmAvailable = sxmTuner != null && channel >= 0;
+            if(!sxmAvailable)sxmTuner=null;
             values.put(4131L, !sxmAvailable);
             if (sxmAvailable) {
                 if (sxmActive) requestSxmCatalog();
@@ -323,7 +341,7 @@ final class K5Radio {
             // A channel ID is not necessarily its displayed channel number.
             // Publish text only when the OEM channel record matches exactly.
             refreshSxmFavoriteMetadata(values, channel);
-        } catch (Throwable t) { sxmTuner = null; }
+        } catch (Throwable t) { sxmTuner=null; sxmAvailable=false; currentSxmChannel=-1; sxmArt=null; values.put(4131L,true); }
     }
 
     private long sxmRequestGeneration = -1;
@@ -334,7 +352,6 @@ final class K5Radio {
         long generation = CpClimate.sessionGeneration;
         long now = android.os.SystemClock.elapsedRealtime();
         if (sxmRequestGeneration == generation || (sxmRequestTime >= 0 && now - sxmRequestTime < 30000)) return;
-        sxmRequestGeneration = generation;
         sxmRequestTime = now;
         try {
             Class<?> iface = Class.forName(SXM_IFACE);
@@ -345,6 +362,7 @@ final class K5Radio {
             categories.invoke(sxmTuner);
             if (!probeActive(generation) || !sxmActive) return;
             channels.invoke(sxmTuner);
+            sxmRequestGeneration = generation;
             log.log("[radio-sxm] requested OEM category and channel catalog; awaiting asynchronous updates");
         } catch (Throwable t) { log.log("[radio-sxm] catalog request unavailable: " + t.getClass().getSimpleName()); }
     }
@@ -546,34 +564,36 @@ final class K5Radio {
 
     // DL322 ODEX debug parameter names: tuneDirect(int channelID, boolean override).
     // Never request override; accept only IDs returned by the OEM catalog.
-    boolean tuneSxm(String identifier) {
+    synchronized boolean tuneSxm(String identifier) {
         final int channel;
         try { channel = Integer.parseInt(identifier); }
         catch (NumberFormatException e) { return false; }
         final long generation = CpClimate.sessionGeneration;
         if (!VehicleState.sxmSchemaTest || !sxmAvailable || !probeActive(generation)
                 || sxmKnownGeneration != generation || !sxmKnownIds.contains(channel)) return false;
-        final long request = tuneRequest.incrementAndGet();
-        if (sxmActive) { queueSxmTune(channel, generation, request); return true; }
-        if (!selectRadioMode(request, 13)) return false;
+        final long station=stationRequest.incrementAndGet();
+        long pending=pendingSource(13,generation);
+        final long request=pending>=0?pending:tuneRequest.incrementAndGet();
+        if (sxmActive) { queueSxmTune(channel, generation, request, station); return true; }
+        if (pending<0&&!selectRadioMode(request, 13)) return false;
         final long deadline = android.os.SystemClock.elapsedRealtime() + 7000;
         main.postDelayed(new Runnable() {
             public void run() {
-                if (!probeActive(generation) || request != tuneRequest.get()) return;
+                if (!probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()) return;
                 if (android.os.SystemClock.elapsedRealtime() >= deadline) {
                     log.log("[radio-sxm] activation timed out; tune discarded"); return;
                 }
-                if (sxmActive) { queueSxmTune(channel, generation, request); return; }
+                if (sxmActive) { queueSxmTune(channel, generation, request, station); return; }
                 main.postDelayed(this, 250);
             }
         }, 250);
         return true;
     }
-    private void queueSxmTune(final int channel, final long generation, final long request) {
+    private void queueSxmTune(final int channel, final long generation, final long request, final long station) {
         fmCommands.execute(new Runnable() {
             public void run() {
                 try {
-                    if (!probeActive(generation) || request != tuneRequest.get()
+                    if (!probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()
                             || !VehicleState.sxmSchemaTest || sxmKnownGeneration != generation
                             || !sxmKnownIds.contains(channel)) return;
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
@@ -590,7 +610,7 @@ final class K5Radio {
                         return;
                     }
                     if (tune.getReturnType() != int.class || !probeActive(generation)
-                            || request != tuneRequest.get()) return;
+                            || request != tuneRequest.get() || station!=stationRequest.get()) return;
                     Object result = tune.invoke(tuner, channel, false);
                     log.log("[radio-sxm] native tune ID=" + channel + " result=" + result + "; awaiting channel feedback");
                 } catch (Throwable t) { log.log("[radio-sxm] tune failed: " + t.getClass().getSimpleName()); }
@@ -599,9 +619,9 @@ final class K5Radio {
     }
 
     boolean sxmSelected() { return sxmActive; }
-    boolean selectSxm() {
-        if (!VehicleState.sxmSchemaTest || !sxmAvailable) return false;
-        return selectRadioMode(tuneRequest.incrementAndGet(), 13);
+    synchronized boolean selectSxm() {
+        if (!VehicleState.sxmSchemaTest || !sxmAvailable || !enabled() || !CpClimate.sessionActive) return false;
+        return selectExplicitSource(13,sxmActive);
     }
 
     /** Queue a seek only for the already-active FM tuner; never route a radio seek to the phone.
@@ -641,21 +661,27 @@ final class K5Radio {
      * RadioNA WrapperUtil identifies the boolean as isFMStep50KHz; the
      * two-argument MicomRadioManager overload supplies PI/PTy zero. */
     boolean tuneFm(final long khz) {
+        return tuneFm(khz,tuneRequest.incrementAndGet(),stationRequest.incrementAndGet());
+    }
+    private boolean tuneFm(final long khz, final long request, final long station) {
         if (khz < 87900 || khz > 107900 || (khz - 87900) % 200 != 0
                 || !enabled() || !CpClimate.sessionActive || !fmActive) return false;
         final long generation = CpClimate.sessionGeneration;
         fmCommands.execute(new Runnable() {
             public void run() {
-                if (!probeActive(generation)) return;
+                if (!probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()) return;
                 try {
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
                     Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
-                    if (tuner == null || !probeActive(generation)) return;
+                    if (tuner == null || !probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()) return;
                     java.lang.reflect.Method method = Class.forName(RADIO_IFACE).getMethod(
                             "directTune", int.class, boolean.class, int.class, int.class);
-                    if (method.getReturnType() != boolean.class) return;
+                    if (method.getReturnType() != boolean.class || !probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()
+                            || readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
+                            || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38
+                            || request != tuneRequest.get() || station!=stationRequest.get()) return;
                     Object result = method.invoke(tuner, (int)(khz / 10), false, 0, 0);
                     log.log("[radio] FM tune " + khz + " kHz accepted=" + result);
                 } catch (Throwable t) { log.log("[radio] FM tune failed: " + t.getClass().getSimpleName()); }
@@ -669,37 +695,63 @@ final class K5Radio {
      * ModeConstants.ModeType FM1=2. Foreground behavior requires parked validation. */
     // A tune with explicit FM source may activate FM first. Only the latest
     // pending request is retained; it expires and cannot cross sessions.
+    private final RadioActivationTrace activationTrace=new RadioActivationTrace();
+    private void activationLog(String event){if(event!=null)log.log("[radio-source] "+event);}
     private final java.util.concurrent.atomic.AtomicLong tuneRequest = new java.util.concurrent.atomic.AtomicLong();
-    void cancelPendingTune() { tuneRequest.incrementAndGet(); }
-    boolean selectAndTuneFm(final long khz) {
+    private final RadioSourceRequest sourceRequest=new RadioSourceRequest();
+    private final java.util.concurrent.atomic.AtomicLong stationRequest=new java.util.concurrent.atomic.AtomicLong();
+    // Reuse a pending mode request, but let a newer station selection supersede its tune.
+    private long pendingSource(int target,long generation) {
+        long request=tuneRequest.get();
+        return sourceRequest.matches(generation,request,target,android.os.SystemClock.elapsedRealtime())?request:-1;
+    }
+    synchronized void cancelPendingTune() { tuneRequest.incrementAndGet(); sourceRequest.clear(); }
+    private boolean selectExplicitSource(int target,boolean owns) {
+        long generation=CpClimate.sessionGeneration, now=android.os.SystemClock.elapsedRealtime();
+        if(sourceRequest.matches(generation,tuneRequest.get(),target,now)) {
+            log.log("[radio-source] duplicate selection coalesced target="+target);
+            return true;
+        }
+        long request=tuneRequest.incrementAndGet();
+        sourceRequest.clear();
+        if(owns)return true;
+        return selectRadioMode(request,target);
+    }
+    synchronized boolean selectAndTuneFm(final long khz) {
         if (khz < 87900 || khz > 107900 || (khz - 87900) % 200 != 0
                 || !enabled() || !CpClimate.sessionActive) return false;
         final long generation = CpClimate.sessionGeneration;
-        final long request = tuneRequest.incrementAndGet();
-        if (fmActive) return tuneFm(khz);
-        if (!selectFm(request)) return false;
+        final long station=stationRequest.incrementAndGet();
+        long pending=pendingSource(2,generation);
+        final long request=pending>=0?pending:tuneRequest.incrementAndGet();
+        if (fmActive) return tuneFm(khz, request, station);
+        if (pending<0&&!selectFm(request)) return false;
         final long deadline = android.os.SystemClock.elapsedRealtime() + 5000;
         main.postDelayed(new Runnable() {
             public void run() {
-                if (!probeActive(generation) || request != tuneRequest.get()) return;
+                if (!probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()) return;
                 if (android.os.SystemClock.elapsedRealtime() >= deadline) {
                     log.log("[radio] FM activation timed out; pending tune discarded");
                     return;
                 }
-                if (fmActive) { tuneFm(khz); return; }
+                if (fmActive) { tuneFm(khz, request, station); return; }
                 main.postDelayed(this, 250);
             }
         }, 250);
         return true;
     }
 
-    boolean selectFm() { return selectFm(tuneRequest.incrementAndGet()); }
+    synchronized boolean selectFm() {
+        if(!enabled()||!CpClimate.sessionActive)return false;
+        return selectExplicitSource(2,fmActive);
+    }
 
     private boolean selectFm(final long request) { return selectRadioMode(request, 2); }
 
     private boolean selectRadioMode(final long request, final int targetMode) {
         if (!enabled() || !CpClimate.sessionActive) return false;
         final long generation = CpClimate.sessionGeneration;
+        sourceRequest.begin(generation,request,targetMode,android.os.SystemClock.elapsedRealtime());
         fmCommands.execute(new Runnable() {
             public void run() {
                 if (!probeActive(generation) || request != tuneRequest.get()) return;
@@ -717,9 +769,13 @@ final class K5Radio {
                                 if (change.getReturnType() != boolean.class) return;
                                 Object manager = type.getConstructor(Context.class).newInstance(context);
                                 if (!probeActive(generation) || request != tuneRequest.get()) return;
+                                activationLog(activationTrace.begin(generation,request,targetMode,android.os.SystemClock.elapsedRealtime()));
                                 Object accepted = change.invoke(manager, Integer.valueOf(targetMode));
+                                activationLog(activationTrace.result(generation,request,Boolean.TRUE.equals(accepted),android.os.SystemClock.elapsedRealtime()));
+                                if(!Boolean.TRUE.equals(accepted))sourceRequest.clearIf(generation,request);
                                 log.log("[radio] OEM mode " + targetMode + " request accepted=" + accepted);
                             } catch (Throwable t) {
+                                sourceRequest.clearIf(generation,request);
                                 log.log("[radio] mode selection failed: " + t.getClass().getSimpleName());
                             }
                         }
