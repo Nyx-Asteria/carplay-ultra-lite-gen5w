@@ -611,6 +611,7 @@ final class K5Radio {
                 if (android.os.SystemClock.elapsedRealtime() >= deadline) {
                     log.log("[radio-sxm] activation timed out; tune discarded"); return;
                 }
+                if (!sourceRequest.matches(generation,request,13,android.os.SystemClock.elapsedRealtime())) { log.log("[radio-sxm] source request ended; tune discarded"); return; }
                 if (sxmActive) { queueSxmTune(channel, generation, request, station); return; }
                 main.postDelayed(this, 250);
             }
@@ -775,6 +776,7 @@ final class K5Radio {
                     log.log("[radio] FM activation timed out; pending tune discarded");
                     return;
                 }
+                if (!sourceRequest.matches(generation,request,2,android.os.SystemClock.elapsedRealtime())) { log.log("[radio] FM source request ended; tune discarded"); return; }
                 if (fmActive) { tuneFm(khz, request, station); return; }
                 main.postDelayed(this, 250);
             }
@@ -795,21 +797,21 @@ final class K5Radio {
         sourceRequest.begin(generation,request,targetMode,android.os.SystemClock.elapsedRealtime());
         fmCommands.execute(new Runnable() {
             public void run() {
-                if (!probeActive(generation) || request != tuneRequest.get()) return;
+                if (!probeActive(generation) || request != tuneRequest.get() || !sourceRequest.matches(generation,request,targetMode,android.os.SystemClock.elapsedRealtime())) { sourceRequest.clearIf(generation,request); return; }
                 try {
                     if (!"7c99638e39c369c45fab9c485b103cf0".equals(
-                            ModContext.md5("/system/framework/automotive.odex"))) return;
+                            ModContext.md5("/system/framework/automotive.odex"))) { sourceRequest.clearIf(generation,request); log.log("[radio] mode selection withheld: fingerprint mismatch"); return; }
                     // Construct the framework wrapper on a Looper thread, as its
                     // implementation can create Handler-backed listener transports.
                     main.post(new Runnable() {
                         public void run() {
-                            if (!probeActive(generation) || request != tuneRequest.get()) return;
+                            if (!probeActive(generation) || request != tuneRequest.get() || !sourceRequest.matches(generation,request,targetMode,android.os.SystemClock.elapsedRealtime())) { sourceRequest.clearIf(generation,request); return; }
                             try {
                                 Class<?> type = Class.forName("com.hkmc.mode.ModeManager");
                                 java.lang.reflect.Method change = type.getMethod("changeMode", Integer.class);
-                                if (change.getReturnType() != boolean.class) return;
+                                if (change.getReturnType() != boolean.class) { sourceRequest.clearIf(generation,request); log.log("[radio] mode selection withheld: unexpected signature"); return; }
                                 Object manager = type.getConstructor(Context.class).newInstance(context);
-                                if (!probeActive(generation) || request != tuneRequest.get()) return;
+                                if (!probeActive(generation) || request != tuneRequest.get() || !sourceRequest.matches(generation,request,targetMode,android.os.SystemClock.elapsedRealtime())) { sourceRequest.clearIf(generation,request); return; }
                                 activationLog(activationTrace.begin(generation,request,targetMode,android.os.SystemClock.elapsedRealtime()));
                                 Object accepted = change.invoke(manager, Integer.valueOf(targetMode));
                                 activationLog(activationTrace.result(generation,request,Boolean.TRUE.equals(accepted),android.os.SystemClock.elapsedRealtime()));
@@ -822,6 +824,7 @@ final class K5Radio {
                         }
                     });
                 } catch (Throwable t) {
+                    sourceRequest.clearIf(generation,request);
                     log.log("[radio] mode selection unavailable: " + t.getClass().getSimpleName());
                 }
             }

@@ -50,3 +50,15 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [x] AirPlay player-specific listeners and generation-bound audio fallback; CI pending.
 
 - [x] Preserve safe display registration and screen SETUP identities in native/session diagnostics; no arbitrary peer UUIDs (CI pending).
+
+- [x] HMG-API vehicle shortcut: RC10 manifest confirms MAIN without LAUNCHER; explicit hmgapi.app.MainActivity fallback, resolve before launch. Nemesis entry point still needs evidence; vehicle verification pending.
+
+- [x] Passenger temperature dispatch uses same session-generation guards as seat commands, including immediately before Binder transaction. Existing Celsius/Fahrenheit conversion confirmed against ClimateMap; OEM setter unchanged. CI and vehicle validation pending.
+
+- [x] FM/SXM pending tunes require a live activation request; clear failed/expired/fingerprint/signature-mismatched activation requests before delayed tune. No new source IDs; CI and vehicle validation pending.
+
+- [x] Expose writer and USB export failure/recovery transitions to HMG runtime log, deduplicated every five seconds; label Android build separately from actual firmware. Actual firmware/LivePatch identity still outstanding.
+- [x] Extend source-request expiry, cancellation and stale-generation regression cases.
+
+- [x] Shared host regression script used by both development and signed bundle; include video session policy and all logging/radio/seat tests. Signed bundle still gated; verify development CI before release.
+- [x] Pin incremental collector 55e8de065f32776ab9eb466207364e0bb66bf29b (collector CI passed); other companion pins remain pending coordination.

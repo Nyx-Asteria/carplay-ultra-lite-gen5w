@@ -38,7 +38,7 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
         page.line("Vehicle", "range", "Fuel range", "fuelpump");
         page.line("Vehicle", "odometer", "Odometer", "road.lanes");
         add("home", "Car home screen", "house", new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME));
-        addPackage("hmgapi", "HMG-API", "puzzlepiece.extension", "hmgapi.app");
+        addPackage("hmgapi", "HMG-API", "puzzlepiece.extension", "hmgapi.app", "hmgapi.app.MainActivity");
         addPackage("nemesis", "NEMESIS Manager", "shippingbox", "com.nemesis.manager");
         addPackage("settings", "Vehicle settings", "gearshape", "com.android.vehiclesettings");
         }
@@ -52,7 +52,18 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
         log.log("[vehicle] K5 page initialized; shortcuts=" + shortcuts.keySet());
     }
     private void addPackage(String id, String label, String symbol, String pkg) {
-        try { add(id, label, symbol, context.getPackageManager().getLaunchIntentForPackage(pkg)); }
+        addPackage(id,label,symbol,pkg,null);
+    }
+    private void addPackage(String id, String label, String symbol, String pkg, String activity) {
+        try {
+            Intent launch=context.getPackageManager().getLaunchIntentForPackage(pkg);
+            // HMG-API RC10 explicitly omits CATEGORY_LAUNCHER; use its manifest-declared entry point.
+            if(launch==null && activity!=null) {
+                launch=new Intent(Intent.ACTION_MAIN).setClassName(pkg,activity);
+                log.log("[vehicle] shortcut explicit manifest entry "+id);
+            }
+            add(id,label,symbol,launch);
+        }
         catch (Exception e) { log.log("[vehicle] shortcut discovery failed " + id + ": " + e.getClass().getSimpleName()); }
     }
     private void add(String id, String label, String symbol, Intent i) {
@@ -72,7 +83,10 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
         final long generation=CpClimate.sessionGeneration;
         main.post(new Runnable() { public void run() {
             if (!enabled() || !CpClimate.sessionActive || generation!=CpClimate.sessionGeneration) { log.log("[vehicle] shortcut rejected: inactive or stale session"); return; }
-            try { context.startActivity(new Intent(i).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); log.log("[vehicle] opened " + id); }
+            try {
+                if(context.getPackageManager().resolveActivity(i,0)==null){log.log("[vehicle] shortcut no longer resolvable "+id);return;}
+                context.startActivity(new Intent(i).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); log.log("[vehicle] opened " + id);
+            }
             catch (Exception e) { log.log("[vehicle] launch failed " + id + ": " + e.getClass().getSimpleName()); }
         }});
     }

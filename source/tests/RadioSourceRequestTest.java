@@ -14,6 +14,17 @@ public final class RadioSourceRequestTest {
         check(r.matches(1,3,13,12000));
         r.clearIf(1,3);
         check(!r.matches(1,3,13,12000));
+        r.begin(4,8,2,20000);
+        check(r.matches(4,8,2,24999));
+        check(!r.matches(4,8,2,25000));
+        r.clearIf(3,8);
+        check(r.matches(4,8,2,21000));
+        r.clearIf(4,8);
+        check(!r.matches(4,8,2,21000));
+        r.begin(5,9,13,30000);
+        r.clearIf(4,8);
+        check(r.matches(5,9,13,36999));
+        check(!r.matches(5,9,13,37000));
         System.out.println("RadioSourceRequestTest passed");
     }
 }
