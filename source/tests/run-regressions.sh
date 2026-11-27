@@ -51,3 +51,6 @@ java -cp "out/tests:$CP" ioniq6.cpclimate.ThemeOwnershipTest
 
 javac --release 8 -cp "$CP" -d out/tests source/tests/VehiclePageStateTest.java
 java -cp "out/tests:$CP" ioniq6.cpclimate.VehiclePageStateTest
+
+javac --release 8 -cp "$CP" -d out/tests source/tests/VehicleDeliveryOwnershipTest.java
+java -cp "out/tests:$CP" ioniq6.cpclimate.VehicleDeliveryOwnershipTest

@@ -154,12 +154,17 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
                     boolean replay = generation != deliveredGeneration || current != deliveredState;
                     Map<Long,Object> changed = page.update(fresh,replay);
                     if (enabled() && radio.available()) changed.putAll(radio.refreshFm());
-                    synchronized (state) {
-                        if (current != null && current == state[0] && !changed.isEmpty()
-                                && CpClimate.sessionActive && generation==CpClimate.sessionGeneration) {
-                            lanes[1].deliver(current.fromCar(changed));
+                    if (current != null && !changed.isEmpty()
+                            && CpClimate.sessionActive && generation==CpClimate.sessionGeneration) {
+                        // Socket writes use captured session-owned writers, not the shared state lock.
+                        boolean delivered=lanes[1].deliverOwned(current,current.fromCar(changed));
+                        if (delivered) {
                             deliveredGeneration=generation;
                             deliveredState=current;
+                        } else {
+                            // Cache may already contain the update; force a replay on the next poll.
+                            deliveredGeneration=-1;
+                            deliveredState=null;
                         }
                     }
                 }

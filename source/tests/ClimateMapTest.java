@@ -138,6 +138,20 @@ public class ClimateMapTest {
                 ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_LEVEL}) {
             check("K5 unsupported write ignored " + iid, ClimateMap.commands(one(iid, 2L), v, 2).isEmpty());
         }
+        VehicleState.coolingMin = -4;
+        for (long iid : new long[]{ClimateMap.DRIVER_SEAT_LEVEL,ClimateMap.PASSENGER_SEAT_LEVEL}) {
+            int[] expectedFourStep={5,4,4,3,2,6,7,8};
+            for(int level=-4;level<=3;level++){
+                List<ClimateMap.Command> fourStepCommands=ClimateMap.commands(one(iid,(long)level),v,2);
+                check("four-step seat write "+iid+" level "+level,fourStepCommands.size()==1&&fourStepCommands.get(0).b==expectedFourStep[level+4]);
+            }
+        }
+        for(long iid:new long[]{ClimateMap.DRIVER_SEAT_LEVEL,ClimateMap.PASSENGER_SEAT_LEVEL}){
+            ClimateMap.Reading fullVentReading=new ClimateMap.Reading();
+            fullVentReading.driverSeat=5;fullVentReading.passengerSeat=5;
+            check("four-step high ventilation feedback "+iid,Long.valueOf(-4).equals(ClimateMap.toCarPlay(fullVentReading).get(iid)));
+        }
+        VehicleState.coolingMin = -3;
         VehicleState.coolingLayout = false;
         for (int raw = 2; raw <= 8; raw++) {
             r = new ClimateMap.Reading(); r.driverSeat = raw; r.passengerSeat = raw;
