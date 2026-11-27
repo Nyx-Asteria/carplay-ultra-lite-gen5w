@@ -971,6 +971,12 @@ __attribute__((visibility("hidden"))) void cpc_info_hook(CF info) {
         (int)VSPI_LEN, (int)panels, area ? "a viewArea" : "no viewArea added", edge, pct, newer ? "950.7.1" : "stock", extras ? "on" : "off", cluster, wide ? 2 : 1, wide == 2 ? "right" : "whole", ultra == 2 ? "1920x720 (type 111, theme display ids)" : ultra ? "800x480 (type 111)" : "off");
 }
 
+/* Preserve OEM-negotiated capabilities; add only missing CPUL contributions. */
+static void append_feature(CF array, CF feature) {
+    for (CFIndex i=0,n=count(array);i<n;i++) if (equal(at(array,i),feature)) return;
+    append(array,feature);
+}
+
 __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) {
     if (!request || !reply) return;
     CF offered = get(request, &K_features);
@@ -1018,25 +1024,32 @@ __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) 
         LOG("cp-climate: SETUP reply left stock (test variant)\n");
         return;
     }
+    CF prior = get(reply, &K_enabledFeatures);
+    if (prior && !is(prior, T_CFArrayGetTypeID)) {
+        LOG("cp-climate: SETUP malformed OEM enabledFeatures; reply unchanged\n");
+        return;
+    }
     CF features = new_array();
     if (!features) return;
-    append(features, &K_vsp);
+    if (prior) for (CFIndex i=0,n=count(prior);i<n;i++) append(features,at(prior,i));
+    append_feature(features, &K_vsp);
     /* Restore upstream-style ViewAreas for themed sidebars, without changing
      * generic virtual-cluster negotiation or the no-VSP stock fallback.
      * Independent widescreen mode also accepts an explicit phone offer. */
     int enable_areas = ultra == 2 || ((ultra || widescreen_areas()) && areas);
-    if (enable_areas) append(features, &K_viewAreas);
-    if (ultra && alt) append(features, &K_altScreen);
-    if (iapx && iap) append(features, &K_iapChannel);
-    if (syncx && sync) append(features, &K_uiSync);
+    if (enable_areas) append_feature(features, &K_viewAreas);
+    if (ultra && alt) append_feature(features, &K_altScreen);
+    if (iapx && iap) append_feature(features, &K_iapChannel);
+    if (syncx && sync) append_feature(features, &K_uiSync);
     int extra = extra_features();
-    if ((extra & 1) && video) append(features, &K_videoPlayback);
-    if ((extra & 2) && hevc) append(features, &K_hevc);
+    if ((extra & 1) && video) append_feature(features, &K_videoPlayback);
+    if ((extra & 2) && hevc) append_feature(features, &K_hevc);
     if (extra)
         LOG("cp-climate: SETUP extra features experiment: videoPlayback %s, hevc %s\n",
             (extra & 1) ? (video ? "enabled" : "not offered") : "off", (extra & 2) ? (hevc ? "enabled" : "not offered") : "off");
     put(reply, &K_enabledFeatures, features);
-    LOG("cp-climate: SETUP reply has enabledFeatures [vehicleStateProtocol%s%s%s%s%s%s]\n",
+    if (prior) LOG("cp-climate: SETUP OEM enabledFeatures preserved; merged count=%d\n", (int)count(features));
+    else LOG("cp-climate: SETUP reply has enabledFeatures [vehicleStateProtocol%s%s%s%s%s%s]\n",
         enable_areas ? ", viewAreas" : "", ultra && alt ? ", altScreen" : "", iapx && iap ? ", iAPChannel" : "",
         syncx && sync ? ", uiSync" : "", (extra & 1) && video ? ", videoPlayback" : "", (extra & 2) && hevc ? ", hevc" : "");
 }

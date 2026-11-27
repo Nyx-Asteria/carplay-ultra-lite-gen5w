@@ -816,6 +816,25 @@ int main(void) {
         m_release(rep);
         m_release(rq);
     }
+    {
+        /* VSP negotiation must augment rather than replace OEM capabilities. */
+        rep=(Dict *)m_new_dict(0,0,&cb_dkey,&cb_dval);
+        Arr *prior=(Arr *)m_new_arr(0,0,&cb_arr);
+        Str *enabled=str("enabledFeatures"), *stock=str("uiContext"), *vsp=str("vehicleStateProtocol");
+        m_append(prior,stock);m_append(prior,vsp);
+        m_set(rep,enabled,prior);m_release(prior);
+        cpc_setup_hook(req,rep);
+        echo=g(rep,"enabledFeatures");
+        CHECK("VSP merge retains OEM feature order and avoids duplicate VSP",echo && echo->n==2
+              && !strcmp(s_of(echo->v[0]),"uiContext") && !strcmp(s_of(echo->v[1]),"vehicleStateProtocol"));
+        cpc_setup_hook(req,rep);
+        echo=g(rep,"enabledFeatures");
+        CHECK("VSP merge is idempotent",echo && echo->n==2);
+        m_set(rep,enabled,stock);
+        cpc_setup_hook(req,rep);
+        CHECK("VSP merge leaves malformed OEM reply untouched",g(rep,"enabledFeatures")==stock);
+        m_release(rep);m_release(enabled);m_release(stock);m_release(vsp);
+    }
     Dict *req2 = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
     Arr *feat2 = (Arr *)m_new_arr(0, 0, &cb_arr);
     Str *s2 = str("hevc"); m_append(feat2, s2); m_release(s2);
