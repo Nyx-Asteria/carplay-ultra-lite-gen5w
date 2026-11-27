@@ -154,7 +154,7 @@ final class K5Radio {
         if (!(raw instanceof java.util.List)) {
             String summary = "unexpected cache type=" + (raw == null ? "null" : raw.getClass().getName());
             if (!summary.equals(lastScanSummary)) { lastScanSummary = summary; log.log("[radio] FM scan cache " + summary); }
-            return java.util.Collections.emptyList();
+            throw new IllegalStateException("unexpected FM cache type");
         }
         Class<?> type = Class.forName("com.hkmc.media.RadioAllBsmFreqInfo");
         java.lang.reflect.Field freq = type.getDeclaredField("mBsmFreq");
@@ -178,6 +178,8 @@ final class K5Radio {
         }
         return fmItemsFor(frequencies);
     }
+
+    static boolean retainFmCache(int previous,int next) { return previous>0 && next==0; }
 
     private java.util.List<Object> fmItemsFor(java.util.Set<Long> frequencies) {
         java.util.TreeSet<Long> all = new java.util.TreeSet<Long>(frequencies);
@@ -288,10 +290,11 @@ final class K5Radio {
                     try {
                         java.util.List<Object> next = readFmItems(fmTuner);
                         if (!next.equals(fmItems)) log.log("[radio] cached OEM FM station list size=" + next.size());
-                        fmItems = next;
+                        if (retainFmCache(fmItems.size(),next.size())) {
+                            log.log("[radio] empty FM cache; preserving previous stations count="+fmItems.size());
+                        } else fmItems = next;
                     } catch (Throwable t) {
-                        fmItems = java.util.Collections.emptyList();
-                        log.log("[radio] station list unavailable: " + t.getClass().getSimpleName());
+                        log.log("[radio] station list unavailable: " + t.getClass().getSimpleName()+"; retained="+fmItems.size());
                     }
                 }
                 java.util.Set<Long> cached = new java.util.TreeSet<Long>();
@@ -399,12 +402,16 @@ final class K5Radio {
             context.registerReceiver(new android.content.BroadcastReceiver() {
                 @Override public void onReceive(Context c, Intent i) {
                     if (!enabled() || !CpClimate.sessionActive || !VehicleState.sxmSchemaTest) return;
-                    long age = android.os.SystemClock.elapsedRealtime() - i.getLongExtra("received", -1);
+                    long received = i.getLongExtra("received", -1);
+                    long age = android.os.SystemClock.elapsedRealtime() - received;
                     if (age < 0 || age > 2000) return;
                     if(i.hasExtra("liveChannel")){
                         int id=i.getIntExtra("liveChannel",-1);
+                        long generation=CpClimate.sessionGeneration;
                         if(sxmActive&&id>=0){
-                            sxmLive.receive(new SxmLiveMetadata(CpClimate.sessionGeneration,id,i.getStringExtra("liveName"),i.getStringExtra("liveTitle"),i.getStringExtra("liveArtist")));
+                            boolean accepted=sxmLive.receive(new SxmLiveMetadata(generation,id,i.getStringExtra("liveName"),i.getStringExtra("liveTitle"),i.getStringExtra("liveArtist")),received,generation,currentSxmChannel);
+                            if(!accepted)log.log("[radio-sxm] live callback withheld ID="+id+" observed="+currentSxmChannel);
+                            else log.log("[radio-sxm] live callback accepted ID="+id);
                         }
                         return;
                     }
@@ -495,7 +502,7 @@ final class K5Radio {
                 Object raw = id.get(entry);
                 if (!(raw instanceof Number)) continue;
                 int channel = ((Number)raw).intValue();
-                if (channel >= 0) sxmMetadata.put(channel, new String[] {channelText(type, entry, "mChannelLongName"), channelText(type, entry, "mTitle"), channelText(type, entry, "mArtist")});
+                if (channel >= 0) sxmMetadata.put(channel, new String[] {channelText(type, entry, "mChannelLongName"), "", ""});
                 if (channel < 0 || !channelFlag(subscribed.get(entry), true)
                         || !channelFlag(skipped.get(entry), false) || known.contains(channel)) continue;
                 // The DL322 binder exposes isChannelLocked(int): int.
@@ -536,7 +543,7 @@ final class K5Radio {
             if(loggedSxmGeneration!=generation || !loggedSxmIds.equals(known)) {
                 loggedSxmGeneration=generation;
                 loggedSxmIds=new java.util.HashSet<Integer>(known);
-                log.log("[radio-sxm] favorite catalog size=" + items.size());
+                log.log("[radio-sxm] eligible catalog size=" + items.size()+" observedID="+channelId+" currentIDListed="+known.contains(channelId));
             }
         }
         values.put(4134L, sxmItems);
@@ -546,9 +553,8 @@ final class K5Radio {
         if (sxmKnownGeneration != CpClimate.sessionGeneration) return;
         String[] metadata = sxmMetadata.get(channel);
         if (metadata == null) return;
-        if (!metadata[1].isEmpty()) values.put(4355L, metadata[1]);
-        else if (!metadata[0].isEmpty()) values.put(4355L, metadata[0]);
-        if (!metadata[2].isEmpty()) values.put(4356L, metadata[2]);
+        // Smart Favorites is a catalog, not proof of the currently playing track.
+        if (!metadata[0].isEmpty()) values.put(4355L, metadata[0]);
     }
     // OEM channel records have been observed with numeric 0/1 flags.
     // Accept boolean representations too; unknown values are not authorization.
@@ -650,33 +656,46 @@ final class K5Radio {
      * Recheck source ownership on the worker immediately before the OEM command. */
     private final java.util.concurrent.ExecutorService fmCommands =
             java.util.concurrent.Executors.newSingleThreadExecutor();
-    boolean seekFm(final boolean up) {
+    synchronized boolean seekFm(final boolean up) {
         if (!enabled() || !CpClimate.sessionActive || !fmActive) {
             log.log("[radio] seek refused: FM not active"); return false;
         }
         final long generation = CpClimate.sessionGeneration;
+        final long request = tuneRequest.incrementAndGet();
+        final long station = stationRequest.incrementAndGet();
+        sourceRequest.clear();
+        log.log("[radio] FM seek queued direction="+(up?"up":"down")+" request="+request);
         fmCommands.execute(new Runnable() {
             public void run() {
-                if (!probeActive(generation)) return;
+                if (!probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) {
+                    log.log("[radio] stale FM seek discarded request="+request); return;
+                }
                 try {
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
-                    if (!probeActive(generation)) return;
+                    if (!probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
                     Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
-                    if (tuner == null || !probeActive(generation)) return;
+                    if (tuner == null || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
                     java.lang.reflect.Method seek = Class.forName(RADIO_IFACE).getMethod(up ? "seekUp" : "seekDown");
-                    if (seek.getReturnType() != void.class) return;
+                    if (seek.getReturnType() != void.class) {
+                        log.log("[radio] FM seek withheld: unexpected return type="+seek.getReturnType().getName());
+                        return;
+                    }
                     // Recheck ownership after resolving the tuner, just as for direct tuning.
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38
-                            || !probeActive(generation)) return;
+                            || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
                     seek.invoke(tuner);
                     log.log("[radio] native FM " + (up ? "seekUp" : "seekDown") + " dispatched; awaiting frequency feedback");
                 } catch (Throwable t) { log.log("[radio] FM seek failed: " + t.getClass().getSimpleName()); }
             }
         });
         return true;
+    }
+
+    static boolean currentRadioRequest(long request,long station,long activeRequest,long activeStation) {
+        return request==activeRequest && station==activeStation;
     }
 
     /** US FM: odd 200 kHz channels, OEM frequency in 10 kHz units.

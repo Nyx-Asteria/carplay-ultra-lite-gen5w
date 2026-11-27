@@ -12,6 +12,35 @@ final class ProjectionLogCapture extends Thread {
     private static final Pattern SETUP=Pattern.compile("(?i)stream type\\s*[:=]\\s*(\\d{1,5})");
     private static final Pattern NATIVE=Pattern.compile("(?i)theme stream audit: native path type (\\d{1,5})");
     private static final Pattern SCREEN=Pattern.compile("(?i)theme screen SETUP type (\\d{1,5})");
+    private static final String[] FEATURES={"vehicleStateProtocol","altScreen","viewAreas","uiSync","iAPChannel","videoPlayback","hevc"};
+    private static final Pattern OFFER=Pattern.compile("SETUP: the phone offers vehicleStateProtocol ([01]), altScreen ([01]), viewAreas ([01]), uiSync ([01]), iAPChannel ([01])(?:, videoPlayback ([01]), hevc ([01]))? \\(Ultra experiment (?:on|off), iAPChannel experiment (?:on|off), uiSync experiment (?:on|off)\\)");
+    private static final Pattern ENABLED=Pattern.compile("SETUP reply has enabledFeatures \\[([^\\]\\r\\n]{1,160})\\]");
+    static String featureEvent(String body) {
+        Matcher offer=OFFER.matcher(body);
+        if(offer.find()){
+            StringBuilder b=new StringBuilder("[projection-theme] offered");
+            for(int i=0;i<FEATURES.length;i++)b.append(' ').append(FEATURES[i]).append('=').append(offer.group(i+1)==null?"unknown":offer.group(i+1));
+            return b.toString();
+        }
+        Matcher enabled=ENABLED.matcher(body);
+        if(enabled.find()){
+            java.util.Set<String> names=new java.util.HashSet<String>();
+            for(String name:enabled.group(1).split(", *")) {
+                if(!java.util.Arrays.asList(FEATURES).contains(name))return "[projection-theme] enabled features unrecognized";
+                names.add(name);
+            }
+            StringBuilder b=new StringBuilder("[projection-theme] enabled");
+            for(String name:FEATURES)b.append(' ').append(name).append('=').append(names.contains(name)?1:0);
+            return b.toString();
+        }
+        if(body.contains("SETUP independent uiSync enabled; stock features preserved, VSP not offered"))
+            return "[projection-theme] independent uiSync enabled; stock features preserved; VSP not offered";
+        if(body.contains("SETUP without vehicleStateProtocol from the phone: reply unchanged"))
+            return "[projection-theme] VSP not offered; reply unchanged";
+        if(body.contains("SETUP reply left stock (test variant)"))
+            return "[projection-theme] reply left stock";
+        return null;
+    }
     ProjectionLogCapture(SessionLogging sink){super("cpul-projection-log");this.sink=sink;setDaemon(true);}
     static String classify(String body) {
         int marker=body.indexOf("CPULCrossProcess");
@@ -35,7 +64,8 @@ final class ProjectionLogCapture extends Thread {
             if(body.contains("Ultra display metadata supplemented"))return "[projection-theme] display metadata supplemented";
             if(body.contains("Ultra display registration"))return "[projection-theme] display registration reported";
             if(body.contains("type 130"))return "[projection-packet] type 130 reported";
-            if(body.contains("SETUP reply has enabledFeatures"))return "[projection] feature negotiation reply";
+            String features=featureEvent(body);if(features!=null)return features;
+            if(body.contains("SETUP reply has enabledFeatures"))return "[projection-theme] enabled features unavailable";
             if(body.contains("videoPlayback")&&body.contains("stream set up"))return "[projection-video] playback stream setup reported";
             if(body.contains("video: answer not sent"))return "[projection-video] native answer send failed";
             if(body.contains("video: answers closed"))return "[projection-video] native answer channel closed";

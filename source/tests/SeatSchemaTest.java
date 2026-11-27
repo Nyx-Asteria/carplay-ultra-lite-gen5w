@@ -19,6 +19,15 @@ public final class SeatSchemaTest {
             check(Arrays.equals(OpackCodec.encode(Integer.valueOf(i)),OpackCodec.encode(Long.valueOf(i))));
             check(Long.valueOf(i).equals(OpackCodec.decode(OpackCodec.encode(Long.valueOf(i)))));
         }
+        for(long i=0;i<=3;i++){
+            check(VehicleState.validFanFeedback(i,i>0));
+            check(!VehicleState.validFanFeedback(i,i==0));
+        }
+        check(!VehicleState.validFanFeedback(4L,true));
+        check(!VehicleState.validFanFeedback(-1L,false));
+        check(!VehicleState.validFanFeedback(null,false));
+        check(!VehicleState.validFanFeedback(1L,null));
+        check(!VehicleState.validFanFeedback("1",true));
         Map<Object,Object> update=new LinkedHashMap<Object,Object>();
         update.put(1042L,3L);update.put(1043L,true);
         String trace=VehicleState.seatNotificationDiagnostic(update);
