@@ -38,6 +38,10 @@ public final class VolumePanelPolicyTest {
         check(!CarAudio.commandOwned(original,original,replacement,1,1,1),"state replaced before observation");
         check(!CarAudio.commandOwned(original,original,original,1,2,2),"generation replaced");
         check(!CarAudio.commandOwned(original,null,original,1,1,1),"readiness revoked");
+        check(CarPlayMedia.sessionCurrent(true,1,1,true),"current media session");
+        check(!CarPlayMedia.sessionCurrent(true,1,2,true),"reused service new generation");
+        check(!CarPlayMedia.sessionCurrent(false,1,1,true),"replaced media session");
+        check(!CarPlayMedia.sessionCurrent(true,1,1,false),"ended media session");
         System.out.println("VolumePanelPolicy: ALL OK");
     }
 }
