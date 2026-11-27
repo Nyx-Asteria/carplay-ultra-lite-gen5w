@@ -111,6 +111,10 @@ final class VsChannel extends Thread {
         }
     }
 
+    static boolean ownsConnection(VehicleState owner,VehicleState active,Socket socket,Socket currentSocket) {
+        return owner!=null && owner==active && socket!=null && socket==currentSocket && !socket.isClosed();
+    }
+
     /** Capture only writers belonging to the expected state. No socket I/O under the state lock. */
     synchronized Writer writerFor(VehicleState owner) {
         return owner != null && writerOwner == owner && writer != null && writer.sock == current ? writer : null;
@@ -138,8 +142,14 @@ final class VsChannel extends Thread {
         if (captured[0]==null && captured[1]==null) return false;
         boolean complete=true;
         for (VehicleState.Out a : answers) {
-            if (!sendCaptured(captured[a.lane],a.message,out)
-                    && !sendCaptured(captured[1-a.lane],a.message,out)) complete=false;
+            int delivered=-1;
+            if (sendCaptured(captured[a.lane],a.message,out)) delivered=a.lane;
+            else if (sendCaptured(captured[1-a.lane],a.message,out)) delivered=1-a.lane;
+            if(delivered<0){
+                complete=false;
+                out.log("VS no session-owned stream left to answer on");
+            }
+            if(a.seatDiagnostic!=null)out.log("[seat-feedback] notification"+a.seatDiagnostic+" requestedLane="+a.lane+" sentLane="+delivered+" socketWrite="+(delivered>=0));
         }
         return complete;
     }
@@ -209,9 +219,10 @@ final class VsChannel extends Thread {
             InputStream in = sock.getInputStream();
             OutputStream os = sock.getOutputStream();
             Writer w = new Writer(sock, os, cipher);
+            final VehicleState owner;
             synchronized (state) {
                 if (current != sock) return;
-                VehicleState owner = startSession();
+                owner = startSession();
                 synchronized (this) {
                     if (current != sock) return;
                     writer = w;
@@ -248,8 +259,13 @@ final class VsChannel extends Thread {
                     if (kind == SYNC) w.send(pack(REPLY, 0, token, new byte[0]));
                     logged++;
                     out.log("[vs-packet] " + SessionLogPolicy.packet("VS" + lane, kind, type, body.length));
-                    VehicleState vs = state[0];
-                    if (kind != REPLY && vs != null) deliver(vs.handle(lane, body));
+                    // Never dispatch an old connection's request to a replacement state.
+                    if (kind != REPLY) {
+                        synchronized (state) {
+                            if (!ownsConnection(owner,state[0],sock,current)) return;
+                        }
+                        deliverOwned(owner,owner.handle(lane,body));
+                    }
                     at += size;
                 }
                 plain.reset();

@@ -18,7 +18,13 @@ public final class VehicleDeliveryOwnershipTest {
         VsChannel.Writer captured=new VsChannel.Writer(new Socket(),original,new ChaChaPoly(key,key));
         check(VsChannel.sendCaptured(captured,new byte[]{1,2,3},log)&&original.size()>0,"captured writer receives payload");
         check(!VsChannel.sendCaptured(null,new byte[]{1},log),"absent fallback rejected");
+        Socket replacement=new Socket();
+        check(VsChannel.ownsConnection(owner,owner,captured.sock,captured.sock),"active connection accepted");
+        check(!VsChannel.ownsConnection(owner,state[0],captured.sock,captured.sock),"replaced session rejected");
+        check(!VsChannel.ownsConnection(owner,owner,captured.sock,replacement),"replaced socket rejected");
         captured.sock.close();
+        check(!VsChannel.ownsConnection(owner,owner,captured.sock,captured.sock),"closed socket rejected");
+        replacement.close();
         System.out.println("VehicleDeliveryOwnershipTest passed");
     }
 }
