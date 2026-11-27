@@ -44,16 +44,52 @@ final class K5Radio {
         return ((Integer)m.invoke(proxy)).intValue();
     }
 
+    // Read the OEM cached scan results, never start a scan or retune.
+    // DL322 automotive.odex: RadioAllBsmFreqInfo.mBsmFreq (int),
+    // mIsBsmValidStaton (boolean). Keep the OEM spelling.
+    private long lastListPoll;
+    private java.util.List<Object> fmItems = java.util.Collections.emptyList();
+    private java.util.List<Object> readFmItems(Object tuner) throws Exception {
+        Object raw = Class.forName(RADIO_IFACE).getMethod("getRadioAllBsmFreqList").invoke(tuner);
+        if (!(raw instanceof java.util.List)) return java.util.Collections.emptyList();
+        Class<?> type = Class.forName("com.hkmc.media.RadioAllBsmFreqInfo");
+        java.lang.reflect.Field freq = type.getDeclaredField("mBsmFreq");
+        java.lang.reflect.Field valid = type.getDeclaredField("mIsBsmValidStaton");
+        freq.setAccessible(true); valid.setAccessible(true);
+        java.util.TreeSet<Long> frequencies = new java.util.TreeSet<Long>();
+        for (Object entry : (java.util.List<?>)raw) {
+            if (type.isInstance(entry) && valid.getBoolean(entry)) {
+                long khz = fmKhz(freq.getInt(entry));
+                if (khz >= 87900 && khz <= 107900 && (khz - 87900) % 200 == 0)
+                    frequencies.add(khz);
+            }
+        }
+        java.util.List<Object> items = new java.util.ArrayList<Object>();
+        for (Long khz : frequencies) {
+            String label = String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0);
+            java.util.Map<String,Object> item = new java.util.LinkedHashMap<String,Object>();
+            item.put("identifier", Long.toString(khz));
+            item.put("mediaItemName", label);
+            item.put("mediaItemShortName", label);
+            item.put("mediaItemType", "fm");
+            item.put("mediaItemCategory", 0L);
+            item.put("frequency", khz);
+            items.add(item);
+        }
+        return items;
+    }
+
     /** Read-only FM state; never change the OEM source merely because CarPlay connects. */
     java.util.Map<Long,Object> refreshFm() {
         java.util.Map<Long,Object> values = new java.util.LinkedHashMap<Long,Object>();
         values.put(4115L, true);
         values.put(4116L, "");
+        values.put(4118L, java.util.Collections.emptyList());
         values.put(4354L, "");
         values.put(4355L, "");
         values.put(4359L, 0L);
         values.put(4117L, ClimateMap.BLANK);
-        if (!enabled() || !CpClimate.sessionActive) { fmActive = false; return values; }
+        if (!enabled() || !CpClimate.sessionActive) { fmActive = false; lastListPoll = 0; fmItems = java.util.Collections.emptyList(); return values; }
         try {
             if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) { fmActive = false; return values; }
             if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
@@ -73,6 +109,21 @@ final class K5Radio {
             // The command path still checks active source ownership before tuning.
             values.put(4115L, !(fmTuner != null && fmAudio != null && khz > 0));
             values.put(4116L, fmActive ? Long.toString(khz) : "");
+            if (fmTuner != null && fmAudio != null && khz > 0) {
+                long now = android.os.SystemClock.elapsedRealtime();
+                if (lastListPoll == 0 || now - lastListPoll >= 10000) {
+                    lastListPoll = now;
+                    try {
+                        java.util.List<Object> next = readFmItems(fmTuner);
+                        if (!next.equals(fmItems)) log.log("[radio] cached OEM FM station list size=" + next.size());
+                        fmItems = next;
+                    } catch (Throwable t) {
+                        fmItems = java.util.Collections.emptyList();
+                        log.log("[radio] station list unavailable: " + t.getClass().getSimpleName());
+                    }
+                }
+                values.put(4118L, fmItems);
+            }
         } catch (Throwable t) { fmActive = false; fmTuner = null; fmAudio = null; }
         return values;
     }
@@ -82,7 +133,9 @@ final class K5Radio {
     private final java.util.concurrent.ExecutorService fmCommands =
             java.util.concurrent.Executors.newSingleThreadExecutor();
     boolean seekFm(final boolean up) {
-        if (!enabled() || !CpClimate.sessionActive || !fmActive) return false;
+        if (!enabled() || !CpClimate.sessionActive || !fmActive) {
+            log.log("[radio] seek refused: FM not active"); return false;
+        }
         final long generation = CpClimate.sessionGeneration;
         fmCommands.execute(new Runnable() {
             public void run() {
@@ -91,16 +144,48 @@ final class K5Radio {
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
-                    Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
-                    if (tuner == null || !probeActive(generation)) return;
-                    java.lang.reflect.Method method = Class.forName(RADIO_IFACE).getMethod(up ? "seekUp" : "seekDown");
-                    if (method.getReturnType() != void.class) return;
-                    method.invoke(tuner);
-                    log.log("[radio] FM seek " + (up ? "up" : "down"));
+                    if (!probeActive(generation)) return;
+                    if (!injectSeek(up)) log.log("[radio] OEM key injection unavailable; seek not sent");
                 } catch (Throwable t) { log.log("[radio] FM seek failed: " + t.getClass().getSimpleName()); }
             }
         });
         return true;
+    }
+
+    /** Use the same OEM key names and physical keyboard selection as Button Mapper.
+     * DiPO must have system UID and INJECT_EVENTS; never bypass a denied permission.
+     * No generic media-key fallback. Called only after fresh tuner ownership checks. */
+    private boolean injectSeek(boolean up) throws Exception {
+        if (android.os.Process.myUid() != 1000 ||
+                context.checkCallingOrSelfPermission("android.permission.INJECT_EVENTS")
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            log.log("[radio] OEM key injection permission unavailable");
+            return false;
+        }
+        String name = up ? "SEEK_UP" : "SEEK_DOWN";
+        int code = android.view.KeyEvent.class.getField("KEYCODE_" + name).getInt(null);
+        if (code <= 0) return false;
+        int device = -1;
+        for (int id : android.view.InputDevice.getDeviceIds()) {
+            android.view.InputDevice d = android.view.InputDevice.getDevice(id);
+            if (d == null || d.isVirtual() ||
+                    (d.getSources() & android.view.InputDevice.SOURCE_KEYBOARD)
+                    != android.view.InputDevice.SOURCE_KEYBOARD) continue;
+            if (d.getName() != null && d.getName().toLowerCase(java.util.Locale.US).contains("daudio")) {
+                device = id; break;
+            }
+        }
+        // Unlike Button Mapper, fail closed if the physical OEM device is not found.
+        if (device < 0) { log.log("[radio] daudio key device unavailable"); return false; }
+        Object im = Class.forName("android.hardware.input.InputManager").getMethod("getInstance").invoke(null);
+        java.lang.reflect.Method inject = im.getClass().getMethod("injectInputEvent", android.view.InputEvent.class, int.class);
+        long t = android.os.SystemClock.uptimeMillis();
+        android.view.KeyEvent down = new android.view.KeyEvent(t,t,0,code,0,0,device,0,0,android.view.InputDevice.SOURCE_KEYBOARD);
+        android.view.KeyEvent release = new android.view.KeyEvent(t,t,1,code,0,0,device,0,0,android.view.InputDevice.SOURCE_KEYBOARD);
+        Object first = inject.invoke(im, down, 0);
+        Object second = inject.invoke(im, release, 0);
+        log.log("[radio] OEM " + name + " code=" + code + " device=" + device + " down=" + first + " up=" + second);
+        return Boolean.TRUE.equals(first) && Boolean.TRUE.equals(second);
     }
 
     /** US FM: odd 200 kHz channels, OEM frequency in 10 kHz units.
@@ -250,6 +335,22 @@ final class K5Radio {
             if (!value.equals(previous.put(key, value))) log.log("[radio-probe] " + key + " raw=" + value);
         }
     }
+    // Inventory exact runtime signatures without invoking unknown getters or registering
+    // unverified listeners. This is only run from the explicit radio diagnostic.
+    private void inventory(String name) {
+        try {
+            Class<?> type = Class.forName(name);
+            java.util.TreeSet<String> signatures = new java.util.TreeSet<String>();
+            for (java.lang.reflect.Method method : type.getMethods()) {
+                String n = method.getName().toLowerCase(java.util.Locale.US);
+                if (n.matches(".*(radio|station|preset|channel|listener|artwork|image|text|title|artist|sis|id3|seek|tune|mode|status|frequency|program).*")) {
+                    signatures.add(method.toGenericString());
+                }
+            }
+            for (String signature : signatures) log.log("[radio-api] " + signature);
+        } catch (Throwable t) { log.log("[radio-api] " + name + ": " + t.getClass().getSimpleName()); }
+    }
+
     private void probeTuner(long generation) {
         if (!probeActive(generation)) return;
         try {
@@ -264,6 +365,14 @@ final class K5Radio {
             java.util.Map<String,String> previous = new java.util.HashMap<String,String>();
             long deadline = android.os.SystemClock.elapsedRealtime() + 120000L;
             log.log("[radio-probe] start: 120 seconds, change stock bands/stations manually");
+            for (String type : new String[]{radio, sxm, modeIface,
+                    "com.hkmc.media.MicomRadioManager", "com.hkmc.media.MicomRadioListener",
+                    "com.hkmc.media.MicomRadioStatus", "com.hkmc.media.MicomRadioPresetData",
+                    "com.hkmc.media.RdsStationInfo", "com.hkmc.media.HDRadioManager",
+                    "com.hkmc.media.HDRadioListener", "com.hkmc.media.sxm65h.Manager"}) {
+                if (!probeActive(generation)) return;
+                inventory(type);
+            }
             while (probeActive(generation) && android.os.SystemClock.elapsedRealtime() < deadline) {
                 try { if (tuner == null) tuner = service(serviceName("RADIO_SERVICE"), radio); }
                 catch (Throwable ignored) {}
