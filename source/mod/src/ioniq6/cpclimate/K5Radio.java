@@ -337,6 +337,9 @@ final class K5Radio {
                     || records.getClass().getComponentType() != type) return;
             java.lang.reflect.Field id = type.getDeclaredField("mChannelID");
             id.setAccessible(true);
+            java.lang.reflect.Field subscribed = type.getDeclaredField("mIsSubscribed");
+            java.lang.reflect.Field skipped = type.getDeclaredField("mIsSkipped");
+            subscribed.setAccessible(true); skipped.setAccessible(true);
             java.util.Set<Integer> known = new java.util.HashSet<Integer>();
             java.util.List<Object> items = new java.util.ArrayList<Object>();
             for (int i = 0; i < Math.min(100, java.lang.reflect.Array.getLength(records)); i++) {
@@ -345,13 +348,19 @@ final class K5Radio {
                 Object raw = id.get(entry);
                 if (!(raw instanceof Number)) continue;
                 int channel = ((Number)raw).intValue();
-                if (channel < 0 || !known.add(channel)) continue;
+                if (channel < 0 || !channelFlag(subscribed.get(entry), true)
+                        || !channelFlag(skipped.get(entry), false) || known.contains(channel)) continue;
+                // The DL322 binder exposes isChannelLocked(int): int.
+                // Only an explicit zero permits direct tuning; do not bypass parental locks.
+                if (!sxmUnlocked(sxmTuner, channel)) continue;
+                known.add(channel);
                 String name = channelText(type, entry, "mChannelLongName");
                 if (name.isEmpty()) name = "SiriusXM";
                 java.util.Map<String,Object> item = new java.util.LinkedHashMap<String,Object>();
                 item.put("identifier", Integer.toString(channel));
                 item.put("mediaItemName", name);
                 item.put("mediaItemShortName", name);
+                item.put("mediaItemCategory", 0L);
                 items.add(item);
             }
             sxmItems = items;
@@ -399,6 +408,26 @@ final class K5Radio {
         else if (!sxmName.isEmpty()) values.put(4355L, sxmName);
         if (!sxmArtist.isEmpty()) values.put(4356L, sxmArtist);
     }
+    // OEM channel records have been observed with numeric 0/1 flags.
+    // Accept boolean representations too; unknown values are not authorization.
+    static boolean channelFlag(Object value, boolean expected) {
+        if (value instanceof Boolean) return ((Boolean)value).booleanValue() == expected;
+        if (value instanceof Number) {
+            double n = ((Number)value).doubleValue();
+            return n == (expected ? 1 : 0);
+        }
+        return false;
+    }
+
+    private boolean sxmUnlocked(Object tuner, int channel) {
+        try {
+            if (tuner == null) return false;
+            java.lang.reflect.Method method = Class.forName(SXM_IFACE).getMethod("isChannelLocked", int.class);
+            return method.getReturnType() == int.class
+                    && Integer.valueOf(0).equals(method.invoke(tuner, channel));
+        } catch (Throwable t) { return false; }
+    }
+
     private static String channelText(Class<?> type, Object entry, String name) throws Exception {
         java.lang.reflect.Field field = type.getDeclaredField(name);
         field.setAccessible(true);
@@ -445,7 +474,7 @@ final class K5Radio {
                     if (tuner == null || readInt(audio, CarAudio.IFACE, "getAudioMode") != 4
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 41) return;
                     java.lang.reflect.Method tune = Class.forName(SXM_IFACE).getMethod("tuneDirect", int.class, boolean.class);
-                    if (tune.getReturnType() != int.class || !probeActive(generation)
+                    if (!sxmUnlocked(tuner, channel) || tune.getReturnType() != int.class || !probeActive(generation)
                             || request != tuneRequest.get()) return;
                     Object result = tune.invoke(tuner, channel, false);
                     log.log("[radio-sxm] native tune ID=" + channel + " result=" + result + "; awaiting channel feedback");
