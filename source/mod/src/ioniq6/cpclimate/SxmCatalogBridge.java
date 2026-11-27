@@ -35,25 +35,33 @@ final class SxmCatalogBridge {
                         Object records = p.args[0];
                         if (records == null || Array.getLength(records) > 512) return;
                         ArrayList<Integer> ids = new ArrayList<Integer>();
+                        ArrayList<Integer> excluded = new ArrayList<Integer>();
                         ArrayList<String> names = new ArrayList<String>();
                         for (int i = 0; i < Array.getLength(records); i++) {
                             Object row = Array.get(records, i);
-                            if (!channel.isInstance(row) || !K5Radio.channelFlag(sub.get(row), true) || !K5Radio.channelFlag(skip.get(row), false)) continue;
+                            if (!channel.isInstance(row)) continue;
                             Object raw = id.get(row);
                             if (!(raw instanceof Number) || ((Number)raw).intValue() < 0) continue;
-                            ids.add(((Number)raw).intValue());
+                            int key=((Number)raw).intValue();
+                            if (!K5Radio.channelFlag(sub.get(row), true) || !K5Radio.channelFlag(skip.get(row), false)) {
+                                excluded.add(key);
+                                continue;
+                            }
+                            ids.add(key);
                             Object label = name.get(row);
                             String value = label instanceof String ? (String)label : "";
                             names.add(value.substring(0, Math.min(128, value.length())));
                         }
                         int[] keys = new int[ids.size()];
+                        int[] denied = new int[excluded.size()];
+                        for(int i=0;i<denied.length;i++) denied[i]=excluded.get(i);
                         String[] empty = new String[ids.size()];
                         for (int i = 0; i < keys.length; i++) { keys[i] = ids.get(i); empty[i] = ""; }
                         context.sendBroadcast(new Intent(ACTION).setPackage(CpClimate.DIPO)
                                 .putExtra("received", android.os.SystemClock.elapsedRealtime())
-                                .putExtra("ids", keys).putExtra("names", names.toArray(new String[0]))
+                                .putExtra("ids", keys).putExtra("excluded", denied).putExtra("names", names.toArray(new String[0]))
                                 .putExtra("titles", empty).putExtra("artists", empty), "android.permission.DEVICE_POWER");
-                        diagnostic(m,"[radio-sxm] forwarded decoded eligible catalog count=" + keys.length);
+                        diagnostic(m,"[radio-sxm] forwarded decoded eligible catalog count=" + keys.length + " excluded=" + denied.length);
                     } catch (Throwable t) { diagnostic(m,"[radio-sxm] catalog bridge failed: " + t.getClass().getSimpleName()); }
                 }
             });

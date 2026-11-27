@@ -55,6 +55,14 @@ public final class RadioPolicyTest {
         check(!K5Radio.sxmCatalogCandidate(10,sxmKnown,sxmExcluded),"duplicate channel omitted");
         check(!K5Radio.sxmCatalogCandidate(-1,sxmKnown,sxmExcluded),"invalid channel omitted");
         check(K5Radio.sxmCatalogCandidate(30,sxmKnown,sxmExcluded),"eligible full catalog candidate");
+        check(K5Radio.retainSxmSnapshot(0,0,true),"transient empty catalog retained");
+        check(!K5Radio.retainSxmSnapshot(0,3,true),"explicit all-excluded catalog replaces old catalog");
+        check(!K5Radio.retainSxmSnapshot(1,0,true),"eligible catalog replaces old catalog");
+        check(!K5Radio.retainSxmSnapshot(0,0,false),"no previous catalog to retain");
+        check(K5Radio.sxmTuneEligible(10,1,1,sxmKnown,new int[0]),"known current channel eligible");
+        check(!K5Radio.sxmTuneEligible(10,1,1,sxmKnown,new int[]{10}),"new exclusion invalidates cached authorization");
+        check(!K5Radio.sxmTuneEligible(10,2,1,sxmKnown,null),"stale session authorization");
+        check(!K5Radio.sxmTuneEligible(20,1,1,sxmKnown,null),"unknown channel unauthorized");
         System.out.println("Radio policy regressions passed");
     }
 }

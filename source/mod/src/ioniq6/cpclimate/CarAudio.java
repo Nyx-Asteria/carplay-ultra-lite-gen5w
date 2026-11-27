@@ -156,7 +156,15 @@ final class CarAudio extends Thread {
     /** the session that has been shown the car's levels; the phone's writes count only for it */
     private volatile VehicleState shown;
     private volatile boolean muted;
-    private final LinkedBlockingQueue<long[]> sends = new LinkedBlockingQueue<long[]>(64);
+    private static final class AudioCommand {
+        final VehicleState owner;
+        final long generation;
+        final int index, level, stream;
+        AudioCommand(VehicleState owner,long generation,int index,int level,int stream){
+            this.owner=owner;this.generation=generation;this.index=index;this.level=level;this.stream=stream;
+        }
+    }
+    private final LinkedBlockingQueue<AudioCommand> sends = new LinkedBlockingQueue<AudioCommand>(64);
     private final hmgapi.hook.ModContext mod;
     private final java.util.Set<Long> observed = new java.util.HashSet<Long>();
     private volatile long observedGeneration = -1;
@@ -187,7 +195,14 @@ final class CarAudio extends Thread {
      * any of the values was one of this class's (CarClimate then doesn't report it as unknown).
      */
     boolean active() { return mod.enabled() && mod.settingBoolean("k5_integration", true) && CpClimate.sessionActive; }
-    boolean phoneWrote(Map<Long, Object> written) {
+    static boolean commandOwned(VehicleState owner,VehicleState shown,VehicleState current,long generation,long observed,long activeGeneration){
+        return owner!=null && owner==shown && owner==current && generation==observed && generation==activeGeneration;
+    }
+    private boolean authorized(VehicleState owner,long generation,long iid){
+        return active() && commandOwned(owner,shown,state[0],generation,observedGeneration,CpClimate.sessionGeneration) && hasObserved(iid);
+    }
+    boolean phoneWrote(VehicleState owner,Map<Long, Object> written) {
+        final long generation=CpClimate.sessionGeneration;
         boolean mine = false;
         for (int i = 0; i < LINKS.length; i++) {
             Object v = written.get(LINKS[i][0]);
@@ -195,7 +210,7 @@ final class CarAudio extends Thread {
             mine = true;
             Long pct = OpackCodec.asLong(v);
             if (pct == null || txSet < 0) continue;
-            if (!active() || shown == null || shown != state[0] || observedGeneration != CpClimate.sessionGeneration || !hasObserved(LINKS[i][0])) {
+            if (!authorized(owner,generation,LINKS[i][0])) {
                 out.log("[audio] volume from the phone ignored: the car's level hasn't been shown to it yet");
                 continue;
             }
@@ -203,13 +218,13 @@ final class CarAudio extends Thread {
             synchronized (wanted) {
                 wanted[i] = level;
             }
-            if (!sends.offer(new long[] { i, level, CpClimate.sessionGeneration, i == 0 ? mainStream : LINKS[i][1] })) out.log("[audio] queue full; level dropped");
+            if (!sends.offer(new AudioCommand(owner,generation,i,level,i==0?mainStream:(int)LINKS[i][1]))) out.log("[audio] queue full; level dropped");
         }
         Object m = written.get(VehicleState.MUTE);
         if (m instanceof Boolean) {
             mine = true;
-            if (active() && shown != null && shown == state[0] && observedGeneration == CpClimate.sessionGeneration && hasObserved(VehicleState.MUTE)) {
-                if (!sends.offer(new long[] { -1, (Boolean) m ? 1 : 0, CpClimate.sessionGeneration, -1 })) out.log("[audio] queue full; mute dropped");
+            if (authorized(owner,generation,VehicleState.MUTE)) {
+                if (!sends.offer(new AudioCommand(owner,generation,-1,(Boolean)m?1:0,-1))) out.log("[audio] queue full; mute dropped");
             }
         }
         return mine;
@@ -224,33 +239,35 @@ final class CarAudio extends Thread {
             @Override
             public void run() {
                 while (true) {
-                    long[] s;
+                    AudioCommand s;
                     try {
                         s = sends.take();
                     } catch (InterruptedException e) {
                         return;
                     }
                     try {
-                        if (!active() || s[2] != CpClimate.sessionGeneration || shown == null || shown != state[0]) continue;
-                        if (s[0] < 0) {
-                            if(!hasObserved(VehicleState.MUTE))continue;
-                            call(s[1] == 1 ? txMute : txUnmute);
-                            muted = s[1] == 1;
+                        long iid=s.index<0?VehicleState.MUTE:LINKS[s.index][0];
+                        if (!authorized(s.owner,s.generation,iid)) continue;
+                        if (s.index < 0) {
+                            if(!authorized(s.owner,s.generation,iid))continue;
+                            call(s.level == 1 ? txMute : txUnmute);
+                            muted = s.level == 1;
                             out.log("[audio] " + (muted ? "muted" : "un-muted") + " for the phone");
                             continue;
                         }
                         // a slider being dragged writes many levels: only the newest goes to the car
                         synchronized (wanted) {
-                            if (wanted[(int) s[0]] != s[1]) continue;
+                            if (wanted[(int) s.index] != s.level) continue;
                         }
-                        if(!hasObserved(LINKS[(int)s[0]][0]))continue;
-                        int stream = (int) s[3];
-                        if (s[0] == 0 && stream != mediaStream()) {
+                        if(!hasObserved(LINKS[(int)s.index][0]))continue;
+                        int stream = (int) s.stream;
+                        if (s.index == 0 && stream != mediaStream()) {
                             out.log("[audio] media source changed; stale volume write discarded");
                             continue;
                         }
-                        call(txSet, stream, (int) s[1], 0);
-                        out.log("[audio] stream " + stream + " set to " + s[1] + " for the phone");
+                        if(!authorized(s.owner,s.generation,iid))continue;
+                        call(txSet, stream, s.level, 0);
+                        out.log("[audio] stream " + stream + " set to " + s.level + " for the phone");
                     } catch (Throwable t) {
                         out.log("[audio] not sent: " + t);
                     }
@@ -277,7 +294,8 @@ final class CarAudio extends Thread {
                     if (!woken) wake.wait(PERIOD_MS);
                     woken = false;
                 }
-                VehicleState vs = state[0];
+                VehicleState vs;
+                synchronized (state) { vs=state[0]; }
                 if (!active() || vs == null || !(lanes[0].isOpen() || lanes[1].isOpen())) { shown = null; observedGeneration = -1; boseSample=null; lastBoseGeneration=-1; synchronized (this) { observed.clear(); } sends.clear(); VolumePanel.publishReady(panelContext, false); continue; }
                 long generation = CpClimate.sessionGeneration;
                 Map<Long, Object> fresh = new LinkedHashMap<Long, Object>();
@@ -297,7 +315,14 @@ final class CarAudio extends Thread {
                     out.log("[audio] " + last);
                 }
                 if (!active() || generation != CpClimate.sessionGeneration || vs != state[0]) continue;
-                lanes[1].deliver(vs.fromCar(fresh));
+                if (!lanes[1].deliverOwned(vs,vs.fromCar(fresh)) || !active()
+                        || generation!=CpClimate.sessionGeneration) {
+                    shown=null;
+                    observedGeneration=-1;
+                    synchronized(this){observed.clear();}
+                    VolumePanel.publishReady(panelContext,false);
+                    continue;
+                }
                 synchronized (this) { observed.clear(); observed.addAll(fresh.keySet()); }
                 mainStream = main;
                 observedGeneration = generation;

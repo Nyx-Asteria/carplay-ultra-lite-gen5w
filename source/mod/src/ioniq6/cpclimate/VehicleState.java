@@ -1094,7 +1094,9 @@ final class VehicleState {
         // only a complete consistent pair (otherwise wait for BCM confirmation).
         if (car != null && seatFanImmediateFeedback) {
             for (long[] pair : SEAT_FAN_PAIRS) {
-                if (!changed.containsKey(pair[0]) && !changed.containsKey(pair[1])) continue;
+                // Validate accepted writes even before the phone subscribes:
+                // a later registerRequest reads this same cached state.
+                if (!Long.valueOf(WRITTEN).equals(results.get(pair[0])) && !Long.valueOf(WRITTEN).equals(results.get(pair[1]))) continue;
                 Object level=values.get(pair[0]), power=values.get(pair[1]);
                 if (!validFanFeedback(level,power)) {
                     for (long iid : pair) {
@@ -1103,7 +1105,7 @@ final class VehicleState {
                         else if (seatBefore.containsKey(iid)) values.put(iid,seatBefore.get(iid));
                         else values.remove(iid);
                     }
-                } else {
+                } else if (changed.containsKey(pair[0]) || changed.containsKey(pair[1])) {
                     for (long iid : pair) if (followed.contains(iid)) changed.put(iid,values.get(iid));
                 }
             }
@@ -1127,7 +1129,7 @@ final class VehicleState {
                 Long iid = OpackCodec.asLong(e.getKey());
                 if (iid != null && writable.contains(iid)) audioWrites.put(iid, e.getValue());
             }
-            audio.phoneWrote(audioWrites);
+            audio.phoneWrote(this,audioWrites);
         }
         Car c = car;
         if (c == null) {

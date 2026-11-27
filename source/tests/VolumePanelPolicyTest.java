@@ -22,6 +22,13 @@ public final class VolumePanelPolicyTest {
         check(!CarAudio.boseSampleCurrent(1,1,41,41,1000,11001),"Bose expired sample");
         check(!CarAudio.boseSampleCurrent(1,1,14,14,1100,1000),"Bose future timestamp");
         check(!CarAudio.boseSampleCurrent(1,1,14,14,-1,1000),"Bose missing timestamp");
+        VsChannel.Log log=new VsChannel.Log(){public void log(String m){}};
+        VehicleState original=new VehicleState(log), replacement=new VehicleState(log);
+        check(CarAudio.commandOwned(original,original,original,1,1,1),"current audio owner");
+        check(!CarAudio.commandOwned(original,replacement,replacement,1,1,1),"same-generation replacement");
+        check(!CarAudio.commandOwned(original,original,replacement,1,1,1),"state replaced before observation");
+        check(!CarAudio.commandOwned(original,original,original,1,2,2),"generation replaced");
+        check(!CarAudio.commandOwned(original,null,original,1,1,1),"readiness revoked");
         System.out.println("VolumePanelPolicy: ALL OK");
     }
 }

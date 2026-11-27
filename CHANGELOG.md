@@ -1,5 +1,29 @@
 # Changelog
 
+## K5 1.0.0-rc.10 (unreleased development candidate)
+
+### Climate
+- Preserve explicit seat-level requests across companion power writes; arbitrate heating/ventilation transitions without inactive-mode zero writes cancelling the selected mode.
+- Validate paired ventilation power/level feedback and reconcile requested values with authoritative BCM readings.
+- Preserve full high-ventilation command in the optional four-step combined seat layout.
+- Use a single immutable DATC callback snapshot for climate readings and passenger-temperature correlation; reset it on service reconnect.
+
+### Radio and audio
+- Separate OEM FM scan frequencies from observed fallback stations; retain the last nonempty OEM scan without treating observed stations as a complete scan.
+- Correlate delayed SiriusXM metadata with tuner observations and prevent explicitly excluded channels from reappearing through the full catalog.
+- Correlate read-only Bose availability/setting samples with source, session and elapsed sampling time. No amplifier writes or entitlement changes.
+
+### Projection, themes and vehicle application
+- Associate AirPlay screen borrowing and recovery callbacks with the owning playback generation; isolate recovery from unrelated thread failures. Park enforcement unchanged.
+- Refresh theme preferences under a shared lock; preserve independent display selections and avoid overwriting malformed preference files.
+- Replay authoritative Vehicle page values on session replacement. Capture session-owned writers before sending page updates outside the shared session lock and retry delivery on failure.
+
+### Release preparation
+- Target HMG-API RC10 and Nemesis 1.17.1 on DL322 USA 260507; retain existing API 19 compatibility requirements.
+- Persistent session logs, incremental firmware collection and automated regression coverage support focused RC10 evidence gathering.
+- Companion versions and final source revisions will be recorded after integration; this entry is provisional until the release audit and signed bundle build are complete.
+- No new vehicle verification is claimed. See [RC10 test plan](docs/rc10-testing.md).
+
 ## K5 1.0.0-rc.9 (vehicle testing)
 
 - Persistent categorized session logging, bounded retention, USB export, native capture, cross-process SiriusXM diagnostic capture, session summaries and regression tests.
