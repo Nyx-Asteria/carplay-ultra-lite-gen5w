@@ -32,6 +32,8 @@ final class VideoMessages extends Thread {
     int count, answered;
     /** the uuid of the item the phone queued last (insertPlayQueueItem) */
     Object itemUuid;
+    private long itemGeneration=-1;
+    private long itemStream;
     DatagramSocket answers;
 
     VideoMessages(VsChannel.Log out) {
@@ -134,6 +136,8 @@ final class VideoMessages extends Thread {
 
     /** answers the phone's requests (and remembers its item) */
     void answer(long sid, Map<?, ?> m) {
+        long generation=CpClimate.sessionGeneration;
+        if(itemGeneration!=generation || itemStream!=sid){itemUuid=null;itemGeneration=generation;itemStream=sid;}
         Object type = m.get("type");
         if ("insertPlayQueueItem".equals(type) && m.get("item") instanceof Map) itemUuid = ((Map<?, ?>) m.get("item")).get("uuid");
         Map<String, Object> reply = reply(m, itemUuid);
@@ -161,7 +165,7 @@ final class VideoMessages extends Thread {
                             }
                             @SuppressWarnings("unchecked")
                             Map<String, Object> m = (Map<String, Object>) next[1];
-                            if ((Long)next[2] == CpClimate.sessionGeneration && CpClimate.videoAllowed()) sendNow((Long) next[0], m);
+                            if (answerCurrent((Long)next[2],CpClimate.sessionGeneration,CpClimate.videoAllowed())) sendNow((Long) next[0], m,(Long)next[2]);
                         }
                     }
                 };
@@ -177,11 +181,13 @@ final class VideoMessages extends Thread {
     final java.util.concurrent.LinkedBlockingQueue<Object[]> outbox = new java.util.concurrent.LinkedBlockingQueue<Object[]>(256);
     Thread sender;
 
-    private void sendNow(long sid, Map<String, Object> reply) {
+    static boolean answerCurrent(long generation,long current,boolean allowed){return allowed && generation==current;}
+    private void sendNow(long sid, Map<String, Object> reply,long generation) {
         try {
-            if (!CpClimate.videoAllowed()) return;
+            if (!answerCurrent(generation,CpClimate.sessionGeneration,CpClimate.videoAllowed())) return;
             if (answers == null) answers = new DatagramSocket();
             byte[] d = datagram(sid, reply);
+            if (!answerCurrent(generation,CpClimate.sessionGeneration,CpClimate.videoAllowed())) return;
             answers.send(new DatagramPacket(d, d.length, InetAddress.getByName("127.0.0.1"), OUT_PORT));
             if (++answered <= 10 || answered % 30 == 0) out.log("video: answer " + answered + " (" + reply.get("type") + ", messageID " + reply.get("messageID") + ") to stream " + sid);
         } catch (Exception e) {

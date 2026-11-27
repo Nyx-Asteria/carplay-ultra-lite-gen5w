@@ -42,6 +42,9 @@ public final class VolumePanelPolicyTest {
         check(!CarPlayMedia.sessionCurrent(true,1,2,true),"reused service new generation");
         check(!CarPlayMedia.sessionCurrent(false,1,1,true),"replaced media session");
         check(!CarPlayMedia.sessionCurrent(true,1,1,false),"ended media session");
+        check(VideoMessages.answerCurrent(1,1,true),"current parked video answer");
+        check(!VideoMessages.answerCurrent(1,2,true),"stale video answer");
+        check(!VideoMessages.answerCurrent(1,1,false),"Park lost before answer");
         System.out.println("VolumePanelPolicy: ALL OK");
     }
 }
