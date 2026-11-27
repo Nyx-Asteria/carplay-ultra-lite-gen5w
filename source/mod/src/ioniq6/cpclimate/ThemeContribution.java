@@ -20,7 +20,10 @@ final class ThemeContribution {
             Object service = mod.use(PROVIDER, SERVICE);
             if (service == null) { mod.log("[theme] provider not published"); return false; }
             Class<?> api = Class.forName(API, false, service.getClass().getClassLoader());
-            return api.isInstance(service) && api.getField("API_VERSION").getInt(null) == 3;
+            if (!api.isInstance(service) || api.getField("API_VERSION").getInt(null) != 3) return false;
+            Class<?> theme = Class.forName(API + "$ThemeIdentity", false, api.getClassLoader());
+            ThemeNegotiation.verifyContract(api, theme);
+            return true;
         } catch (Throwable t) { mod.error("[theme] capability probe failed", t); return false; }
     }
 
@@ -33,6 +36,7 @@ final class ThemeContribution {
             Class<?> api = Class.forName(API, false, service.getClass().getClassLoader());
             if (!api.isInstance(service) || api.getField("API_VERSION").getInt(null) != 3) { mod.log("[theme] incompatible shared identity API"); return false; }
             Class<?> theme = Class.forName(API + "$ThemeIdentity", false, api.getClassLoader());
+            ThemeNegotiation.verifyContract(api, theme);
             Object value = theme.getConstructor(String.class, long.class, String.class)
                     .newInstance("44C9FA31EC", 985L, "19.0");
             Method unregister = api.getMethod("removeTheme", String.class);

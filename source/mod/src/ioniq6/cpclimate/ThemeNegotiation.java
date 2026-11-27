@@ -4,6 +4,25 @@ import java.lang.reflect.Method;
 
 /** Generation-consistent, redacted API v3 observations; never a startup gate. */
 final class ThemeNegotiation {
+    /** Check API shape without invoking provider code or gating on native readiness. */
+    static void verifyContract(Class<?> api, Class<?> theme) throws Exception {
+        theme.getConstructor(String.class, long.class, String.class);
+        api.getMethod("registerTheme", String.class, theme, boolean.class);
+        api.getMethod("removeTheme", String.class);
+        Class<?> identity = api.getMethod("identityStatus").getReturnType();
+        Class<?> evidence = api.getMethod("negotiationStatus").getReturnType();
+        requireField(identity, "generation", long.class);
+        if (!identity.getField("readiness").getType().isEnum())
+            throw new NoSuchFieldException("readiness enum");
+        requireField(evidence, "generation", long.class);
+        for (String field : new String[]{"vehicleBuilt","themeBuilt","startRequested","startArmed","startSendCapability","startReceiveCapability"})
+            requireField(evidence, field, boolean.class);
+    }
+
+    private static void requireField(Class<?> type, String name, Class<?> expected) throws Exception {
+        if (type.getField(name).getType() != expected) throw new NoSuchFieldException(name);
+    }
+
     static String sample(Class<?> api, Object service) throws Exception {
         Method identity = api.getMethod("identityStatus");
         Object before = identity.invoke(service);

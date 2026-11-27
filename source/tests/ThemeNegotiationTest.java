@@ -10,7 +10,18 @@ public final class ThemeNegotiationTest {
         public long generation=7;
         public boolean vehicleBuilt=true,themeBuilt=true,startRequested=true,startArmed=true,startSendCapability=true,startReceiveCapability=false;
     }
+    public static final class Theme {
+        public Theme(String id,long version,String protocol){}
+    }
+    public static final class IncompleteProvider {
+        public void registerTheme(String owner,Theme theme,boolean start){}
+        public void removeTheme(String owner){}
+        public Identity identityStatus(){return null;}
+        public Identity negotiationStatus(){return null;}
+    }
     public static final class Provider {
+        public void registerTheme(String owner,Theme theme,boolean start){}
+        public void removeTheme(String owner){}
         int calls;
         long second=7;
         Ready state=Ready.ADVERTISED;
@@ -20,6 +31,11 @@ public final class ThemeNegotiationTest {
     }
     static void check(boolean v){if(!v)throw new AssertionError();}
     public static void main(String[] args)throws Exception{
+        ThemeNegotiation.verifyContract(Provider.class,Theme.class);
+        try {
+            ThemeNegotiation.verifyContract(IncompleteProvider.class,Theme.class);
+            throw new AssertionError("incomplete negotiation contract accepted");
+        } catch(NoSuchFieldException expected){}
         Provider p=new Provider();
         String s=ThemeNegotiation.sample(Provider.class,p);
         check(s.contains("themeBuilt=true") && s.contains("startReceiveCapability=false"));

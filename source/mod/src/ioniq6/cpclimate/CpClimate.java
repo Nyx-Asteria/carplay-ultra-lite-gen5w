@@ -121,9 +121,9 @@ public final class CpClimate extends ModEntry {
         if (!DIPO.equals(app.packageName)) return;
         m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("k5_integration", true));
         if (!targetVerified) return;
-        themePreflight=m.settingBoolean("ultra_theme",true)
+        themePreflight=m.enabled() && m.settingBoolean("ultra_theme",true)
                 && m.settingBoolean("ultra_sidebars",true) && theme.available(m);
-        m.log("[theme] DiPO process preflight="+themePreflight+" (registry availability only)");
+        m.log("[theme] DiPO process preflight="+themePreflight+" (API v3 contract shape only)");
         boolean climate = m.settingBoolean("k5_integration", true);
         boolean any = climate || m.settingBoolean("parked_video", false) || m.settingBoolean("ultra_theme", true);
         if (!any) { m.log("[runtime] all CPUL features off; disable CPUL itself to use standalone PPS CarPlay scaling"); return; }
