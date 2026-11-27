@@ -1,13 +1,27 @@
-name: RC2 signed testing bundle
+name: Signed release bundle
 on:
   push:
     branches: [k5-compatibility]
-    paths: ['.github/workflows/rc2-bundle.yml']
-  workflow_dispatch:
 permissions:
   contents: read
 jobs:
+  gate:
+    if: contains(github.event.head_commit.message, 'rc')
+    runs-on: ubuntu-24.04
+    outputs:
+      release: ${{ steps.title.outputs.release }}
+    steps:
+      - id: title
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          title=$(printf '%s\n' "$MESSAGE" | head -n 1)
+          if printf '%s\n' "$title" | grep -Eqi '(^|[^[:alnum:]])rc([.]?[0-9]+)?([^[:alnum:]]|$)'; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
   package:
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -16,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Open-HMG/HMG-API
-          ref: 939484edfc7cbfe5d9f1f1bc3b321056dadb41a6
+          ref: a1830a83a8ad4bf3377be32e9064c5018947a2f6
           path: .hmgapi
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -28,8 +42,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Nyx-Asteria/HMG-IconDump
-          ref: 2819ccd0029b13721e5f49a61d3a381d8fc489cb
+          ref: 8a1dfaa12d133e9450f517c71a558420f46ad9c5
           path: .collector
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Nyx-Asteria/hmgapi-wireless-cp-aa
+          ref: adbf1a9f69b287cf31836fb3a4684b12f1fe5d82
+          path: .wireless
           persist-credentials: false
       - uses: actions/setup-java@v4
         with:
@@ -42,7 +62,12 @@ jobs:
           (cd .hmgapi && ./build.sh sdk)
           mkdir -p out/sdk
           unzip -q .hmgapi/out/dist/hmgapi-mod-sdk-*.zip -d out/sdk
-      - name: Build and sign four packages
+      - name: Read release version
+        run: |
+          VERSION=$(python3 -c 'import json; print(json.load(open("source/mod/mod.json"))["version"])')
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$'
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Build and sign five packages
         shell: bash
         run: |
           set -euo pipefail
@@ -51,7 +76,7 @@ jobs:
           SDK="$HMGAPI_SDK"
           AJ=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
           D8=$(find "$ANDROID_HOME/build-tools" -name d8 -type f | sort -V | tail -1)
-          KEY="$RUNNER_TEMP/rc2-test.key"
+          KEY="$RUNNER_TEMP/release-test.key"
           java -cp "$SDK/lib/hmgapi-engine.jar" hmgapi.engine.Signing keygen "$KEY"
           trap 'rm -f "$KEY" "$KEY.pub"' EXIT
           mkdir -p out/staging out/park-tests out/tests out/check-classes out/check-dex
@@ -88,6 +113,17 @@ jobs:
           (cd .collector && HMGAPI_MOD_BUILD="$OUT/collector" sh HMG-IconDump/test.sh)
           cp out/collector/firmware-dump.jar out/staging/collector/
           sh "$SDK/bin/mkmodpkg.sh" out/staging/collector "$KEY"
+          # Rebuild the modified provider's native library, never package the upstream prebuilt binary.
+          W="$PWD/.wireless/wireless-carplay-aa"
+          mkdir -p out/wireless-tests
+          javac --release 8 -d out/wireless-tests "$W/src/hmgapi/mods/wireless/api/CarPlayIdentification.java" "$W/src/hmgapi/mods/wireless/IdentityRegistry.java" "$W/src/hmgapi/mods/wireless/StartSessionCodec.java" "$W/native/identity/StartSessionCodecTest.java"
+          java -cp out/wireless-tests hmgapi.mods.wireless.StartSessionCodecTest
+          sh "$W/tools/cpturns/test.sh"
+          sh "$W/tools/aa-text/test.sh"
+          sh "$W/native/identity/build.sh"
+          cp -a "$W" out/staging/wireless-carplay-aa
+          sh "$SDK/bin/build-mod.sh" out/staging/wireless-carplay-aa out/wireless-carplay-aa out/wireless-work
+          HMGAPI_MOD_BUILD="$PWD/out/wireless-carplay-aa" sh "$SDK/bin/mkmodpkg.sh" out/staging/wireless-carplay-aa "$KEY"
           mkdir -p out/release
           for f in out/packages/*.zip; do
             tmp=$(mktemp -d)
@@ -96,12 +132,12 @@ jobs:
             rm -rf "$tmp"
             cp "$f" out/release/
           done
-          test "$(find out/release -name '*.zip' | wc -l)" -eq 4
-          cp docs/rc2-testing.md out/release/TESTING.md
-          (cd out/release && sha256sum *.zip > SHA256SUMS.txt && zip -q CarPlay-Ultra-Lite-K5-1.0.0-rc.2-testing-bundle.zip *.zip TESTING.md SHA256SUMS.txt)
+          test "$(find out/release -name '*.zip' | wc -l)" -eq 5
+          cp "docs/rc${VERSION##*.}-testing.md" out/release/TESTING.md
+          (cd out/release && sha256sum *.zip > SHA256SUMS.txt && zip -q CarPlay-Ultra-Lite-K5-$VERSION-testing-bundle.zip *.zip TESTING.md SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
-          name: rc2-signed-packages
+          name: signed-packages
           path: out/release/
   publish:
     needs: package
@@ -111,12 +147,16 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: rc2-signed-packages
+          name: signed-packages
           path: release
-      - name: Publish verified test prerelease
+      - name: Publish verified release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TARGET: ${{ github.sha }}
         run: |
-          gh release create v1.0.0-rc.2 release/*.zip release/SHA256SUMS.txt --target "$TARGET" --prerelease --title "CarPlay Ultra-Lite K5 1.0.0-rc.2" --notes-file release/TESTING.md
+          set -euo pipefail
+          bundle=$(basename "$(find release -name 'CarPlay-Ultra-Lite-K5-*-testing-bundle.zip' -print -quit)")
+          VERSION=${bundle#CarPlay-Ultra-Lite-K5-}
+          VERSION=${VERSION%-testing-bundle.zip}
+          gh release create "v$VERSION" release/*.zip release/SHA256SUMS.txt --target "$TARGET" --title "CarPlay Ultra-Lite K5 $VERSION" --notes-file release/TESTING.md

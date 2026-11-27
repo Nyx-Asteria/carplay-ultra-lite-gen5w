@@ -107,7 +107,8 @@ public class ClimateMapTest {
         check("a ventilating seat shows no heating (state 4 read on the car 2026-11-09)", Long.valueOf(0).equals(ClimateMap.toCarPlay(r).get(ClimateMap.DRIVER_SEAT_LEVEL)));
         check("nothing read: nothing told", ClimateMap.toCarPlay(new ClimateMap.Reading()).isEmpty());
 
-        // K5 front seats: combined heating and ventilation, no rear or wheel services.
+        // K5 front seats: combined heating and ventilation, wheel capability absent.
+        VehicleState.wheelHeater = false;
         ClimateMap.extras = true;
         VehicleState.coolingLayout = true;
         VehicleState.coolingMin = -3;
@@ -137,6 +138,18 @@ public class ClimateMapTest {
                 ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_LEVEL}) {
             check("K5 unsupported write ignored " + iid, ClimateMap.commands(one(iid, 2L), v, 2).isEmpty());
         }
+        VehicleState.wheelHeater = true;
+        r = new ClimateMap.Reading();
+        check("K5 wheel unknown feedback omitted", !ClimateMap.toCarPlay(r).containsKey(ClimateMap.WHEEL_LEVEL));
+        for (int level = 0; level <= 1; level++) {
+            r.wheel = level;
+            v = ClimateMap.toCarPlay(r);
+            check("K5 wheel feedback " + level, Long.valueOf(level).equals(v.get(ClimateMap.WHEEL_LEVEL)));
+            List<ClimateMap.Command> wheel = ClimateMap.commands(one(ClimateMap.WHEEL_LEVEL, Long.valueOf(level)), v, 2);
+            check("K5 wheel command " + level, wheel.size() == 1 && wheel.get(0).kind == ClimateMap.WHEEL && wheel.get(0).a == level);
+        }
+        check("K5 wheel rejects nonbinary level", ClimateMap.commands(one(ClimateMap.WHEEL_LEVEL, 2L), v, 2).isEmpty());
+        VehicleState.wheelHeater = false;
         ClimateMap.extras = false;
 
         // write side: the commands tested on the car

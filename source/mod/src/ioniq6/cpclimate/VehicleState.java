@@ -300,7 +300,7 @@ final class VehicleState {
      */
     static volatile boolean twoRear;
     /** test switch (setting wheel_heater): false leaves the steering wheel heater out (Climate drew it over the vent position button) */
-    static volatile boolean wheelHeater = true;
+    static volatile boolean wheelHeater = false; // opt in only after OEM capability detection
     /**
      * setting rear_zone (layout B/C): a rear Temperature service (seat_2ndRow, iids 576-580). The Climate app makes one
      * zone card per Temperature service, so without it the rear seats' heat has nowhere to show. Read-only: the car
