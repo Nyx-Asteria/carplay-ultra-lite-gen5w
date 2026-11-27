@@ -549,6 +549,17 @@ static int add_alt_display(CF info, int themed) {
             return 0;
         }
     }
+    /* Do not create duplicate theme identities when another display already
+     * owns either reserved ID. The first display may already be Center_Display. */
+    if (themed) for (CFIndex i = 0; i < n; i++) {
+        CF d = at(displays, i);
+        CF u = is(d, T_CFDictionaryGetTypeID) ? get(d, &K_uuid) : 0;
+        if (is(u, T_CFStringGetTypeID) &&
+            (equal(u, &K_clusterId) || (i != 0 && equal(u, &K_centerId)))) {
+            LOG("cp-climate: Ultra theme registration skipped: reserved display identity collision\n");
+            return 0;
+        }
+    }
     CF first = at(displays, 0);
     if (themed && (!is(first, T_CFDictionaryGetTypeID) || !is(get(first, &K_uuid), T_CFStringGetTypeID))) {
         LOG("cp-climate: Ultra theme registration skipped: missing valid center identity\n");

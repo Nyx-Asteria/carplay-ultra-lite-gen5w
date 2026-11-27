@@ -558,6 +558,23 @@ int main(void) {
               && !strcmp(s_of(g(si, "hidDevices")), "malformed"));
         m_release(si);
         CHECK("malformed HID case releases all objects", live == 0);
+        /* A reserved ID on a different display must not be duplicated. */
+        for (int collision = 0; collision < 2; collision++) {
+            si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+            sd = (Arr *)m_new_arr(0, 0, &cb_arr);
+            sm = display("stock-center", 1920, 720, 292, 110);
+            m_append(sd, sm); m_release(sm);
+            sm = display(collision ? "Cluster_Display" : "Center_Display", 800, 480, 102, 61);
+            m_append(sd, sm); m_release(sm);
+            k = str("displays"); m_set(si, k, sd); m_release(k); m_release(sd);
+            cpc_info_hook(si);
+            ds2 = g(si, "displays");
+            CHECK("reserved theme identity collision leaves existing display UUIDs intact",
+                  ds2 && ds2->n == 2 && !strcmp(s_of(g(ds2->v[0], "uuid")), "stock-center")
+                  && !strcmp(s_of(g(ds2->v[1], "uuid")), collision ? "Cluster_Display" : "Center_Display"));
+            m_release(si);
+        }
+        CHECK("reserved identity collision cases release all objects", live == 0);
         f = fopen(DIR "cpc-hid", "w");
         if (f) { fputs("1\n", f); fclose(f); }
         si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
