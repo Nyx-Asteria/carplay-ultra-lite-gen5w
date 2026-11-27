@@ -566,6 +566,29 @@ public class ClimateMapTest {
         }
         VehicleState.seatHeatImmediateFeedback=true;
         VehicleState.seatFanImmediateFeedback=false;
+        // Immediate feedback must never publish a contradictory ventilation pair.
+        VehicleState.seatFanImmediateFeedback=true;
+        for (long[] pair : pairs) {
+            VehicleState ps=new VehicleState(new VsChannel.Log(){public void log(String m){}});
+            final List<ClimateMap.Command> pc=new java.util.ArrayList<ClimateMap.Command>();
+            ps.car=new VehicleState.Car(){public void phoneWrote(Map<Long,Object> w,Map<Long,Object> state){
+                pc.addAll(ClimateMap.commands(w,state,2));
+            }};
+            ps.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","registerRequest","transactionID",60L,
+                    "values",java.util.Arrays.asList(pair[0],pair[1]))));
+            Map<Long,Object> sample=new java.util.LinkedHashMap<Long,Object>();
+            sample.put(pair[0],0L);sample.put(pair[1],false);ps.fromCar(sample);
+            List<VehicleState.Out> alone=ps.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest",
+                    "transactionID",61L,"values",VehicleState.dict(pair[0],3L))));
+            check("optimistic incomplete fan pair withheld "+pair[0],alone.size()==1&&VehicleState.validFanFeedback(ps.values.get(pair[0]),ps.values.get(pair[1])));
+            check("withholding feedback does not withhold OEM command "+pair[0],pc.size()==1&&pc.get(0).b==5);
+            sample.put(pair[0],3L);sample.put(pair[1],true);
+            check("BCM still confirms both fan values "+pair[0],ps.fromCar(sample).size()==1&&Long.valueOf(3).equals(ps.values.get(pair[0])));
+            List<VehicleState.Out> off=ps.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest",
+                    "transactionID",62L,"values",VehicleState.dict(pair[1],false))));
+            check("optimistic contradictory off withheld "+pair[0],off.size()==1&&VehicleState.validFanFeedback(ps.values.get(pair[0]),ps.values.get(pair[1])));
+        }
+        VehicleState.seatFanImmediateFeedback=false;
         System.out.println(fails == 0 ? "ALL OK" : fails + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }

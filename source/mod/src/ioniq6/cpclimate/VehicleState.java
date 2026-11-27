@@ -1089,6 +1089,25 @@ final class VehicleState {
             if (immediate && !same(before, v) && followed.contains(iid)) changed.put(iid, v);
             if (frontSeatValue(iid)) out.log("[seat-feedback] write iid=" + iid + " valueType=" + (v == null ? "null" : v.getClass().getSimpleName()) + " immediate=" + immediate + " subscribed=" + followed.contains(iid) + " queued=" + changed.containsKey(iid));
         }
+        // An optimistic SeatFan notification must not expose a contradictory
+        // level/power pair. Keep the request for OEM arbitration, but publish
+        // only a complete consistent pair (otherwise wait for BCM confirmation).
+        if (car != null && seatFanImmediateFeedback) {
+            for (long[] pair : SEAT_FAN_PAIRS) {
+                if (!changed.containsKey(pair[0]) && !changed.containsKey(pair[1])) continue;
+                Object level=values.get(pair[0]), power=values.get(pair[1]);
+                if (!validFanFeedback(level,power)) {
+                    for (long iid : pair) {
+                        changed.remove(iid);
+                        if (actualSeats.containsKey(iid)) values.put(iid,actualSeats.get(iid));
+                        else if (seatBefore.containsKey(iid)) values.put(iid,seatBefore.get(iid));
+                        else values.remove(iid);
+                    }
+                } else {
+                    for (long iid : pair) if (followed.contains(iid)) changed.put(iid,values.get(iid));
+                }
+            }
+        }
         VehiclePage page = vehiclePage;
         if (page != null) {
             Map<Long, Object> pageWrites = new LinkedHashMap<Long, Object>();
