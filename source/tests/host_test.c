@@ -3,6 +3,7 @@
  * end up holding. cc -I native tests/host_test.c native/hooks.c -DVSPI=\"data/vspi.bplist\" */
 #include <stdarg.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
 #include "cpc.h"
@@ -939,6 +940,13 @@ int main(void) {
         f = fopen(DIR "cpc-vs-3.key", "rb"); kn = f ? fread(kf, 1, sizeof kf, f) : 0; if (f) fclose(f);
         CHECK("uiSync stream keys in cpc-vs-3.key (72 bytes)", kn == 72);
         CHECK("uiSync stream: logged as uiSync on port 7135", strstr(lastlog, "uiSync stream 3 set up on port 7135") != 0);
+        unsigned char published[72]; memcpy(published,kf,72);
+        CHECK("UI Sync staging file absent after publication",access(DIR "cpc-vs-3.key.tmp",F_OK)!=0);
+        CHECK("create deterministic staging obstruction",mkdir(DIR "cpc-vs-3.key.tmp",0700)==0);
+        CHECK("failed key staging leaves stream unclaimed",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==4);
+        f=fopen(DIR "cpc-vs-3.key","rb"); kn=f?fread(kf,1,sizeof kf,f):0; if(f)fclose(f);
+        CHECK("failed staging preserves previously published key record",kn==72 && memcmp(published,kf,72)==0);
+        rmdir(DIR "cpc-vs-3.key.tmp");
         remove(DIR "cpc-uisync");
         ((Arr *)streams)->n--;   /* the later checks count the streams added before this one */
         m_release(streams->v[3]);

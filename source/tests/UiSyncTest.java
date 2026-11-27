@@ -504,7 +504,19 @@ public class UiSyncTest {
         }finally{file.delete();new File(file.getPath()+".tmp").delete();}
     }
 
+    static void keyRecordLength(File dir) throws Exception {
+        File file=File.createTempFile("sync-keys-", ".key",dir);
+        try {
+            for(int size:new int[]{71,72,73}) {
+                FileOutputStream out=new FileOutputStream(file);
+                try {out.write(new byte[size]);}finally{out.close();}
+                check("exact key record length "+size,(IapChannel.readKeys(dir,file.getName())!=null)==(size==72));
+            }
+        }finally{file.delete();}
+    }
+
     public static void main(String[] args) throws Exception {
+        keyRecordLength(new File(args[0]));
         for(int i=0;i<VsData.NAME_IIDS.length;i++) {
             check("navigation logging classification iid="+VsData.NAME_IIDS[i],VehicleState.navigationCharacteristic(VsData.NAME_IIDS[i])==(i<16));
         }

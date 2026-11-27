@@ -653,16 +653,21 @@ static CFIndex add_additions(CF info, CF into, int cluster) {
 #ifdef CPC_HOST_TEST
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdio.h>
 static long sys_open(const char *p, int mode) { return open(p, O_WRONLY | O_CREAT | O_TRUNC, mode); }
 static long sys_open_read(const char *p) { return open(p, O_RDONLY); }
 static long sys_read(long fd, void *b, unsigned long n) { return read((int)fd, b, n); }
 static long sys_write(long fd, const void *b, unsigned long n) { return write((int)fd, b, n); }
 static void sys_close(long fd) { close((int)fd); }
+static long sys_rename(const char *from, const char *to) { return rename(from,to); }
+static void sys_unlink(const char *p) { unlink(p); }
 #else
 long cpc_sys3(long nr, long a, long b, long c) __attribute__((visibility("hidden")));   /* seg.S */
 static long sys_open(const char *p, int mode) { return cpc_sys3(5, (long)p, 01 | 0100 | 01000, mode); }   /* O_WRONLY|O_CREAT|O_TRUNC */
 static long sys_write(long fd, const void *b, unsigned long n) { return cpc_sys3(4, fd, (long)b, (long)n); }
 static void sys_close(long fd) { cpc_sys3(6, fd, 0, 0); }
+static long sys_rename(const char *from, const char *to) { return cpc_sys3(38,(long)from,(long)to,0); }
+static void sys_unlink(const char *p) { cpc_sys3(10,(long)p,0,0); }
 static long sys_open_read(const char *p) { return cpc_sys3(5, (long)p, 0, 0); }   /* O_RDONLY */
 static long sys_read(long fd, void *b, unsigned long n) { return cpc_sys3(3, fd, (long)b, (long)n); }
 #endif
@@ -1101,11 +1106,20 @@ static int save_keys(int lane, unsigned long long seed, const unsigned char *rd,
     unsigned lo = (unsigned)seed, hi = (unsigned)(seed >> 32);   /* 32-bit shifts: no libgcc helpers here */
     for (int i = 0; i < 4; i++) { buf[i] = (unsigned char)(lo >> (8 * i)); buf[4 + i] = (unsigned char)(hi >> (8 * i)); }
     for (int i = 0; i < 32; i++) { buf[8 + i] = rd[i]; buf[40 + i] = wr[i]; }
-    long fd = sys_open(lane == 3 ? DIR "cpc-vs-3.key" : lane == 2 ? DIR "cpc-vs-2.key" : lane ? DIR "cpc-vs-1.key" : DIR "cpc-vs-0.key", 0600);
-    if (fd < 0) return (int)fd;
-    long n = sys_write(fd, buf, sizeof buf);
-    sys_close(fd);
+    /* Keep the established lane files for compatibility. UI Sync uses a
+     * staged file so its reader never observes a partially written key record.
+     * Do not delete the previous published key on a failed staging attempt. */
+    const char *path = lane == 3 ? DIR "cpc-vs-3.key" : lane == 2 ? DIR "cpc-vs-2.key" : lane ? DIR "cpc-vs-1.key" : DIR "cpc-vs-0.key";
+    const char *staged = lane == 3 ? DIR "cpc-vs-3.key.tmp" : path;
+    long fd = sys_open(staged, 0600);
+    long n = fd < 0 ? fd : sys_write(fd, buf, sizeof buf);
+    if (fd >= 0) sys_close(fd);
     for (unsigned i = 0; i < sizeof buf; i++) ((volatile unsigned char *)buf)[i] = 0;
+    if (lane == 3) {
+        if (n == (long)sizeof buf && sys_rename(staged,path) == 0) return 0;
+        sys_unlink(staged);
+        return -1;
+    }
     return n == (long)sizeof buf ? 0 : -1;
 }
 
