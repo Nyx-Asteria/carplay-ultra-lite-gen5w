@@ -65,6 +65,7 @@ final class UiSync {
     private java.io.File preferences;
     private final java.util.Properties saved = new java.util.Properties();
     private final boolean centerEnabled;
+    boolean legacyCenterLayout;
     UiSync() { this(null, false); }
     UiSync(java.io.File preferences, boolean centerEnabled) {
         this.preferences = preferences;
@@ -170,8 +171,8 @@ final class UiSync {
             out.add(message(COMMAND, command(ALLOW_LAYOUT_CHANGE, "allow", Boolean.TRUE), null));
             // LIVI leaves center layouts to the phone; do not force the
             // NoStyle/blue wallpaper layout over the theme's phone-managed UI.
-            Layout selected = "Cluster_Display".equals(panel.get("displayUUID"))
-                    ? selected("Cluster_Display") : null;
+            Layout selected = legacyCenterLayout || "Cluster_Display".equals(panel.get("displayUUID"))
+                    ? selected(String.valueOf(panel.get("displayUUID"))) : null;
             if (selected != null)
                 out.add(message(COMMAND, requestLayout(selected, light ? LIGHT : DARK), null));
             out.add(message(COMMAND, command(GIVE_FOCUS, "tokenID", FOCUS_TOKEN), null));

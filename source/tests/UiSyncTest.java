@@ -172,6 +172,17 @@ public class UiSyncTest {
                     && (k == 0 || Long.valueOf(centerTypes[k]).equals(n(commandOf(centerHeader),"type")));
         }
         check("center handshake permits phone-managed layouts without forcing Wallpaper/blue", centerPhoneManaged);
+        center.reopen();
+        center.legacyCenterLayout = true;
+        panel.put("data", Bplist.encode(map("type", 0L, "ssn", 1L, "psn", 1L, "version", 3L)));
+        center.handle(OpackCodec.encode(panel));
+        panel.put("data", Bplist.encode(map("type", 1L, "ssn", 1L, "psn", 1L, "version", 3L)));
+        List<byte[]> legacy = center.handle(OpackCodec.encode(panel));
+        Map<Object,Object> legacyFrame = (Map<Object,Object>) OpackCodec.decode(legacy.get(2));
+        Map<String,Object> legacyHeader = (Map<String,Object>) Bplist.decode((byte[]) legacyFrame.get("data"));
+        Map<String,Object> legacyData = (Map<String,Object>) commandOf(legacyHeader).get("data");
+        check("RC4 diagnostic restores center Wallpaper request", legacy.size() == 4 && "Center_Display".equals(legacyFrame.get("displayUUID"))
+                && UiSync.CENTER.id.equals(legacyData.get("layoutID")) && "blue".equals(legacyData.get("paletteID")));
         sync.handle(fromPhone(3, UiSync.START_LAYOUT_TRANSITION, map("layoutID", UiSync.layout("DigiRing").id, "paletteID", "green")));
         sync.reopen(); sync.handle(reset);
         Map<String,Object> retained = (Map<String,Object>) commandOf(headerOf(sync.handle(complete).get(2))).get("data");

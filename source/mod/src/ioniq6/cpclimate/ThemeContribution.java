@@ -35,7 +35,7 @@ final class ThemeContribution {
             Object value = theme.getConstructor(String.class, long.class, String.class)
                     .newInstance("44C9FA31EC", 985L, "19.0");
             Method unregister = api.getMethod("removeTheme", String.class);
-            boolean start = true; // part of the consolidated Ultra profile
+            boolean start = mod.settingBoolean("ultra_session_start", true);
             Method registration = null;
             try { registration = api.getMethod("registerTheme", String.class, theme, boolean.class); }
             catch (NoSuchMethodException stock) { /* original v2 provider */ }

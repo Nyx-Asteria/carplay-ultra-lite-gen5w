@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Nyx-Asteria/hmgapi-wireless-cp-aa
-          ref: 49f02ae5476c8fa3d4ae9650108d231a2ff4efcc
+          ref: 0fcc2309fc70fbf1da1293b5f7b1376ddd7153b4
           path: .wireless
           persist-credentials: false
       - uses: actions/checkout@v4
