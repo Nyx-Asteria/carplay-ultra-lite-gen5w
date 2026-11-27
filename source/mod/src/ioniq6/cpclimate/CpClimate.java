@@ -60,6 +60,7 @@ public final class CpClimate extends ModEntry {
         if(logger!=null) logger.log(msg); else if(mod!=null) mod.log(msg);
     }
     static volatile long sessionGeneration;
+    static volatile long sessionStartedElapsed=-1;
     static volatile boolean sessionActive;
     static CarPlayMedia media;
     public static long videoSessionGeneration() { return sessionGeneration; }
@@ -343,6 +344,8 @@ public final class CpClimate extends ModEntry {
         m.hook(app.classLoader, "dipo.carplay.session_started", new MethodHook() {
             @Override
             protected void afterHookedMethod(Param p) {
+                sessionActive = false;
+                sessionStartedElapsed = android.os.SystemClock.elapsedRealtime();
                 sessionGeneration++;
                 sessionActive = true;
                 if(sessionLogging!=null) sessionLogging.start(sessionGeneration);

@@ -97,6 +97,14 @@ final class K5Radio {
     static boolean metadataNewEnough(long khz,long generation,long received,long previousKhz,long previousGeneration,long previousReceived) {
         return khz!=previousKhz || generation!=previousGeneration || received>=previousReceived;
     }
+    static boolean callbackFresh(long received,long now,long sessionStart){
+        return sessionStart>=0 && received>=sessionStart && received<=now && now-received<=2000;
+    }
+    private static boolean callbackCurrent(long generation,long received,long now){
+        return CpClimate.sessionActive && generation==CpClimate.sessionGeneration
+                && callbackFresh(received,now,CpClimate.sessionStartedElapsed)
+                && generation==CpClimate.sessionGeneration && CpClimate.sessionActive;
+    }
     private void listenMetadata() {
         try {
             context.registerReceiver(new android.content.BroadcastReceiver() {
@@ -107,8 +115,7 @@ final class K5Radio {
                     long received = i.getLongExtra("received", -1);
                     long now = android.os.SystemClock.elapsedRealtime();
                     String name = i.getStringExtra("name");
-                    if (khz < 87500 || khz > 108000 || received < 0 || now < received
-                            || now - received > 2000) return;
+                    if (khz < 87500 || khz > 108000 || !callbackCurrent(generation,received,now)) return;
                     if (khz != lastFmFrequency || generation!=CpClimate.sessionGeneration) return;
                     StationName prior=stationName;
                     if (name != null && name.length() <= 256 && (prior==null || metadataNewEnough(khz,generation,received,prior.khz,prior.generation,prior.received))) {
@@ -406,10 +413,10 @@ final class K5Radio {
     private volatile int currentSxmChannel = -1;
     private static final class SxmArt {
         final int channel;
-        final long generation;
+        final long generation, received;
         final byte[] bytes;
-        SxmArt(int channel, long generation, byte[] bytes) {
-            this.channel = channel; this.generation = generation; this.bytes = bytes;
+        SxmArt(int channel, long generation, long received, byte[] bytes) {
+            this.channel = channel; this.generation = generation; this.received=received; this.bytes = bytes;
         }
     }
     private static final class SxmSnapshot {
@@ -426,12 +433,11 @@ final class K5Radio {
                 @Override public void onReceive(Context c, Intent i) {
                     if (!enabled() || !CpClimate.sessionActive || !VehicleState.sxmSchemaTest) return;
                     long received = i.getLongExtra("received", -1);
-                    long age = android.os.SystemClock.elapsedRealtime() - received;
-                    if (age < 0 || age > 2000) return;
+                    long generation=CpClimate.sessionGeneration;
+                    if (!callbackCurrent(generation,received,android.os.SystemClock.elapsedRealtime())) return;
                     if(i.hasExtra("liveChannel")){
                         int id=i.getIntExtra("liveChannel",-1);
-                        long generation=CpClimate.sessionGeneration;
-                        if(sxmActive&&id>=0){
+                        if(sxmActive&&id>=0&&callbackCurrent(generation,received,android.os.SystemClock.elapsedRealtime())){
                             boolean accepted=sxmLive.receive(new SxmLiveMetadata(generation,id,i.getStringExtra("liveName"),i.getStringExtra("liveTitle"),i.getStringExtra("liveArtist")),received,generation,currentSxmChannel);
                             if(!accepted)log.log("[radio-sxm] live callback withheld ID="+id+" observed="+currentSxmChannel);
                             else log.log("[radio-sxm] live callback accepted ID="+id);
@@ -441,8 +447,11 @@ final class K5Radio {
                     if (i.hasExtra("artChannel")) {
                         int id = i.getIntExtra("artChannel", -1);
                         byte[] bytes = i.getByteArrayExtra("artwork");
-                        if (sxmActive && id >= 0 && id == currentSxmChannel && supportedArtwork(bytes))
-                            sxmArt = new SxmArt(id, CpClimate.sessionGeneration, bytes);
+                        SxmArt previous=sxmArt;
+                        if (sxmActive && id >= 0 && id == currentSxmChannel && supportedArtwork(bytes)
+                                && callbackCurrent(generation,received,android.os.SystemClock.elapsedRealtime())
+                                && (previous==null || metadataNewEnough(id,generation,received,previous.channel,previous.generation,previous.received)))
+                            sxmArt = new SxmArt(id, generation, received, bytes);
                         return;
                     }
                     int[] ids = i.getIntArrayExtra("ids");
@@ -456,7 +465,7 @@ final class K5Radio {
                     // A transient empty response must not erase a previously usable catalog.
                     // Live lock/subscription/skip checks still govern every tuning command.
                     SxmSnapshot previous=fullSxm;
-                    long generation=CpClimate.sessionGeneration;
+                    if(!callbackCurrent(generation,received,android.os.SystemClock.elapsedRealtime()))return;
                     if(previous!=null&&!sxmSnapshotNewEnough(generation,received,previous.generation,previous.received)){
                         log.log("[radio-sxm] stale catalog response withheld"); return;
                     }

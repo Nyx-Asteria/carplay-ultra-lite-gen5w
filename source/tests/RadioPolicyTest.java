@@ -33,6 +33,12 @@ public final class RadioPolicyTest {
         oversized[0]=(byte)255; oversized[1]=(byte)216; oversized[2]=(byte)255;
         check(!K5Radio.supportedArtwork(oversized), "reject oversized artwork");
         check(!K5Radio.metadataNewEnough(100300,1,99,100300,1,100),"older callback rejected");
+        check(!K5Radio.callbackFresh(999,1100,1000),"previous-session callback rejected even when recent");
+        check(K5Radio.callbackFresh(1000,1100,1000),"session boundary accepted");
+        check(K5Radio.callbackFresh(1000,3000,1000),"freshness boundary accepted");
+        check(!K5Radio.callbackFresh(1000,3001,1000),"expired callback rejected");
+        check(!K5Radio.callbackFresh(1101,1100,1000),"future callback rejected");
+        check(!K5Radio.callbackFresh(1000,1100,-1),"unknown session start rejected");
         check(K5Radio.metadataNewEnough(100300,1,100,100300,1,100),"same timestamp accepted");
         check(K5Radio.metadataNewEnough(100300,1,101,100300,1,100),"new callback accepted");
         check(K5Radio.metadataNewEnough(100500,1,99,100300,1,100),"new frequency independent");
