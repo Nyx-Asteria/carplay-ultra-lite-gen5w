@@ -235,6 +235,17 @@ final class UiSync {
         return p == null ? lastRx : p;
     }
 
+    /** Catalog labels only: unknown peer strings may contain private data. */
+    private static String layoutLabel(String id) {
+        Layout l=byId(id);
+        return l==null?"unknown":l.name;
+    }
+    private static String paletteLabel(String id,Object palette) {
+        if(palette==null)return "absent";
+        Layout l=byId(id);
+        return l!=null && palette instanceof String && offered(l,(String)palette)?(String)palette:"unknown";
+    }
+
     /** records the phone's layout, palette or appearance choice; true if it asks for focus */
     @SuppressWarnings("unchecked")
     boolean followPhone(Map<String, Object> header) {
@@ -253,11 +264,11 @@ final class UiSync {
         Long type = OpackCodec.asLong(cmd.get("type"));
         if (type == null) return false;
         if (type == START_LAYOUT_TRANSITION && data.get("layoutID") instanceof String) {
-            choices.add("layout " + data.get("layoutID") + (data.get("paletteID") instanceof String ? " palette " + data.get("paletteID") : ""));
+            choices.add("layout " + layoutLabel((String)data.get("layoutID")) + " palette " + paletteLabel((String)data.get("layoutID"),data.get("paletteID")));
             remember(String.valueOf(panel.get("displayUUID")), (String) data.get("layoutID"),
                     data.get("paletteID") instanceof String ? (String) data.get("paletteID") : null, true);
         } else if (type == PALETTE_CHANGE && data.get("layoutIdentifier") instanceof String && data.get("paletteIdentifier") instanceof String) {
-            choices.add("palette " + data.get("paletteIdentifier") + " of layout " + data.get("layoutIdentifier"));
+            choices.add("palette " + paletteLabel((String)data.get("layoutIdentifier"),data.get("paletteIdentifier")) + " of layout " + layoutLabel((String)data.get("layoutIdentifier")));
             remember(String.valueOf(panel.get("displayUUID")), (String) data.get("layoutIdentifier"),
                     (String) data.get("paletteIdentifier"), false);
         } else if (type == APPEARANCE_PREFERENCE_CHANGE) {

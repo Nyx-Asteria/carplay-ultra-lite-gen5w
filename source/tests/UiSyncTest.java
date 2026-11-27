@@ -110,7 +110,15 @@ public class UiSyncTest {
         sync.handle(fromPhone(5, UiSync.APPEARANCE_PREFERENCE_CHANGE, map("preference", 2L)));
         sync.handle(fromPhone(6, UiSync.APPEARANCE_PREFERENCE_CHANGE, map("preference", 7L)));
         check("the phone's choices are recorded: " + sync.choices, sync.choices.equals(Arrays.asList(
-                "layout 0D38B526 palette starlight", "palette racingGreen of layout 0D38B526", "appearance dark")));
+                "layout unknown palette unknown", "palette unknown of layout unknown", "appearance dark")));
+
+        UiSync redacted=new UiSync();
+        redacted.followPhone(map("data",Bplist.encode(UiSync.command(UiSync.START_LAYOUT_TRANSITION,"layoutID","private-id"))));
+        check("unknown layout and missing palette use fixed labels",redacted.choices.equals(Arrays.asList("layout unknown palette absent")));
+        redacted.followPhone(map("data",Bplist.encode(map("type",UiSync.PALETTE_CHANGE,"data",map("layoutIdentifier",UiSync.layout("Modular").id,"paletteIdentifier","private-token")))));
+        check("unknown palette cannot leak peer string",redacted.choices.get(1).equals("palette unknown of layout Modular"));
+        redacted.followPhone(map("data",Bplist.encode(map("type",UiSync.START_LAYOUT_TRANSITION,"data",map("layoutID",UiSync.layout("DigiRing").id,"paletteID","green")))));
+        check("catalog layout and palette remain identifiable",redacted.choices.get(2).equals("layout DigiRing palette green"));
 
         out = sync.handle(fromPhone(7, UiSync.REQUEST_FOCUS, map("tokenID", 4711L)));
         check("a focus request: acked, then the focus goes back",

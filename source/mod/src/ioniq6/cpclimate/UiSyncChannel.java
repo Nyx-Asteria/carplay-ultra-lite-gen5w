@@ -157,7 +157,7 @@ final class UiSyncChannel extends Thread {
         // A reconnect must not reset an older connection's handshake.
         final PanelRouter router=new PanelRouter(preferenceFile(dir,sync.wanted,sync.legacyCenterLayout),sync);
         out.log("SYNC connection opened");
-        int logged = 0, packages = 0;
+        int logged = 0, packages = 0, choiceLogs = 0;
         java.util.Set<String> seenPanels = new java.util.HashSet<String>();
         try {
             InputStream in = sock.getInputStream();
@@ -238,7 +238,15 @@ final class UiSyncChannel extends Thread {
                         if (resetStarted) out.log("[theme-sync] panel=" + lane + " reset session=" + sync.session);
                         if (becameReady) out.log("[theme-sync] panel=" + lane + " initialization replies written session="
                                 + sync.session + " version=" + sync.version + " replies=" + answers.size());
-                        for (String c : picked) out.log("SYNC the phone picked " + c);
+                        for (String c : picked) {
+                            if (choiceLogs < MAX_LOGGED) {
+                                out.log("[theme-sync] panel=" + lane + " phone choice " + c);
+                                choiceLogs++;
+                            } else if (choiceLogs == MAX_LOGGED) {
+                                out.log("[theme-sync] additional phone choice logs suppressed");
+                                choiceLogs++;
+                            }
+                        }
                     }
                     at += size;
                 }
@@ -247,7 +255,7 @@ final class UiSyncChannel extends Thread {
             }
             out.log("SYNC connection closed by the phone after " + packages + " package(s)");
         } catch (Throwable t) {
-            out.log("SYNC connection ended after " + packages + " package(s): " + t);
+            out.log("SYNC connection ended after " + packages + " package(s): " + t.getClass().getSimpleName());
         } finally {
             out.log("[theme-sync] negotiated traffic panels=" + seenPanels);
             VsChannel.close(sock);
