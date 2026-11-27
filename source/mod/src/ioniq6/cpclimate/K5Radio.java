@@ -626,13 +626,25 @@ final class K5Radio {
 
     // DL322 ODEX debug parameter names: tuneDirect(int channelID, boolean override).
     // Never request override; accept only IDs returned by the OEM catalog.
+    static boolean sxmTuneEligible(int channel,long generation,long knownGeneration,java.util.Set<Integer> known,int[] excluded){
+        if(channel<0 || generation!=knownGeneration || !known.contains(channel))return false;
+        if(excluded!=null)for(int denied:excluded)if(denied==channel)return false;
+        return true;
+    }
+
+    private boolean sxmTuneEligible(int channel,long generation){
+        SxmSnapshot latest=fullSxm;
+        return sxmTuneEligible(channel,generation,sxmKnownGeneration,sxmKnownIds,
+                latest!=null&&latest.generation==generation?latest.excluded:null);
+    }
+
     synchronized boolean tuneSxm(String identifier) {
         final int channel;
         try { channel = Integer.parseInt(identifier); }
         catch (NumberFormatException e) { return false; }
         final long generation = CpClimate.sessionGeneration;
         if (!VehicleState.sxmSchemaTest || !sxmAvailable || !probeActive(generation)
-                || sxmKnownGeneration != generation || !sxmKnownIds.contains(channel)) return false;
+                || !sxmTuneEligible(channel,generation)) return false;
         final long station=stationRequest.incrementAndGet();
         long pending=pendingSource(13,generation);
         final long request=pending>=0?pending:tuneRequest.incrementAndGet();
@@ -657,8 +669,7 @@ final class K5Radio {
             public void run() {
                 try {
                     if (!probeActive(generation) || request != tuneRequest.get() || station!=stationRequest.get()
-                            || !VehicleState.sxmSchemaTest || sxmKnownGeneration != generation
-                            || !sxmKnownIds.contains(channel)) return;
+                            || !VehicleState.sxmSchemaTest || !sxmTuneEligible(channel,generation)) return;
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
                     Object tuner = service(serviceName("SXM65H_SERVICE"), SXM_IFACE);
                     if (tuner == null || readInt(audio, CarAudio.IFACE, "getAudioMode") != 4
@@ -672,8 +683,14 @@ final class K5Radio {
                                 + " skipped=" + skipped + " unlocked=" + unlocked);
                         return;
                     }
+                    // Binder reads can take time: recheck current source and catalog authorization.
                     if (tune.getReturnType() != int.class || !probeActive(generation)
-                            || request != tuneRequest.get() || station!=stationRequest.get()) return;
+                            || request != tuneRequest.get() || station!=stationRequest.get()
+                            || !VehicleState.sxmSchemaTest || !sxmTuneEligible(channel,generation)
+                            || readInt(audio,CarAudio.IFACE,"getAudioMode")!=4
+                            || readInt(audio,CarAudio.IFACE,"getCurStreamType")!=41) return;
+                    if (!probeActive(generation) || request!=tuneRequest.get() || station!=stationRequest.get()
+                            || !VehicleState.sxmSchemaTest || !sxmTuneEligible(channel,generation))return;
                     Object result = tune.invoke(tuner, channel, false);
                     log.log("[radio-sxm] native tune ID=" + channel + " result=" + result + "; awaiting channel feedback");
                 } catch (Throwable t) { log.log("[radio-sxm] tune failed: " + t.getClass().getSimpleName()); }
