@@ -71,10 +71,24 @@ final class UiSync {
     UiSync(java.io.File preferences, boolean centerEnabled) {
         this.preferences = preferences;
         this.centerEnabled = centerEnabled;
-        if (preferences != null) try {
-            java.io.FileInputStream in = new java.io.FileInputStream(preferences);
-            try { saved.load(in); } finally { in.close(); }
-        } catch (java.io.IOException ignored) {}
+        synchronized(PREFERENCE_LOCK){ refreshPreferences(); }
+    }
+
+    /** Read a complete snapshot, never merge stale keys from an older panel.
+     * Called only under PREFERENCE_LOCK. Retain the last valid snapshot on I/O failure. */
+    private boolean refreshPreferences(){
+        if(preferences==null)return true;
+        java.util.Properties fresh=new java.util.Properties();
+        try{
+            java.io.FileInputStream in=new java.io.FileInputStream(preferences);
+            try{fresh.load(in);}finally{in.close();}
+        }catch(java.io.FileNotFoundException e){
+            if(preferences.exists())return false;
+        }catch(java.io.IOException e){return false;}
+        catch(IllegalArgumentException e){return false;}
+        saved.clear();
+        saved.putAll(fresh);
+        return true;
     }
     static Layout byId(String id) {
         for (Layout l : THEME_LAYOUTS) if (l.id.equals(id)) return l;
@@ -92,21 +106,22 @@ final class UiSync {
         Layout base = "Cluster_Display".equals(display) ? wanted :
                 centerEnabled && "Center_Display".equals(display) ? CENTER : null;
         if (base == null) return null;
-        Layout remembered = byId(saved.getProperty(display + ".layout"));
-        if (remembered != null && (base == CENTER) == (remembered == CENTER)) base = remembered;
-        String p = saved.getProperty(display + ".palette." + base.id);
-        if (!offered(base, p)) p = offered(base, DEFAULT_PALETTE) ? DEFAULT_PALETTE : base.palette;
-        return new Layout(base.name, base.id, p, base.zone, base.component);
+        synchronized(PREFERENCE_LOCK){
+            refreshPreferences();
+            Layout remembered = byId(saved.getProperty(display + ".layout"));
+            if (remembered != null && (base == CENTER) == (remembered == CENTER)) base = remembered;
+            String p = saved.getProperty(display + ".palette." + base.id);
+            if (!offered(base, p)) p = offered(base, DEFAULT_PALETTE) ? DEFAULT_PALETTE : base.palette;
+            return new Layout(base.name, base.id, p, base.zone, base.component);
+        }
     }
     void remember(String display, String id, String palette, boolean selectLayout) {
         Layout l = byId(id);
         if (l == null || !("Cluster_Display".equals(display) && l != CENTER ||
                 centerEnabled && "Center_Display".equals(display) && l == CENTER)) return;
         synchronized(PREFERENCE_LOCK){
-        if(preferences!=null)try{
-            java.io.FileInputStream in=new java.io.FileInputStream(preferences);
-            try{saved.load(in);}finally{in.close();}
-        }catch(java.io.IOException ignored){}
+        // A failed read must not overwrite preferences owned by another panel.
+        if(!refreshPreferences())return;
         if (selectLayout) saved.setProperty(display + ".layout", id);
         if (offered(l, palette)) saved.setProperty(display + ".palette." + id, palette);
         if (preferences == null) return;

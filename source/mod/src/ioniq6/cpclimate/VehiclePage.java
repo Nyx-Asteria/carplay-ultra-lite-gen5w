@@ -294,6 +294,20 @@ final class VehiclePage {
      * New values from the car, by item id (a line's text, a switch's state); returns them by iid for
      * VehicleState.fromCar, only the ones that changed.
      */
+    /** On a new projection session, resend authoritative values even if the
+     * page cache was updated after the phone's initial description was built. */
+    synchronized Map<Long, Object> update(Map<String, Object> fresh, boolean replay) {
+        Map<Long,Object> changed = update(fresh);
+        if (replay) {
+            for (String id : fresh.keySet()) {
+                Item it = item(id);
+                if (it != null && it.kind != BUTTON && fresh.get(id) != null)
+                    changed.put(it.valueIid(), current.get(id));
+            }
+        }
+        return changed;
+    }
+
     synchronized Map<Long, Object> update(Map<String, Object> fresh) {
         Map<Long, Object> changed = new LinkedHashMap<Long, Object>();
         for (Map.Entry<String, Object> e : fresh.entrySet()) {
