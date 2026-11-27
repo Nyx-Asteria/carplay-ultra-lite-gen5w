@@ -896,7 +896,21 @@ final class VehicleState {
         Set<Long> handledFans = new HashSet<Long>();
         for (long[] pair : SEAT_FAN_PAIRS) {
             Long levelAt = heldSince.get(pair[0]), onAt = heldSince.get(pair[1]);
-            if (levelAt == null && onAt == null) continue;
+            if (levelAt == null && onAt == null) {
+                // Physical button changes must also publish the entire subscribed pair.
+                if (!reported.containsKey(pair[0]) || !reported.containsKey(pair[1])) continue;
+                if (!(reported.get(pair[0]) instanceof Long) || !(reported.get(pair[1]) instanceof Boolean)) continue;
+                if (same(values.get(pair[0]), reported.get(pair[0])) && same(values.get(pair[1]), reported.get(pair[1]))) continue;
+                handledFans.add(pair[0]); handledFans.add(pair[1]);
+                for (long iid : pair) {
+                    Object actual = reported.get(iid);
+                    carSets(iid, actual, changed);
+                    if (followed.contains(iid)) changed.put(iid, actual);
+                }
+                out.log("[seat-fan] physical feedback iid=" + pair[0] + " level=" + reported.get(pair[0])
+                        + " on=" + reported.get(pair[1]) + " subscribed=" + followed.contains(pair[0]) + "/" + followed.contains(pair[1]));
+                continue;
+            }
             handledFans.add(pair[0]); handledFans.add(pair[1]);
             if (!reported.containsKey(pair[0]) || !reported.containsKey(pair[1])) continue;
             long since = Math.max(levelAt == null ? 0L : levelAt, onAt == null ? 0L : onAt);
@@ -958,7 +972,8 @@ final class VehicleState {
             if (iid == null) continue;
             followed.add(iid);
             if (seatFanValue(iid)) out.log("[seat-fan] subscribed iid=" + iid + " cached=" + values.get(iid) + " BCM=" + actualSeats.get(iid));
-            if (values.containsKey(iid)) held.put(iid, values.get(iid));
+            if (car != null && seatFanValue(iid) && actualSeats.containsKey(iid)) held.put(iid, actualSeats.get(iid));
+            else if (values.containsKey(iid)) held.put(iid, values.get(iid));
             else missing.put(iid, NO_VALUE);
             if (names.containsKey(iid)) named.add(names.get(iid));
         }
@@ -976,7 +991,8 @@ final class VehicleState {
             Long iid = OpackCodec.asLong(o);
             if (iid == null) continue;
             if (names.containsKey(iid)) named.add(names.get(iid));
-            if (values.containsKey(iid)) held.put(iid, values.get(iid));
+            if (car != null && seatFanValue(iid) && actualSeats.containsKey(iid)) held.put(iid, actualSeats.get(iid));
+            else if (values.containsKey(iid)) held.put(iid, values.get(iid));
             else missing.put(iid, NO_VALUE);
         }
         out.log("VS phone reads " + join(named));

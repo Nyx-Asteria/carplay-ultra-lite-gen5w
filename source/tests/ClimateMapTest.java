@@ -403,6 +403,22 @@ public class ClimateMapTest {
         fs.car = new VehicleState.Car() { public void phoneWrote(Map<Long,Object> w, Map<Long,Object> state) { } };
         long[][] pairs = {{ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.DRIVER_VENT_ON},
                           {ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON}};
+        // A reused IID would make otherwise valid notifications ambiguous.
+        Map<Long,Object> extraValues = new java.util.TreeMap<Long,Object>();
+        Object expanded = OpackCodec.decode(VehicleState.withExtras(VsData.bytes(VsData.ACCESSORIES), extraValues));
+        java.util.Set<Long> ids = new java.util.HashSet<Long>();
+        boolean unique = true;
+        for (Object accessory : (List<?>) expanded) {
+            Map<?,?> am = (Map<?,?>) accessory;
+            unique &= ids.add(OpackCodec.asLong(am.get("iid")));
+            for (Object service : (List<?>) am.get("services")) {
+                Map<?,?> sm = (Map<?,?>) service;
+                unique &= ids.add(OpackCodec.asLong(sm.get("iid")));
+                for (Object characteristic : (List<?>) sm.get("characteristics"))
+                    unique &= ids.add(OpackCodec.asLong(((Map<?,?>) characteristic).get("iid")));
+            }
+        }
+        check("expanded seat accessory IIDs are globally unique", unique);
         for (long[] pair : pairs) {
             fs.handle(VehicleState.HIGH, VehicleState.wrap(VehicleState.dict("command", "registerRequest",
                     "transactionID", 10L, "values", java.util.Arrays.asList(pair[0], pair[1]))));
@@ -423,6 +439,29 @@ public class ClimateMapTest {
                 check("SeatFan BCM confirms paired level and power " + pair[0] + "=" + level,
                         Long.valueOf(level).equals(nv.get(pair[0])) && Boolean.valueOf(level != 0).equals(nv.get(pair[1])));
                 check("SeatFan repeated confirmed feedback deduplicated", fs.fromCar(actual).isEmpty());
+            }
+            // A physical change must publish both subscribed characteristics, including
+            // the unchanged power flag when the seat changes between nonzero levels.
+            for (long level : new long[]{3,2,1,0}) {
+                actual.put(pair[0], level); actual.put(pair[1], level != 0);
+                List<VehicleState.Out> physical = fs.fromCar(actual);
+                Object notified = physical.size() == 1 ? VehicleState.get(
+                        OpackCodec.decode((byte[]) VehicleState.get(OpackCodec.decode(physical.get(0).message), "pluginData")), "values") : null;
+                Map<?,?> nv = notified instanceof Map ? (Map<?,?>) notified : java.util.Collections.emptyMap();
+                check("SeatFan physical paired feedback " + pair[0] + "=" + level,
+                        Long.valueOf(level).equals(nv.get(pair[0])) && Boolean.valueOf(level != 0).equals(nv.get(pair[1])));
+                check("SeatFan physical feedback deduplicated", fs.fromCar(actual).isEmpty());
+            }
+            fs.handle(VehicleState.HIGH, VehicleState.wrap(VehicleState.dict("command", "writeRequest",
+                    "transactionID", 12L, "values", VehicleState.dict(pair[0], 3L, pair[1], true))));
+            for (String command : new String[]{"readRequest", "registerRequest"}) {
+                List<VehicleState.Out> response = fs.handle(VehicleState.HIGH, VehicleState.wrap(VehicleState.dict(
+                        "command", command, "transactionID", 13L, "values", java.util.Arrays.asList(pair[0], pair[1]))));
+                Object result = response.size() == 1 ? VehicleState.get(OpackCodec.decode((byte[]) VehicleState.get(
+                        OpackCodec.decode(response.get(0).message), "pluginData")), "values") : null;
+                Map<?,?> rv = result instanceof Map ? (Map<?,?>) result : java.util.Collections.emptyMap();
+                check("SeatFan " + command + " returns actual BCM state during pending write " + pair[0],
+                        Long.valueOf(0).equals(rv.get(pair[0])) && Boolean.FALSE.equals(rv.get(pair[1])));
             }
         }
         System.out.println(fails == 0 ? "ALL OK" : fails + " FAILED");
