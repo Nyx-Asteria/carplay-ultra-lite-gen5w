@@ -83,14 +83,30 @@ final class ThemeContribution {
                             Thread.sleep(2000);
                             continue;
                         }
-                        Object service = mod.use(PROVIDER, SERVICE);
+                        Object service;
+                        try {
+                            service = mod.use(PROVIDER, SERVICE);
+                        } catch (RuntimeException e) {
+                            reportLookupFailure(mod);
+                            Thread.sleep(2000);
+                            continue;
+                        } catch (LinkageError e) {
+                            reportLookupFailure(mod);
+                            Thread.sleep(2000);
+                            continue;
+                        }
                         synchronized (ThemeContribution.this) {
                             if (observer != Thread.currentThread()) return;
                             if (service == null) unregister(mod);
                             else if (!ownership.confirmed(service)) register(mod);
                         }
-                        String next = "unavailable";
-                        if (service != null) {
+                        boolean owned;
+                        synchronized (ThemeContribution.this) {
+                            if (observer != Thread.currentThread()) return;
+                            owned = service != null && ownership.confirmed(service);
+                        }
+                        String next = service == null ? "unavailable" : "contribution_unconfirmed";
+                        if (owned) {
                             try {
                                 Class<?> api = Class.forName(API, false, service.getClass().getClassLoader());
                                 if (api.isInstance(service) && api.getField("API_VERSION").getInt(null) == 3)
@@ -98,7 +114,10 @@ final class ThemeContribution {
                             } catch (Exception e) { next = "observation_failed"; }
                             catch (LinkageError e) { next = "observation_failed"; }
                         }
-                        if (service != mod.use(PROVIDER, SERVICE)) { service = null; next = "provider_changed"; }
+                        try {
+                            if (service != mod.use(PROVIDER, SERVICE)) { service = null; next = "provider_changed"; }
+                        } catch (RuntimeException e) { service = null; next = "observation_failed"; }
+                        catch (LinkageError e) { service = null; next = "observation_failed"; }
                         // A late-starting DiPO reader may miss the initial transition.
                         // Periodically emit a fresh observation, never replay old evidence.
                         synchronized (ThemeContribution.this) {
@@ -127,6 +146,16 @@ final class ThemeContribution {
         }, "cpul-theme-evidence");
         observer.setDaemon(true);
         observer.start();
+    }
+
+    private long lastLookupFailure = -10000;
+    private synchronized void reportLookupFailure(ModContext mod) {
+        if (observer != Thread.currentThread()) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (now - lastLookupFailure < 10000) return;
+        lastLookupFailure = now;
+        mod.log("[theme] negotiation observation_failed");
+        android.util.Log.i("CPULCrossProcess", "[theme] negotiation observation_failed");
     }
 
     synchronized void stopObservation() {

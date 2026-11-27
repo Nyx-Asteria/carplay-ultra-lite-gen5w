@@ -31,6 +31,8 @@ public final class ProjectionLogCaptureTest {
         String actual=ProjectionLogCapture.classify("cp-climate: SETUP actual enabledFeatures vehicleStateProtocol=1 altScreen=0 viewAreas=1 uiSync=1 iAPChannel=0 videoPlayback=0 hevc=1 other=2");
         check(actual.equals("[projection-theme] enabled vehicleStateProtocol=1 altScreen=0 viewAreas=1 uiSync=1 iAPChannel=0 videoPlayback=0 hevc=1 other=2"));
         check(ProjectionLogCapture.classify("cp-climate: SETUP actual enabledFeatures vehicleStateProtocol=1 altScreen=0 viewAreas=1 uiSync=1 iAPChannel=0 videoPlayback=0 hevc=1 other=private")==null);
+        check("[theme] negotiation contribution_unconfirmed".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation contribution_unconfirmed")));
+        check(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation contribution_unconfirmed secret=private")==null);
         System.out.println("ProjectionLogCaptureTest passed");
     }
 }
