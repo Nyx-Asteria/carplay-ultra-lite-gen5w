@@ -19,6 +19,8 @@ final class SessionLogging {
     private final java.util.concurrent.ScheduledExecutorService timer=java.util.concurrent.Executors.newSingleThreadScheduledExecutor(new java.util.concurrent.ThreadFactory(){public Thread newThread(Runnable r){Thread t=new Thread(r,"cpul-log-teardown");t.setDaemon(true);return t;}});
     private final PreSessionEvents preSession=new PreSessionEvents();
     private long sessionStartedAt, previousEndedAt;
+    private boolean observedSession;
+    private static final long STARTUP_SNAPSHOT_SECONDS=30;
 
     SessionLogging(ModContext mod, File files, String androidBuild, String environment) {
         this.mod=mod;
@@ -39,6 +41,7 @@ final class SessionLogging {
         policy=new SessionLogPolicy(categories);
         writer=enabled?new SessionLogWriter(new File(files,"cpul-session-logs"),
             usb?new SessionUsbExport(new SessionUsbDestination()):null,categories):null;
+        if(writer!=null)timer.schedule(new Runnable(){public void run(){snapshotStartup();}},STARTUP_SNAPSHOT_SECONDS,java.util.concurrent.TimeUnit.SECONDS);
         if(writer!=null)timer.scheduleWithFixedDelay(new Runnable(){public void run(){reportWriterHealth();}},5,5,java.util.concurrent.TimeUnit.SECONDS);
     }
     private String lastWriterFailure,lastExportFailure;
@@ -55,7 +58,23 @@ final class SessionLogging {
             }
         }catch(RuntimeException ignored){ /* health monitoring must not stop the teardown timer */ }
     }
+    /** One bounded startup-only report if no established session was observed. */
+    private synchronized void snapshotStartup() {
+        if(writer==null||observedSession||generation>=0)return;
+        long now=System.currentTimeMillis();
+        SessionLogPolicy startupPolicy=new SessionLogPolicy(SessionLogPolicy.diagnosticCategories(
+            mod.settingBoolean("diagnostic_detail",true),mod.settingBoolean("diagnostic_packets",false)));
+        writer.start(0,metadata+"; report_kind=startup_only; session_established=false");
+        for(PreSessionEvents.Event e:preSession.snapshot(now,previousEndedAt)) {
+            Category category=category(e.message);
+            Level level=level(e.message,category);
+            String safe=startupPolicy.accept(level,category,e.message,e.at);
+            if(safe!=null)writer.recordAt(0,level,category,safe,e.at);
+        }
+        writer.finishAt(0,"startup snapshot; no session observed at capture time",startupPolicy.suppressed(),now);
+    }
     synchronized void start(long id) {
+        observedSession=true;
         if(generation==id)return;
         if(generation>=0)closeNow(endingReason==null?"superseded by new session":endingReason);
         policy.reset(); generation=id; sessionStartedAt=System.currentTimeMillis();

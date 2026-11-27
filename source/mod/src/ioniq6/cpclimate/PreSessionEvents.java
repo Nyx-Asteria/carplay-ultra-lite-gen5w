@@ -20,6 +20,11 @@ final class PreSessionEvents {
         if(events.size()>=LIMIT)events.removeFirst();
         events.addLast(new Event(SessionLogPolicy.sanitize(message),at));
     }
+    List<Event> snapshot(long now,long previousEnd){
+        List<Event> result=new ArrayList<Event>();
+        for(Event e:events)if(recent(e.at,now,previousEnd))result.add(e);
+        return result;
+    }
     List<Event> drain(long now,long previousEnd){
         List<Event> result=new ArrayList<Event>();
         while(!events.isEmpty()){
