@@ -678,6 +678,17 @@ int main(void) {
               && !strcmp(s_of(echo->v[0]),"vehicleStateProtocol") && !strcmp(s_of(echo->v[1]),"viewAreas"));
         m_release(rep);m_release(limited);
         remove(DIR "cpc-ultra");
+        for(int wide=1;wide<=2;wide++){
+            uf=fopen(DIR "cpc-wide","w");
+            if(uf){fprintf(uf,"%d\n",wide);fclose(uf);}
+            rep=(Dict *)m_new_dict(0,0,&cb_dkey,&cb_dval);
+            cpc_setup_hook(req,rep);
+            echo=g(rep,"enabledFeatures");
+            CHECK("independent widescreen accepts offered ViewAreas without altScreen",echo && echo->n==2
+                  && !strcmp(s_of(echo->v[0]),"vehicleStateProtocol") && !strcmp(s_of(echo->v[1]),"viewAreas"));
+            m_release(rep);
+        }
+        remove(DIR "cpc-wide");
         uf = fopen(DIR "cpc-xenable", "w");
         if (uf) { fputs("1\n", uf); fclose(uf); }
         rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);

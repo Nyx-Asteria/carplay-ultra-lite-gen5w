@@ -986,8 +986,9 @@ __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) 
     if (!features) return;
     append(features, &K_vsp);
     /* Restore upstream-style ViewAreas for themed sidebars, without changing
-     * generic virtual-cluster negotiation or the no-VSP stock fallback. */
-    int enable_areas = ultra == 2 || (ultra && areas);
+     * generic virtual-cluster negotiation or the no-VSP stock fallback.
+     * Independent widescreen mode also accepts an explicit phone offer. */
+    int enable_areas = ultra == 2 || ((ultra || widescreen_areas()) && areas);
     if (enable_areas) append(features, &K_viewAreas);
     if (ultra && alt) append(features, &K_altScreen);
     if (iapx && iap) append(features, &K_iapChannel);

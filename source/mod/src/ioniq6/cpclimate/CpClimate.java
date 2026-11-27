@@ -142,7 +142,7 @@ public final class CpClimate extends ModEntry {
             NativeProfile.writeVersion(m, dir, ultra ? "950" : "off");                             // receiver version 950.7.1 in /info
             NativeProfile.writeFlag(m, dir, "cpc-extras", ultra, "LIVI display extras");
             NativeProfile.writeCluster(m, dir, "full");                            // the instrument panel with its plugin (climate overlay)
-            String wide=NativeProfile.wideMode(m.settingString("ultra_widescreen_areas","0"));
+            String wide=SessionSettings.widescreen(m);
             boolean iapBridge = false, iap = false;               // iAP over CarPlay: an experiment, off
             NativeProfile.writeFlag(m, dir, "cpc-iap", false, "iAPChannel");
             // the theme's vehicle: the Aston Martin DBX unless the vehicle_variant test setting picks another

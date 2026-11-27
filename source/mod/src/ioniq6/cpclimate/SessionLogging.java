@@ -37,6 +37,7 @@ final class SessionLogging {
             if ("diagnostic_detail".equals(key)||"diagnostic_packets".equals(key)||"session_logging".equals(key)||"session_usb_export".equals(key)) continue;
             settings.append("; ").append(key).append('=').append(SessionSettings.read(mod,key));
         }
+        settings.append("; ").append(SessionSettings.WIDE_KEY).append('=').append(SessionSettings.widescreen(mod));
         metadata=settings.toString();
         policy=new SessionLogPolicy(categories);
         writer=enabled?new SessionLogWriter(new File(files,"cpul-session-logs"),

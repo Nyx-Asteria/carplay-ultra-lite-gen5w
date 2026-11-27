@@ -39,6 +39,11 @@ final class SessionSettings {
         true,
         false
     };
+    static final String WIDE_KEY="ultra_widescreen_areas";
+    static final String WIDE_DEFAULT="0";
+    static String widescreen(ModContext mod) {
+        return NativeProfile.wideMode(mod.settingString(WIDE_KEY,WIDE_DEFAULT));
+    }
     static boolean read(ModContext mod, String key) {
         for (int i=0; i<KEYS.length; i++) if (KEYS[i].equals(key)) return mod.settingBoolean(key, DEFAULTS[i]);
         throw new IllegalArgumentException("Unknown session setting: " + key);
