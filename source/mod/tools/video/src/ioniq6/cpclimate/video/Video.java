@@ -65,7 +65,7 @@ public final class Video {
     static Object itemUuid;
     static long streamId = -1;
     // Main-thread ownership, independent of the generation at which a stop was queued.
-    static long playbackGeneration = -1;
+    static volatile long playbackGeneration = -1;
     static boolean shown;
     static String currentUrl;
     static boolean requestedPlaying;
@@ -93,15 +93,18 @@ public final class Video {
                 // the video's own threads (ExoPlayer's, the TLS ones): the video stops, CarPlay keeps running
                 // (2026-11-11: an Error in ExoPlayer:Playback took the whole CarPlay process down)
                 String name = t.getName();
-                if (name != null && (name.startsWith("ExoPlayer") || name.startsWith("cp-climate-")) && t != Looper.getMainLooper().getThread()) {
+                if (name != null && VideoSessionPolicy.videoWorker(name) && t != Looper.getMainLooper().getThread()) {
                     try {
                         log("video: stopped after an error in " + name + ": " + e);
+                        final long failedGeneration = playbackGeneration;
                         if (main != null) main.post(new Runnable() {
                             @Override
                             public void run() {
                                 try {
-                                    send(error(ERROR_INCOMPATIBLE_ASSET));
+                                    if (!VideoSessionPolicy.ownsFailure(failedGeneration, sessionGeneration(), playbackGeneration)) return;
+                                    if (parkAllowed()) send(error(ERROR_INCOMPATIBLE_ASSET));
                                     stop("error in the player");
+                                    closeScreen(failedGeneration);
                                 } catch (Throwable ignored) {
                                 }
                             }
@@ -119,8 +122,9 @@ public final class Video {
         main.postDelayed(new Runnable() { public void run() {
             try {
                 if ((player != null || shown || itemUuid != null) && !parkAllowed()) {
+                    long owner = playbackGeneration;
                     stop("Park feedback stale or session ended");
-                    callCore("ioniq6.cpclimate.VideoUi", "engineClosed", new Class<?>[0]);
+                    closeScreen(owner);
                 }
             } finally { main.postDelayed(this, 250); }
         }}, 250);
@@ -247,11 +251,12 @@ public final class Video {
                 log("[video] stale stop ignored generation="+requestedGeneration+" owner="+playbackGeneration);
                 return;
             }
+            long owner = playbackGeneration >= 0 ? playbackGeneration : requestedGeneration;
             if (player != null || shown || itemUuid != null) {
                 log("[video] stopping: " + reason);
                 stop(reason);
             }
-            callCore("ioniq6.cpclimate.VideoUi", "engineClosed", new Class<?>[0]);
+            closeScreen(owner);
         }});
     }
 
@@ -916,7 +921,12 @@ public final class Video {
         if (window != null) window.setVisibility(View.GONE);
         shown = false;
         log("video: hidden (" + why + ")");
-        callCore("ioniq6.cpclimate.VideoUi", "engineClosed", new Class<?>[0]);
+        closeScreen(playbackGeneration);
+    }
+
+    static void closeScreen(long generation) {
+        if (generation >= 0)
+            callCore("ioniq6.cpclimate.VideoUi", "engineClosed", new Class<?>[]{long.class}, generation);
     }
 
     static void stop(String why) {
