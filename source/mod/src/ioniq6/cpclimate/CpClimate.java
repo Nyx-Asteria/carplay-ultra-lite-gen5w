@@ -5,14 +5,8 @@ import hmgapi.hook.MethodHook;
 import hmgapi.hook.ModContext;
 import hmgapi.hook.ModEntry;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileWriter;
-import java.io.InputStreamReader;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 
 /**
  * CarPlay climate, milestone 1: DiPO tells the iPhone it speaks the vehicle state protocol
@@ -26,13 +20,6 @@ import java.util.Set;
  */
 public final class CpClimate extends ModEntry {
     static final String DIPO = "com.daudio.app.dipo";
-    /** the session's stream SETUPs come in after it has started */
-    static final long COPY_DELAY_MS = 5000;
-    static final int MAX_LINES = 600;
-    /** log entries copied into HMG-API's saved log: the patched SETUP log, ours, DiPO's stream refusals */
-    static final String[] MARKS = { "Setting up session", "cp-climate", "Unsupported stream type",
-            "Command '", "Request accessory UI", "ChangeModeBorrow", "ChangeModeUnborrow", "Modes changed" };
-
     private boolean targetVerified;
     private boolean themePreflight;
     private final ThemeContribution theme = new ThemeContribution();
@@ -67,8 +54,11 @@ public final class CpClimate extends ModEntry {
     }
 
     static ModContext mod;
-    static final Set<String> copied = new HashSet<String>();
-    static boolean busy;
+    private static volatile SessionLogging sessionLogging;
+    static void runtimeLog(String msg) {
+        SessionLogging logger=sessionLogging;
+        if(logger!=null) logger.log(msg); else if(mod!=null) mod.log(msg);
+    }
     static volatile long sessionGeneration;
     static volatile boolean sessionActive;
     static CarPlayMedia media;
@@ -122,6 +112,10 @@ public final class CpClimate extends ModEntry {
         if (!any) { m.log("[runtime] all CPUL features off; disable CPUL itself to use standalone PPS CarPlay scaling"); return; }
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
+        if (sessionLogging == null) {
+            sessionLogging = new SessionLogging(m, dir, property("ro.build.display.id"));
+            new ProjectionLogCapture(sessionLogging).start();
+        }
         ClimateMap.loadSetpoints(new File(dir, "cpc-setpoints"));
         {
             // RC6 verified baseline; themed identity and display IDs are paired.
@@ -162,7 +156,7 @@ public final class CpClimate extends ModEntry {
                     writeNumber(dir, "cpc-video-nosound", sound ? 0 : 1, "video: picture only");
                     m.log("[video-audio] local player audio requested=" + sound + "; stock projection route untouched");
                     writeNumber(dir, "cpc-video-nopicture", 0, "video: picture enabled");
-                    new VideoMessages(new VsChannel.Log() { public void log(String s) { m.log("[video] " + s); } });
+                    new VideoMessages(new VsChannel.Log() { public void log(String s) { runtimeLog("[video] " + s); } });
                     if (!VideoMessages.startEngine(app.context)) {
                         m.log("[video] engine unavailable; feature withheld");
                         extraBits = 0;
@@ -178,7 +172,7 @@ public final class CpClimate extends ModEntry {
             VsChannel.Log log = new VsChannel.Log() {
                 @Override
                 public void log(String msg) {
-                    mod.log(msg);
+                    runtimeLog(msg);
                 }
             };
             VehicleState[] state = new VehicleState[1];
@@ -320,8 +314,8 @@ public final class CpClimate extends ModEntry {
                 if (media != null) media.ended(p.thisObject);
                 VideoMessages.stopEngine("session finalized");
                 sessionGeneration++;
-                m.log("[session] finalized");
-                copyLater(COPY_DELAY_MS);
+                runtimeLog("[session] finalized");
+                if(sessionLogging!=null) sessionLogging.finish("DiPO finalization observed; cause unknown");
             }
         };
         m.hook(app.classLoader, "dipo.carplay.session_started", new MethodHook() {
@@ -329,11 +323,11 @@ public final class CpClimate extends ModEntry {
             protected void afterHookedMethod(Param p) {
                 sessionGeneration++;
                 sessionActive = true;
+                if(sessionLogging!=null) sessionLogging.start(sessionGeneration);
                 if (media != null) media.started(p.thisObject);
-                m.log("[session] started generation=" + sessionGeneration);
+                runtimeLog("[session] started generation=" + sessionGeneration);
                 IapBridge.carPlay = p.thisObject;
                 VideoUi.install(p.thisObject, app.classLoader);
-                copyLater(COPY_DELAY_MS);
             }
         });
         m.hook(app.classLoader, "dipo.carplay.session_finalized", copy);
@@ -365,7 +359,7 @@ public final class CpClimate extends ModEntry {
     }
 
     @Override public void onEnabled(ModContext m, boolean enabled) {
-        if (!enabled) { theme.unregister(m); sessionActive = false; sessionGeneration++; VideoMessages.stopEngine("mod disabled"); }
+        if (!enabled) { theme.unregister(m); sessionActive = false; sessionGeneration++; VideoMessages.stopEngine("mod disabled"); if(sessionLogging!=null) sessionLogging.finish("mod disabled"); }
         m.log("[runtime] enabled=" + enabled + "; restart required to change advertised capabilities");
     }
 
@@ -592,72 +586,4 @@ public final class CpClimate extends ModEntry {
         }
     }
 
-    static synchronized void copyLater(final long delay) {
-        if (busy) return;
-        busy = true;
-        new Thread("cp-climate") {
-            @Override
-            public void run() {
-                try {
-                    Thread.sleep(delay);
-                    copy();
-                } catch (Throwable t) {
-                    mod.error("copying the CarPlay lines", t);
-                } finally {
-                    synchronized (CpClimate.class) { busy = false; }
-                }
-            }
-        }.start();
-    }
-
-    /** DiPO's own TccCarPlay lines: an entry spans several lines that share one header */
-    static synchronized void copy() throws Exception {
-        Process p = Runtime.getRuntime().exec(new String[] { "logcat", "-d", "-v", "threadtime", "-s", "TccCarPlay:*" });
-        List<String> lines = new ArrayList<String>();
-        BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
-        try {
-            String l;
-            while ((l = in.readLine()) != null) lines.add(l);
-        } finally {
-            in.close();
-            p.destroy();
-        }
-        int sent = 0, entries = 0;
-        boolean streams130 = false;
-        for (int i = 0; i < lines.size() && sent < MAX_LINES; i++) {
-            String l = lines.get(i);
-            if (!marked(l)) continue;
-            String head = header(l);
-            if (head == null || !copied.add(head)) continue;
-            entries++;
-            for (int j = i; j < lines.size() && sent < MAX_LINES && head.equals(header(lines.get(j))); j++) {
-                String body = lines.get(j).substring(head.length());
-                if (body.contains("\"type\" : 130") || body.contains("stream type: 130")) streams130 = true;
-                // Do not copy arbitrary SETUP payloads: they can contain device identifiers or session keys.
-                if (body.contains("Unsupported stream type") || body.contains("Modes changed"))
-                    mod.log("[projection] " + (body.contains("Unsupported stream type") ? "unsupported stream reported" : "mode transition reported"));
-                sent++;
-            }
-        }
-        if (entries > 0) {
-            mod.log("CP copied " + entries + " entr" + (entries == 1 ? "y" : "ies") + ", " + sent + " line(s); type 130 streams "
-                    + (streams130 ? "ASKED FOR" : "not seen"));
-        }
-    }
-
-    static boolean marked(String l) {
-        for (String m : MARKS) if (l.contains(m)) return true;
-        return false;
-    }
-
-    /** "11-07 12:44:01.930  1363  1363 " from a threadtime line, or null */
-    static String header(String l) {
-        if (l.length() < 31 || l.charAt(2) != '-' || l.charAt(5) != ' ') return null;
-        int k = 18;
-        for (int f = 0; f < 2; f++) {
-            while (k < l.length() && l.charAt(k) == ' ') k++;
-            while (k < l.length() && Character.isDigit(l.charAt(k))) k++;
-        }
-        return k < l.length() ? l.substring(0, k + 1) : null;
-    }
 }

@@ -157,7 +157,7 @@ final class VsChannel extends Thread {
 
     void serve(Socket sock) {
         String who = String.valueOf(sock.getRemoteSocketAddress());
-        out.log("VS" + lane + " connection from " + who);
+        out.log("VS" + lane + " connection opened");
         int logged = 0;
         try {
             byte[] keys = readKeys();
@@ -204,7 +204,8 @@ final class VsChannel extends Thread {
                     long token = (long) be32(p, at + 20) << 32 | (be32(p, at + 24) & 0xffffffffL);
                     byte[] body = java.util.Arrays.copyOfRange(p, at + HEADER, at + size);
                     if (kind == SYNC) w.send(pack(REPLY, 0, token, new byte[0]));
-                    if (logged++ < MAX_LOGGED) out.log("VS" + lane + " " + tag(kind) + "/" + tag(type) + " " + body.length + " B: " + text(body));
+                    logged++;
+                    out.log("[vs-packet] " + SessionLogPolicy.packet("VS" + lane, kind, type, body.length));
                     VehicleState vs = state[0];
                     if (kind != REPLY && vs != null) deliver(vs.handle(lane, body));
                     at += size;

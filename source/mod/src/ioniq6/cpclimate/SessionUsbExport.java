@@ -13,11 +13,17 @@ final class SessionUsbExport {
     static boolean sessionName(String name) {
         return name.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}_session-[0-9]+_[0-9a-f-]{36}");
     }
-    int pending(File spool) throws Exception {
+    File destinationRoot() throws Exception {
         File usb=destination.find();
-        if(usb==null) return 0;
+        if(usb==null)return null;
         File root=new File(usb,"CPUL-LOGS");
         SessionLogWriter.ensureDir(root);
+        return root;
+    }
+    void exportOne(File source,File root)throws Exception { export(source,root); }
+    int pending(File spool) throws Exception {
+        File root=destinationRoot();
+        if(root==null)return 0;
         File[] files=spool.listFiles();
         if(files==null) return 0;
         Arrays.sort(files);

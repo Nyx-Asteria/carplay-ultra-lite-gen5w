@@ -65,7 +65,7 @@ final class UiSyncChannel extends Thread {
         final UiSync sync = new UiSync(new File(dir, "cpc-theme-preferences.properties"), true);
         sync.wanted = this.sync.wanted;
         sync.legacyCenterLayout = this.sync.legacyCenterLayout;
-        out.log("SYNC connection from " + sock.getRemoteSocketAddress());
+        out.log("SYNC connection opened");
         int logged = 0, packages = 0;
         java.util.Set<String> seenPanels = new java.util.HashSet<String>();
         try {
@@ -121,7 +121,7 @@ final class UiSyncChannel extends Thread {
                                 answers = sync.handle(body);
                             } catch (IllegalArgumentException e) {
                                 answers = java.util.Collections.emptyList();
-                                if (logged++ < MAX_LOGGED) out.log("SYNC unreadable message (" + e.getMessage() + "): " + UiSync.describe(body));
+                                if (logged++ < MAX_LOGGED) out.log("SYNC unreadable message bytes=" + body.length);
                             }
                             picked = new java.util.ArrayList<String>(sync.choices);
                             sync.choices.clear();
@@ -137,10 +137,10 @@ final class UiSyncChannel extends Thread {
                                     out.log("[theme-sync] first message for " + display);
                             }
                         } catch (RuntimeException ignored) {}
-                        if (logged++ < MAX_LOGGED) out.log("SYNC phone: " + UiSync.describe(body));
+                        if (logged++ < MAX_LOGGED) out.log("SYNC phone: bytes=" + body.length);
                         for (byte[] a : answers) {
                             w.send(VsChannel.pack(VsChannel.ASYNC, VsChannel.COMMAND, 0, a));
-                            if (logged++ < MAX_LOGGED) out.log("SYNC car: " + UiSync.describe(a));
+                            if (logged++ < MAX_LOGGED) out.log("SYNC car: bytes=" + a.length);
                         }
                         for (String c : picked) out.log("SYNC the phone picked " + c);
                     }
