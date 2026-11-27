@@ -62,3 +62,5 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 
 - [x] Shared host regression script used by both development and signed bundle; include video session policy and all logging/radio/seat tests. Signed bundle still gated; verify development CI before release.
 - [x] Pin incremental collector 55e8de065f32776ab9eb466207364e0bb66bf29b (collector CI passed); other companion pins remain pending coordination.
+
+- [x] Report supported firmware target, verified startup preflight, Android build, CCNC launcher package presence and exact-file mount evidence for four known LivePatch targets. Mount ownership and actual OEM firmware version are not independently inferred; CI pending.

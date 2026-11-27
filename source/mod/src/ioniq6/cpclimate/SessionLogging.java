@@ -20,10 +20,10 @@ final class SessionLogging {
     private final PreSessionEvents preSession=new PreSessionEvents();
     private long sessionStartedAt, previousEndedAt;
 
-    SessionLogging(ModContext mod, File files, String firmware) {
+    SessionLogging(ModContext mod, File files, String androidBuild, String environment) {
         this.mod=mod;
         EnumSet<Category> categories=EnumSet.noneOf(Category.class);
-        StringBuilder settings=new StringBuilder("android_build=").append(firmware);
+        StringBuilder settings=new StringBuilder("android_build=").append(androidBuild).append("; ").append(environment);
         for(Category c:Category.values()) {
             if(c==Category.CORE)continue;
             String key="diagnostic_"+c.name().toLowerCase(Locale.US);
