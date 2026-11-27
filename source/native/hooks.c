@@ -1063,12 +1063,11 @@ __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stre
      * the native receiver's main-screen routing. */
     if (ui_sync_mode() && (type == STREAM_MAIN_SCREEN || type == STREAM_ALT_SCREEN)) {
         CF u = get(stream, &K_uuid), d = get(stream, &K_displayUUID);
-        const char *us = is(u, T_CFStringGetTypeID)
-            ? FN(T_CFStringGetCStringPtr, const char *(*)(CF, unsigned))(u, UTF8) : 0;
-        const char *ds = is(d, T_CFStringGetTypeID)
-            ? FN(T_CFStringGetCStringPtr, const char *(*)(CF, unsigned))(d, UTF8) : 0;
+        /* Only report known theme display identities, never arbitrary peer UUIDs. */
         LOG("cp-climate: theme screen SETUP type %d uuid=%s displayUUID=%s\n",
-            (int)type, us ? us : "(absent/unavailable)", ds ? ds : "(absent/unavailable)");
+            (int)type,
+            !u ? "absent" : equal(u,&K_centerId) ? "Center_Display" : equal(u,&K_clusterId) ? "Cluster_Display" : "other",
+            !d ? "absent" : equal(d,&K_centerId) ? "Center_Display" : equal(d,&K_clusterId) ? "Cluster_Display" : "other");
     }
     if (type == STREAM_ALT_SCREEN) return ultra_mode() ? alt_stream(reply) : 0;
     if (type != STREAM_DATA) {

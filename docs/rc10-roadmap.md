@@ -48,3 +48,5 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - Do not rewrite active RC10 history; agree migration scope before changing shared branch history.
 
 - [x] AirPlay player-specific listeners and generation-bound audio fallback; CI pending.
+
+- [x] Preserve safe display registration and screen SETUP identities in native/session diagnostics; no arbitrary peer UUIDs (CI pending).
