@@ -2,19 +2,11 @@
   "version": 1,
   "settings": [
     {
-      "key": "climate_test",
+      "key": "k5_integration",
       "type": "toggle",
       "default": true,
-      "title": "Climate integration",
-      "description": "Enable K5 climate display and commands, including both front heated and ventilated seats. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "vehicle_page",
-      "type": "toggle",
-      "default": true,
-      "title": "K5 vehicle information and shortcuts",
-      "description": "Vehicle app readings and installed head-unit app shortcuts. Restart required.",
+      "title": "K5 vehicle integration",
+      "description": "Climate, front seats, Vehicle app, Comfort, media, volume and radio shortcut. Restart required.",
       "apply": "restart"
     },
     {
@@ -26,46 +18,6 @@
       "apply": "restart"
     },
     {
-      "key": "volume_link",
-      "type": "toggle",
-      "default": true,
-      "title": "Volume synchronization",
-      "description": "Synchronize supported CarPlay audio streams with the head unit. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "media_controls",
-      "type": "toggle",
-      "default": true,
-      "title": "Media controls",
-      "description": "Forward explicit play, pause and track commands. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_theme",
-      "type": "toggle",
-      "default": true,
-      "title": "Ultra theme",
-      "description": "Experimental shared CarPlay theme and virtual display profile. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "comfort_thresholds",
-      "type": "toggle",
-      "default": true,
-      "title": "Comfort thresholds",
-      "description": "Edit automatic seat heating and ventilation thresholds in CarPlay when compatible Comfort is installed. Restart required.",
-      "apply": "restart"
-    },
-    {
-      "key": "volume_panel",
-      "type": "toggle",
-      "default": true,
-      "title": "CarPlay volume panel",
-      "description": "Dismiss the native volume popup after stock volume keys while CarPlay is foreground and volume synchronization is ready. Restart required.",
-      "apply": "restart"
-    },
-    {
       "key": "video_audio",
       "type": "toggle",
       "default": false,
@@ -74,11 +26,75 @@
       "apply": "restart"
     },
     {
-      "key": "native_radio",
+      "key": "ultra_theme",
       "type": "toggle",
-      "default": true,
-      "title": "Native radio integration",
-      "description": "Open the installed Kia radio from the CarPlay Vehicle app. Direct tuner controls require a verified OEM interface. Restart required.",
+      "default": false,
+      "title": "Ultra experiments",
+      "description": "Master switch for individually selected Ultra components. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "ultra_identity",
+      "type": "toggle",
+      "default": false,
+      "title": "Ultra: theme identity",
+      "description": "Advertise original theme ID via Wireless shared identity. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "ultra_cluster",
+      "type": "toggle",
+      "default": false,
+      "title": "Ultra: virtual cluster",
+      "description": "Advertise secondary display stream. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "ultra_display_ids",
+      "type": "toggle",
+      "default": false,
+      "title": "Ultra: themed display IDs",
+      "description": "Requires virtual cluster. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "ultra_variant",
+      "type": "toggle",
+      "default": false,
+      "title": "Ultra: DBX vehicle variant",
+      "description": "Advertise theme vehicle variant. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "ultra_ui_sync",
+      "type": "toggle",
+      "default": false,
+      "title": "Ultra: UI synchronization",
+      "description": "Negotiate layout and palette channel. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "ultra_features",
+      "type": "toggle",
+      "default": false,
+      "title": "Ultra: extended features",
+      "description": "Advertise non-audio LIVI features. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "ultra_full_features",
+      "type": "toggle",
+      "default": false,
+      "title": "Ultra: original feature mask",
+      "description": "Requires extended features; experimental original upstream mask. Restart required.",
+      "apply": "restart"
+    },
+    {
+      "key": "ultra_enhanced_ui",
+      "type": "toggle",
+      "default": false,
+      "title": "Ultra: enhanced RequestCarUI",
+      "description": "Advertise enhanced UI capability. Restart required.",
       "apply": "restart"
     }
   ]

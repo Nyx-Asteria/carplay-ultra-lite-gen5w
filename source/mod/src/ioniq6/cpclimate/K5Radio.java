@@ -27,7 +27,7 @@ final class K5Radio {
         launch=found;
         log.log("[radio] stock radio launch available="+(launch!=null)+"; direct tuner unavailable pending OEM interface evidence");
     }
-    boolean enabled() { return mod.enabled() && mod.settingBoolean("native_radio",true); }
+    boolean enabled() { return mod.enabled() && mod.settingBoolean("k5_integration", true); }
     boolean available() { return launch!=null; }
     void describe(VehiclePage page) {
         page.sectionName("radio","Radio");

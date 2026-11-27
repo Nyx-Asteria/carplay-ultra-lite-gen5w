@@ -33,7 +33,7 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
         setDaemon(true);
         this.context = context; this.mod = mod; this.state = state; this.lanes = lanes; this.log = log;
         VehiclePage.tiles = "dict";
-        if (mod.settingBoolean("vehicle_page", true)) {
+        if (mod.settingBoolean("k5_integration", true)) {
         page.sectionName("Vehicle", "Kia K5");
         page.line("Vehicle", "range", "Fuel range", "fuelpump");
         page.line("Vehicle", "odometer", "Odometer", "road.lanes");
@@ -74,7 +74,7 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
         }});
     }
     public void switched(String id, boolean value) { }
-    boolean enabled() { return mod.enabled() && mod.settingBoolean("vehicle_page", true); }
+    boolean enabled() { return mod.enabled() && mod.settingBoolean("k5_integration", true); }
     void lookup() {
         try {
             ClassLoader cl = new dalvik.system.PathClassLoader("/system/framework/com.hkmc.ext.hcan.jar", context.getClassLoader());

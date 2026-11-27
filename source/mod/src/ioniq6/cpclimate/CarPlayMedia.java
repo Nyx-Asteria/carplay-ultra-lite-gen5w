@@ -73,7 +73,7 @@ final class CarPlayMedia implements VehicleState.Controls {
     private void press(final Session session, final String name) {
         final Object button;
         synchronized (this) {
-            if (current != session || !mod.enabled() || !mod.settingBoolean("media_controls", true) || !CpClimate.sessionActive) return;
+            if (current != session || !mod.enabled() || !mod.settingBoolean("k5_integration", true) || !CpClimate.sessionActive) return;
         }
         try {
             button = session.button(name);
@@ -103,7 +103,7 @@ final class CarPlayMedia implements VehicleState.Controls {
     }
 
     @Override public void pressed(String name, Object value) {
-        if (!mod.enabled() || !mod.settingBoolean("media_controls", true) || !CpClimate.sessionActive) return;
+        if (!mod.enabled() || !mod.settingBoolean("k5_integration", true) || !CpClimate.sessionActive) return;
         final String button = "play".equals(name) ? "Play" : "pause".equals(name) ? "Pause"
                 : "nextItem".equals(name) ? "ScanNextTrack" : "previousItem".equals(name) ? "ScanPreviousTrack" : null;
         if (button == null) return;

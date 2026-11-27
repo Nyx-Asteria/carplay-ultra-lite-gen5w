@@ -110,7 +110,7 @@ final class CarAudio extends Thread {
      * What the phone wrote, from VehicleState's thread: volume levels and mute are queued for the car. True if
      * any of the values was one of this class's (CarClimate then doesn't report it as unknown).
      */
-    boolean active() { return mod.enabled() && mod.settingBoolean("volume_link", true) && CpClimate.sessionActive; }
+    boolean active() { return mod.enabled() && mod.settingBoolean("k5_integration", true) && CpClimate.sessionActive; }
     boolean phoneWrote(Map<Long, Object> written) {
         boolean mine = false;
         for (int i = 0; i < LINKS.length; i++) {
