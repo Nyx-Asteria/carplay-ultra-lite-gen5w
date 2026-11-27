@@ -2,6 +2,9 @@ package ioniq6.cpclimate;
 public final class SeatCommandTraceTest {
     static void has(String s,String part){if(s==null||!s.contains(part))throw new AssertionError(s+" missing "+part);}
     public static void main(String[] args){
+        if (!SeatCommandTrace.sessionMatches(1,1,true)
+                || SeatCommandTrace.sessionMatches(1,2,true)
+                || SeatCommandTrace.sessionMatches(1,1,false)) throw new AssertionError("session guard");
         SeatCommandTrace t=new SeatCommandTrace();
         has(t.accepted(0,7,8,1,100),"#1 driver");
         if(t.observe(0,8,1,200)!=null)throw new AssertionError("premature result");

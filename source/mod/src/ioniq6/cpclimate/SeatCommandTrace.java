@@ -3,6 +3,7 @@ package ioniq6.cpclimate;
 /** Observational only. A matching BCM sample is evidence, never a retry or a phone acknowledgement. */
 final class SeatCommandTrace {
     static final long TIMEOUT_MS = 3000;
+    static boolean sessionMatches(long queued,long current,boolean active) { return active && queued==current; }
     private final Pending[] pending = new Pending[2];
     private long next;
     static final class Pending {

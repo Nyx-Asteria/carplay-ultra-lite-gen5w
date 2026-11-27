@@ -77,7 +77,14 @@ final class CarClimate extends Thread implements VehicleState.Car {
     private final Temperatures temps = new Temperatures();
     private int failures;
     private volatile int unit = -1;
-    private final LinkedBlockingQueue<ClimateMap.Command> commands = new LinkedBlockingQueue<ClimateMap.Command>();
+    private static final class QueuedCommand {
+        final ClimateMap.Command command;
+        final long generation;
+        QueuedCommand(ClimateMap.Command command, long generation) {
+            this.command=command; this.generation=generation;
+        }
+    }
+    private final LinkedBlockingQueue<QueuedCommand> commands = new LinkedBlockingQueue<QueuedCommand>();
     private final SeatCommandTrace seatTrace = new SeatCommandTrace();
     private final Body body = new Body();
     private final Binder bodyToken = new Binder();
@@ -173,7 +180,12 @@ final class CarClimate extends Thread implements VehicleState.Car {
 
     @Override
     public void phoneWrote(Map<Long, Object> written, Map<Long, Object> now) {
+        final long generation = CpClimate.sessionGeneration;
         List<ClimateMap.Command> list = ClimateMap.commands(written, now, unit);
+        if (written.containsKey(ClimateMap.PASSENGER_TARGET))
+            out.log("[climate-passenger] request="+written.get(ClimateMap.PASSENGER_TARGET)
+                    +" unit="+unit+" sync="+now.get(ClimateMap.ZONES_SYNCED)
+                    +" commands="+list);
         for (Map.Entry<Long,Object> e : written.entrySet()) {
             long iid = e.getKey();
             if (iid == ClimateMap.DRIVER_SEAT_LEVEL || iid == ClimateMap.DRIVER_SEAT_ON
@@ -196,7 +208,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
         }
         if (list.isEmpty() && ambient == null) out.log("CAR nothing to send for " + written.keySet());
         for (ClimateMap.Command command : list) {
-            if (allowed(command)) commands.add(command);
+            if (allowed(command)) commands.add(new QueuedCommand(command, generation));
             else out.log("CAR test switch withheld " + command);
         }
     }
@@ -207,14 +219,19 @@ final class CarClimate extends Thread implements VehicleState.Car {
             @Override
             public void run() {
                 while (true) {
-                    ClimateMap.Command c;
+                    QueuedCommand queued;
                     try {
-                        c = commands.take();
+                        queued = commands.take();
                     } catch (InterruptedException e) {
                         return;
                     }
+                    ClimateMap.Command c = queued.command;
                     try {
-                        if (send(c)) out.log("CAR sent " + c);
+                        if (c.kind == ClimateMap.SEAT && !SeatCommandTrace.sessionMatches(queued.generation, CpClimate.sessionGeneration, CpClimate.sessionActive)) {
+                            out.log("[seat-command] discarded stale queued "+c+" generation="+queued.generation);
+                            continue;
+                        }
+                        if (send(c, queued.generation)) out.log("CAR sent " + c);
                     } catch (Throwable t) {
                         out.log("CAR " + c + " failed: " + t);
                     }
@@ -247,10 +264,9 @@ final class CarClimate extends Thread implements VehicleState.Car {
     }
 
     /** sends a command; false if nothing needed sending */
-    boolean send(ClimateMap.Command c) throws Exception {
+    boolean send(ClimateMap.Command c, long generation) throws Exception {
         if (!allowed(c)) { out.log("CAR test switch withheld " + c); return false; }
-        if (c.kind == ClimateMap.SEAT && !CpClimate.sessionActive) return false;
-        final long generation = CpClimate.sessionGeneration;
+        if (c.kind == ClimateMap.SEAT && !SeatCommandTrace.sessionMatches(generation, CpClimate.sessionGeneration, CpClimate.sessionActive)) return false;
         int seatBefore = -1;
         if (c.kind == ClimateMap.SEAT) {
             IBinder bodyService = service(BCM);
@@ -361,9 +377,10 @@ final class CarClimate extends Thread implements VehicleState.Car {
                 Thread.sleep(PERIOD_MS);
                 VehicleState vs = state[0];
                 if (vs == null || !(lanes[0].isOpen() || lanes[1].isOpen())) continue;
+                long generation = CpClimate.sessionGeneration;
                 ClimateMap.Reading r = read();
-                if (r == null) continue;
-                long generation = CpClimate.sessionGeneration, now = android.os.SystemClock.elapsedRealtime();
+                if (r == null || generation != CpClimate.sessionGeneration) continue;
+                long now = android.os.SystemClock.elapsedRealtime();
                 String driverResult = seatTrace.observe(0, r.driverSeat, generation, now);
                 String passengerResult = seatTrace.observe(1, r.passengerSeat, generation, now);
                 if (driverResult != null) out.log(driverResult);

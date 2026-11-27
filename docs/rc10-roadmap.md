@@ -14,9 +14,10 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [ ] Incremental firmware dumper only collects new missing targets; avoid duplicate APK/ODEX collection.
 
 ## Climate and vehicle
-- [ ] Resolve seat actuation regression, compare feedback experiments independently; guard queued commands by original session generation.
+- [ ] Resolve seat actuation regression, compare feedback experiments independently.
+- [x] Guard queued seat commands by original session generation (CI pending).
 - [ ] Resolve ventilation UI feedback using confirmed iOS identifiers; no speculative unsupported auto mode.
-- [ ] Passenger temperature request vs DATC callback diagnostics and verified K5 setter.
+- [ ] Passenger temperature request/converted commands now logged; still need DATC callback correlation and verified K5 setter.
 - [ ] Fuel range validity and missing HMG-API/Nemesis shortcuts.
 - [ ] Bose source-dependent setting; clear stale diagnostic sample on read failures, no forced setter.
 
