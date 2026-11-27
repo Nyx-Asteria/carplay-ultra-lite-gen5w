@@ -19,7 +19,8 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [ ] Resolve ventilation UI feedback using confirmed iOS identifiers; no speculative unsupported auto mode.
 - [ ] Passenger temperature request/converted commands and fresh DATC callback correlation implemented (CI pending); verified K5 setter still needed.
 - [ ] Fuel range validity and missing HMG-API/Nemesis shortcuts.
-- [ ] Bose source-dependent setting; clear stale diagnostic sample on read failures, no forced setter.
+- [ ] Bose source-dependent setting; no forced setter.
+- [x] Clear cached Bose diagnostic sample and reset poll generation on audio read failure (CI pending).
 
 ## Radio
 - [ ] FM catalog publication, seek, metadata/artwork and direct activation reliability.
@@ -27,6 +28,7 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [x] Preserve nonempty FM cache on transient empty poll or list accessor failure while tuner remains available; log catalog subscription/notifier queue status (CI pending).
 - [ ] HD2–4 discovery and control only with verified protocol evidence.
 - [ ] SXM channel identity mapping, source activation, song/artist/artwork and seek validation.
+- [x] Do not publish Smart Favorites track snapshots as live song/artist; log observed ID membership in eligible catalog (CI pending).
 - [x] Reject live metadata callbacks for mismatched observed channel and out-of-order delivery (CI pending); early callbacks before tuner observation may be withheld, same-ID delayed callbacks remain ambiguous.
 
 ## AirPlay and themes

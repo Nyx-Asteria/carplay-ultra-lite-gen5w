@@ -297,6 +297,8 @@ final class CarAudio extends Thread {
                 // observation that could no longer be verified.
                 shown=null;
                 observedGeneration=-1;
+                boseSample=null;
+                lastBoseGeneration=-1;
                 synchronized(this){observed.clear();}
                 sends.clear();
                 VolumePanel.publishReady(panelContext,false);

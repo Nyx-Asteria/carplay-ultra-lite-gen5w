@@ -502,7 +502,7 @@ final class K5Radio {
                 Object raw = id.get(entry);
                 if (!(raw instanceof Number)) continue;
                 int channel = ((Number)raw).intValue();
-                if (channel >= 0) sxmMetadata.put(channel, new String[] {channelText(type, entry, "mChannelLongName"), channelText(type, entry, "mTitle"), channelText(type, entry, "mArtist")});
+                if (channel >= 0) sxmMetadata.put(channel, new String[] {channelText(type, entry, "mChannelLongName"), "", ""});
                 if (channel < 0 || !channelFlag(subscribed.get(entry), true)
                         || !channelFlag(skipped.get(entry), false) || known.contains(channel)) continue;
                 // The DL322 binder exposes isChannelLocked(int): int.
@@ -543,7 +543,7 @@ final class K5Radio {
             if(loggedSxmGeneration!=generation || !loggedSxmIds.equals(known)) {
                 loggedSxmGeneration=generation;
                 loggedSxmIds=new java.util.HashSet<Integer>(known);
-                log.log("[radio-sxm] favorite catalog size=" + items.size());
+                log.log("[radio-sxm] eligible catalog size=" + items.size()+" observedID="+channelId+" currentIDListed="+known.contains(channelId));
             }
         }
         values.put(4134L, sxmItems);
@@ -553,9 +553,8 @@ final class K5Radio {
         if (sxmKnownGeneration != CpClimate.sessionGeneration) return;
         String[] metadata = sxmMetadata.get(channel);
         if (metadata == null) return;
-        if (!metadata[1].isEmpty()) values.put(4355L, metadata[1]);
-        else if (!metadata[0].isEmpty()) values.put(4355L, metadata[0]);
-        if (!metadata[2].isEmpty()) values.put(4356L, metadata[2]);
+        // Smart Favorites is a catalog, not proof of the currently playing track.
+        if (!metadata[0].isEmpty()) values.put(4355L, metadata[0]);
     }
     // OEM channel records have been observed with numeric 0/1 flags.
     // Accept boolean representations too; unknown values are not authorization.
