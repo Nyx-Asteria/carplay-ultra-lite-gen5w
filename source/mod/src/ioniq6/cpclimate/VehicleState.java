@@ -76,6 +76,7 @@ final class VehicleState {
     private final OpackCodec.Raw accessories;
     static volatile VehiclePage vehiclePage;
     static volatile boolean climateEnabled = true;
+    static volatile boolean seatFanImmediateFeedback;
     interface Controls { void pressed(String name, Object value); }
     static volatile Controls mediaControls;
 
@@ -890,12 +891,22 @@ final class VehicleState {
         // SeatFan needs an authoritative paired level/power update after a phone write,
         // even when the BCM confirms the same level already cached by write().
         for (Map.Entry<Long,Object> e : reported.entrySet()) {
-            if (frontSeatValue(e.getKey()) && e.getValue() != ClimateMap.BLANK)
+            if (frontSeatValue(e.getKey()) && e.getValue() != ClimateMap.BLANK
+                    && !seatFanValue(e.getKey()))
                 actualSeats.put(e.getKey(), e.getValue());
         }
         Set<Long> handledFans = new HashSet<Long>();
         for (long[] pair : SEAT_FAN_PAIRS) {
             Long levelAt = heldSince.get(pair[0]), onAt = heldSince.get(pair[1]);
+            Object level = reported.get(pair[0]), power = reported.get(pair[1]);
+            if (reported.containsKey(pair[0]) || reported.containsKey(pair[1])) {
+                handledFans.add(pair[0]); handledFans.add(pair[1]);
+                // Never publish a partial or ill-typed pair as confirmed fan state.
+                if (!(level instanceof Long) || !(power instanceof Boolean)
+                        || ((Long)level) < 0 || ((Long)level) > 3) continue;
+                actualSeats.put(pair[0], level);
+                actualSeats.put(pair[1], power);
+            }
             if (levelAt == null && onAt == null) {
                 // Physical button changes must also publish the entire subscribed pair.
                 if (!reported.containsKey(pair[0]) || !reported.containsKey(pair[1])) continue;
@@ -1040,7 +1051,7 @@ final class VehicleState {
             results.put(iid, WRITTEN);
             // LIVI hides a notification history entry here; M3 keeps no history, so nothing to hide
             Object before = values.put(iid, v);
-            if (!(car != null && seatFanValue(iid)) && !same(before, v) && followed.contains(iid)) changed.put(iid, v);
+            if (!(car != null && seatFanValue(iid) && !seatFanImmediateFeedback) && !same(before, v) && followed.contains(iid)) changed.put(iid, v);
         }
         VehiclePage page = vehiclePage;
         if (page != null) {

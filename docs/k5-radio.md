@@ -65,3 +65,6 @@ Read-only diagnostic entry in the Vehicle app. Candidate OEM sound setting ID 48
 8. Record failures with [radio], [radio-meta], [radio-sxm], [audio-bose] and VS log lines. Do not treat missing experimental schema or unavailable methods as verified support.
 
 RadioPolicyTest covers pure mapping/filtering rules, not OEM runtime behavior. RC8 release remains gated on development and signed bundle checks. Passenger seat heating is now reported working in both directions; ventilation remains a separate follow-up.
+
+## RC8 final development additions
+Full catalog remains usable without Smart Favorites; inactive-session artwork and eligibility caches clear. HD SPS candidate methods are traced during the existing two-minute window, with elapsed timestamps. Test native HD1→HD2→HD3→HD1 and frequency changes; capture hook availability and callback arguments. Native multicast tuning is not enabled. See [RC8 guide](rc8-testing.md).

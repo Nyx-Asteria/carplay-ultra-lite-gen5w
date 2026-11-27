@@ -35,3 +35,6 @@ Capture [seat], [seat-dispatch], [seat-fan], VS phone follows, VS phone reads, a
 ## Deferred
 
 Separate SeatFan schema is experimental; LIVI provides cabin FanLevel and seat heating, not a verified ventilated-seat service. No protocol identifier changes without independent evidence. Driver setter matches HMG-API base hook map; runtime K5 acceptance remains unresolved. No Android Auto work. No version bump.
+
+## Second-pass additions
+Require complete typed ventilation level (0–3) and Boolean power feedback before updating authoritative state. New Seat Ventilation Immediate Feedback toggle defaults off; enable only for isolated comparison, restart, repeat identical tests and restore off. Both modes reconcile with BCM. Regression tests passed on 18101ed, but Apple UI behavior remains unverified. See [RC8 guide](rc8-testing.md).

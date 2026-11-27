@@ -213,7 +213,14 @@ final class K5Radio {
         values.put(4358L, EMPTY_ARTWORK);
         values.put(4359L, 0L);
         values.put(4117L, ClimateMap.BLANK);
-        if (!enabled() || !CpClimate.sessionActive) { fmActive = false; sxmActive = false; sxmAvailable = false; lastListPoll = 0; fmItems = java.util.Collections.emptyList(); return values; }
+        if (!enabled() || !CpClimate.sessionActive) {
+            fmActive = false; sxmActive = false; sxmAvailable = false;
+            stationName = null; stationArtwork = null; clearTags(); lastFmFrequency = -1;
+            sxmArt = null; currentSxmChannel = -1; fullSxm = null;
+            sxmKnownGeneration = -1; sxmKnownIds = java.util.Collections.emptySet();
+            lastListPoll = 0; fmItems = java.util.Collections.emptyList();
+            return values;
+        }
         try {
             if (!"7c99638e39c369c45fab9c485b103cf0".equals(ModContext.md5("/system/framework/automotive.odex"))) { fmActive = false; sxmActive = false; sxmAvailable = false; return values; }
             if (fmTuner == null) fmTuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
@@ -303,6 +310,7 @@ final class K5Radio {
             }
             if (!sxmAvailable || !sxmActive) { currentSxmChannel = -1; sxmArt = null; return; }
             if (currentSxmChannel != channel) { sxmArt = null; currentSxmChannel = channel; }
+            if (sxmArt != null && sxmArt.generation != CpClimate.sessionGeneration) sxmArt = null;
             SxmArt art = sxmArt;
             if (art != null && art.channel == channel && art.generation == CpClimate.sessionGeneration)
                 values.put(4358L, art.bytes);
@@ -406,10 +414,14 @@ final class K5Radio {
             sxmKnownGeneration = -1;
             sxmKnownIds = java.util.Collections.emptySet();
             sxmItems = java.util.Collections.emptyList();
-            int category = readInt(sxmTuner, SXM_IFACE, "getSmartFavoritesCategoryID");
-            if (category < 0) return;
-            Object records = Class.forName(SXM_IFACE).getMethod("getCategoryChannels", int.class)
-                    .invoke(sxmTuner, category);
+            Object records = null;
+            try {
+                int category = readInt(sxmTuner, SXM_IFACE, "getSmartFavoritesCategoryID");
+                if (category >= 0) records = Class.forName(SXM_IFACE).getMethod("getCategoryChannels", int.class)
+                        .invoke(sxmTuner, category);
+            } catch (Exception e) {
+                log.log("[radio-sxm] Smart Favorites unavailable: " + e.getClass().getSimpleName());
+            }
             // Discover read-only catalog accessors without invoking unknown methods.
             if (sxmDiscoveryGeneration != generation) {
                 sxmDiscoveryGeneration = generation;
@@ -424,7 +436,8 @@ final class K5Radio {
             }
             Class<?> type = Class.forName("com.hkmc.media.sxm65h.Channel");
             if (records == null || !records.getClass().isArray()
-                    || records.getClass().getComponentType() != type) return;
+                    || records.getClass().getComponentType() != type)
+                records = java.lang.reflect.Array.newInstance(type, 0);
             java.lang.reflect.Field id = type.getDeclaredField("mChannelID");
             id.setAccessible(true);
             java.lang.reflect.Field subscribed = type.getDeclaredField("mIsSubscribed");
@@ -560,9 +573,15 @@ final class K5Radio {
                     if (tuner == null || readInt(audio, CarAudio.IFACE, "getAudioMode") != 4
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 41) return;
                     java.lang.reflect.Method tune = Class.forName(SXM_IFACE).getMethod("tuneDirect", int.class, boolean.class);
-                    if (readIntWithChannel(tuner, "isChannelSubscribed", channel) != 1
-                            || readIntWithChannel(tuner, "isChannelSkipped", channel) != 0
-                            || !sxmUnlocked(tuner, channel) || tune.getReturnType() != int.class || !probeActive(generation)
+                    int subscribed = readIntWithChannel(tuner, "isChannelSubscribed", channel);
+                    int skipped = readIntWithChannel(tuner, "isChannelSkipped", channel);
+                    boolean unlocked = sxmUnlocked(tuner, channel);
+                    if (subscribed != 1 || skipped != 0 || !unlocked) {
+                        log.log("[radio-sxm] tune refused ID=" + channel + " subscribed=" + subscribed
+                                + " skipped=" + skipped + " unlocked=" + unlocked);
+                        return;
+                    }
+                    if (tune.getReturnType() != int.class || !probeActive(generation)
                             || request != tuneRequest.get()) return;
                     Object result = tune.invoke(tuner, channel, false);
                     log.log("[radio-sxm] native tune ID=" + channel + " result=" + result + "; awaiting channel feedback");
