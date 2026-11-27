@@ -58,8 +58,10 @@ final class VolumePanel {
                         KeyEvent e = (KeyEvent)key.args[0];
                         traceRadioKey(mod, e);
                         if (!isVolume(e.getKeyCode()) || e.getAction() != KeyEvent.ACTION_DOWN) return;
+                        final long issued=android.os.SystemClock.elapsedRealtime();
                         handler.post(new Runnable() { public void run() {
-                            if (foreground(context)) context.sendBroadcast(new Intent(CarAudio.ACTION_CHANGED).setPackage("com.daudio.app.dipo"));
+                            if (foreground(context)) context.sendBroadcast(new Intent(CarAudio.ACTION_CHANGED)
+                                    .setPackage("com.daudio.app.dipo").putExtra("issued",issued),PERMISSION);
                         }});
                     }
                 });

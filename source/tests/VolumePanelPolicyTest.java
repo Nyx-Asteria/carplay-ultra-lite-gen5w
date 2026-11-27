@@ -3,6 +3,11 @@ public final class VolumePanelPolicyTest {
     private static void check(boolean ok, String what) { if (!ok) throw new AssertionError(what); }
     public static void main(String[] args) {
         check(VolumePanelPolicy.fresh(1000,900),"fresh");
+        check(VolumePanelPolicy.keyEventCurrent(1000,1100,1000),"current session key");
+        check(!VolumePanelPolicy.keyEventCurrent(999,1100,1000),"previous session key");
+        check(!VolumePanelPolicy.keyEventCurrent(1000,3500,1000),"expired key");
+        check(!VolumePanelPolicy.keyEventCurrent(1000,1100,-1),"unknown session");
+        check(!VolumePanelPolicy.keyEventCurrent(1101,1100,1000),"future key");
         check(!VolumePanelPolicy.fresh(1000,1001),"future");
         check(!VolumePanelPolicy.fresh(3500,1000),"expired");
         check(VolumePanelPolicy.suppress(true,true,true,3500,1000,true,true),"ready");

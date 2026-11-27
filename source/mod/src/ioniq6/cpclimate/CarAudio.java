@@ -56,10 +56,12 @@ final class CarAudio extends Thread {
             context.registerReceiver(new android.content.BroadcastReceiver() {
                 @Override
                 public void onReceive(android.content.Context c, android.content.Intent i) {
+                    if (!active() || !VolumePanelPolicy.keyEventCurrent(i.getLongExtra("issued",-1),
+                            android.os.SystemClock.elapsedRealtime(),CpClimate.sessionStartedElapsed)) return;
                     readNow();
                     VolumePanel.onStockKey(c, CarAudio.this);
                 }
-            }, new android.content.IntentFilter(ACTION_CHANGED));
+            }, new android.content.IntentFilter(ACTION_CHANGED), "android.permission.DEVICE_POWER", null);
         } catch (Throwable t) {
             out.log("[audio] no word from the volume keys (the levels are still read " + (1000 / PERIOD_MS) + " times a second): " + t);
         }
