@@ -45,6 +45,10 @@ public final class VolumePanelPolicyTest {
         check(VideoMessages.answerCurrent(1,1,true),"current parked video answer");
         check(!VideoMessages.answerCurrent(1,2,true),"stale video answer");
         check(!VideoMessages.answerCurrent(1,1,false),"Park lost before answer");
+        check(VideoUi.returnOwned(1,1,1),"current screen return");
+        check(!VideoUi.returnOwned(1,1,2),"old session screen return");
+        check(!VideoUi.returnOwned(2,1,2),"stale engine close");
+        check(!VideoUi.returnOwned(-1,-1,-1),"no borrowed screen");
         System.out.println("VolumePanelPolicy: ALL OK");
     }
 }

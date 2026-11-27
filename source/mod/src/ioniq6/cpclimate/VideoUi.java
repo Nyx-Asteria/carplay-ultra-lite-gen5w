@@ -33,6 +33,11 @@ final class VideoUi {
     /** wraps the session's listeners (again after DiPO adds new ones); safe to call on every session start */
     static synchronized void install(Object service, ClassLoader cl) {
         if (!enabled || service == null) return;
+        if (borrowedService != null && borrowedGeneration != CpClimate.sessionGeneration) {
+            // The previous projection is gone. Never unborrow through a reused service.
+            borrowedService=null; borrowedGeneration=-1; ++borrowToken;
+            log("[video] previous screen ownership discarded on new session");
+        }
         carPlay = service;
         try {
             Class<?> iface = cl.loadClass(PKG + "ICarPlayServiceListener");
@@ -148,9 +153,13 @@ final class VideoUi {
         }
     }
 
+    static boolean returnOwned(long owner,long requested,long active){
+        return owner>=0 && owner==requested && owner==active;
+    }
+
     /** the video engine closed its window (its back button): CarPlay gets the screen back */
     public static synchronized void engineClosed(long generation) {
-        if (borrowedService != null && borrowedGeneration == generation)
+        if (borrowedService != null && returnOwned(borrowedGeneration,generation,CpClimate.sessionGeneration))
             unborrow(borrowedService, "video closed");
     }
 
@@ -191,7 +200,7 @@ final class VideoUi {
                     } catch (InterruptedException ignored) {
                     }
                     synchronized (VideoUi.class) {
-                        if (borrowToken == token && borrowedService == service && borrowedGeneration == generation)
+                        if (borrowToken == token && borrowedService == service && returnOwned(borrowedGeneration,generation,CpClimate.sessionGeneration))
                             unborrow(service, "stage 1 timer");
                     }
                 }
@@ -206,6 +215,9 @@ final class VideoUi {
     }
 
     private static void unborrow(Object service, String why) {
+        if(borrowedService!=service || borrowedGeneration!=CpClimate.sessionGeneration){
+            log("[video] stale screen return withheld"); return;
+        }
         try {
             service.getClass().getMethod("changeModeUnborrowScreen", String.class).invoke(service, BORROW_ID);
             borrowedService = null;
