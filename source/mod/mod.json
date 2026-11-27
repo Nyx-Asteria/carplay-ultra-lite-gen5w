@@ -1,13 +1,13 @@
 {
   "id": "carplay-ultra-lite-k5",
   "name": "CarPlay Ultra-Lite K5",
-  "version": "0.1.0-alpha.1",
+  "version": "1.0.0-rc.1",
   "hmgapi": ">=1.1.0-rc.8",
   "authors": [
     "cp-climate contributors"
   ],
   "license": "GPL-3.0-or-later",
-  "description": "Development port for the Kia K5 DL322 USA 260507. Not validated on-car. Uses existing wireless projection; Ultra theme and video remain disabled pending integration and validation. Based on LIVI (GPL-3.0).",
+  "description": "Kia K5 DL322 USA 260507 CarPlay Ultra-Lite port: climate, vehicle information, optional Comfort thresholds, shared Ultra theme, volume and media controls, parked video and native radio shortcut. Experimental audio and theme; on-car validation pending. Based on LIVI (GPL-3.0).",
   "system": [
     {
       "model": [
