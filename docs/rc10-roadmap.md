@@ -6,7 +6,7 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [x] IPv4/MAC/IPv6 redaction and missing theme setting metadata; development CI passed.
 - [x] Seat Binder acceptance vs BCM observation, supersession and generation diagnostics (CI pending).
 - [x] Bound pre-session projection events to 10 seconds, retain native timestamps and reject events before previous teardown (CI pending; no native session identifier available).
-- [ ] Capture safe named offered/enabled projection features, not generic negotiation replies; never record secrets or raw bodies.
+- [x] Capture allowlisted offered/enabled projection features and independent UI Sync outcome; native video/HEVC offer flags added (CI pending).
 - [ ] Reduce navigation characteristic noise in climate logs; record actual firmware identity and CCNC/LivePatch environment.
 - [ ] Surface writer/export failures; distinguish delivery queued, socket success and phone acknowledgement.
 - [ ] Companion WCP/STBT legacy cmp compatibility, export dedup/rate limiting and legacy utility tests (coordinate separate repositories).

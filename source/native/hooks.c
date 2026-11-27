@@ -954,8 +954,8 @@ __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) 
     }
     int ultra = ultra_mode(), iapx = iap_mode(), syncx = ui_sync_mode();
     if (is(offered, T_CFArrayGetTypeID))
-        LOG("cp-climate: SETUP: the phone offers vehicleStateProtocol %d, altScreen %d, viewAreas %d, uiSync %d, iAPChannel %d (Ultra experiment %s, iAPChannel experiment %s, uiSync experiment %s)\n",
-            found, alt, areas, sync, iap, ultra ? "on" : "off", iapx ? "on" : "off", syncx ? "on" : "off");
+        LOG("cp-climate: SETUP: the phone offers vehicleStateProtocol %d, altScreen %d, viewAreas %d, uiSync %d, iAPChannel %d, videoPlayback %d, hevc %d (Ultra experiment %s, iAPChannel experiment %s, uiSync experiment %s)\n",
+            found, alt, areas, sync, iap, video, hevc, ultra ? "on" : "off", iapx ? "on" : "off", syncx ? "on" : "off");
     if (!found) {
         /* Opt-in narrow experiment: retain every stock feature and append only
          * explicitly offered uiSync. Never advertise VSP when absent. */
