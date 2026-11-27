@@ -14,6 +14,7 @@ final class ThemeContribution {
     private static final String SERVICE = "carplay-identification";
     private Object registered;
     private Method remove;
+    private boolean confirmed;
 
     boolean available(ModContext mod) {
         try {
@@ -28,7 +29,7 @@ final class ThemeContribution {
         try {
             Object service = mod.use(PROVIDER, SERVICE);
             if (service == null) { mod.log("[theme] shared identity service unavailable"); return false; }
-            if (registered == service) return true;
+            if (registered == service && confirmed) return true;
             if (registered != null && !unregister(mod)) return false;
             Class<?> api = Class.forName(API, false, service.getClass().getClassLoader());
             if (!api.isInstance(service) || api.getField("API_VERSION").getInt(null) != 2) { mod.log("[theme] incompatible shared identity API"); return false; }
@@ -44,6 +45,7 @@ final class ThemeContribution {
             // Retain withdrawal ownership even if that callback throws after insertion.
             registered = service;
             remove = unregister;
+            confirmed = false;
             try {
             if (registration != null) {
                 registration.invoke(service, mod.id, value, start);
@@ -59,6 +61,7 @@ final class ThemeContribution {
                 unregister(mod);
                 throw e;
             }
+            confirmed = true;
             mod.log("Ultra theme contribution accepted by registry (native activation unverified)");
             return true;
         } catch (Exception e) {
@@ -72,6 +75,7 @@ final class ThemeContribution {
 
     synchronized boolean unregister(ModContext mod) {
         if (registered == null) return true;
+        confirmed = false;
         try {
             remove.invoke(registered, mod.id);
             registered = null;
