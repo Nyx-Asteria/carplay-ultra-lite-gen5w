@@ -64,8 +64,8 @@ final class ProjectionLogCapture extends Thread {
                             int year=Calendar.getInstance().get(Calendar.YEAR);
                             long at=date.parse(year+"-"+line.substring(0,18)).getTime();
                             if(at<started-1000||at>System.currentTimeMillis()+1000)continue;
+                            sink.projection(event,at);
                         }catch(Exception ignored){continue;}
-                        sink.projection(event);
                     }
                 }finally{in.close();}
                 sink.projection("[projection] native log reader ended");

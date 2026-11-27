@@ -16,6 +16,8 @@ public final class SessionLogWriterTest {
             SessionLogWriter w=new SessionLogWriter(root,null,java.util.EnumSet.of(RADIO));
             w.start(7,"firmware=test");
             w.record(7,INFO,CORE,"connected");
+            long nativeAt=System.currentTimeMillis()-2000;
+            w.recordAt(7,INFO,CORE,"native event",nativeAt);
             w.record(6,INFO,CORE,"wrong generation");
             w.record(7,ERROR,RADIO,"failed");
             w.record(7,INFO,THEMES,"[theme-sync] negotiated traffic panels=[Cluster_Display]");
@@ -27,6 +29,7 @@ public final class SessionLogWriterTest {
             File session=null;for(File f:root.listFiles())if(f.getName().contains("session-7_"))session=f;
             check(session!=null&&!session.getName().endsWith(".open"));
             check(read(new File(session,"session.log")).contains("connected"));
+            check(read(new File(session,"session.log")).contains(nativeAt+" INFO CORE native event"));
             check(!read(new File(session,"session.log")).contains("wrong generation"));
             check(read(new File(session,"errors.log")).contains("failed"));
             check(read(new File(session,"diagnostics/radio.log")).contains("failed"));

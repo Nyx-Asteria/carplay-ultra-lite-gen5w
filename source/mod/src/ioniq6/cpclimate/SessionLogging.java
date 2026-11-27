@@ -17,7 +17,8 @@ final class SessionLogging {
     private long endingAt=-1;
     private String endingReason;
     private final java.util.concurrent.ScheduledExecutorService timer=java.util.concurrent.Executors.newSingleThreadScheduledExecutor(new java.util.concurrent.ThreadFactory(){public Thread newThread(Runnable r){Thread t=new Thread(r,"cpul-log-teardown");t.setDaemon(true);return t;}});
-    private final java.util.ArrayDeque<String> preSession=new java.util.ArrayDeque<String>();
+    private final PreSessionEvents preSession=new PreSessionEvents();
+    private long sessionStartedAt, previousEndedAt;
 
     SessionLogging(ModContext mod, File files, String firmware) {
         this.mod=mod;
@@ -45,9 +46,9 @@ final class SessionLogging {
     synchronized void start(long id) {
         if(generation==id)return;
         if(generation>=0)closeNow(endingReason==null?"superseded by new session":endingReason);
-        policy.reset(); generation=id;
+        policy.reset(); generation=id; sessionStartedAt=System.currentTimeMillis();
         if(writer!=null)writer.start(id,metadata);
-        while(!preSession.isEmpty())log(preSession.removeFirst());
+        for(PreSessionEvents.Event e:preSession.drain(sessionStartedAt,previousEndedAt)) logAt(e.message,e.at);
     }
     synchronized void finish(String reason) {
         if(generation<0||endingAt>=0)return;
@@ -62,24 +63,32 @@ final class SessionLogging {
     }
     private void closeNow(String reason) {
         if(writer!=null)writer.finishAt(generation,reason,policy.suppressed(),endingAt<0?System.currentTimeMillis():endingAt);
+        previousEndedAt=System.currentTimeMillis();
         generation=-1; endingAt=-1; endingReason=null;
     }
     synchronized void projection(String message) {
+        projection(message,System.currentTimeMillis());
+    }
+    synchronized void projection(String message,long at) {
+        long now=System.currentTimeMillis();
         if(generation<0) {
-            if(preSession.size()>=32)preSession.removeFirst();
-            preSession.addLast(message);
-        } else if(endingAt<0 || teardown(message)) log(message);
+            if(!teardown(message))preSession.add(message,at,now,previousEndedAt);
+        } else if(at>=sessionStartedAt-PreSessionEvents.MAX_AGE_MS && at>previousEndedAt
+                && at<=now+1000 && (endingAt<0 || teardown(message))) logAt(message,at);
     }
     private static boolean teardown(String message) {
         String s=message.toLowerCase(Locale.US);
         return s.contains("closed")||s.contains("ended")||s.contains("failed")||s.contains("stopped")||s.contains("disconnect")||s.contains("finaliz");
     }
     synchronized void log(String message) {
+        logAt(message,System.currentTimeMillis());
+    }
+    private void logAt(String message,long at) {
         Category category=category(message);
         Level level=level(message,category);
         String safe=policy.accept(level,category,message,System.nanoTime()/1000000L);
         if(safe==null)return;
-        if(writer!=null&&generation>=0&&(endingAt<0||teardown(message)))writer.record(generation,level,category,safe);
+        if(writer!=null&&generation>=0&&(endingAt<0||teardown(message)))writer.recordAt(generation,level,category,safe,at);
         mod.log(safe);
     }
     static Category category(String message) {
