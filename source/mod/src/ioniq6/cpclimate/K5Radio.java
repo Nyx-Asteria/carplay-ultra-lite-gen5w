@@ -48,21 +48,38 @@ final class K5Radio {
     // DL322 automotive.odex: RadioAllBsmFreqInfo.mBsmFreq (int),
     // mIsBsmValidStaton (boolean). Keep the OEM spelling.
     private long lastListPoll;
+    private String lastScanSummary = "";
     private java.util.List<Object> fmItems = java.util.Collections.emptyList();
     private java.util.List<Object> readFmItems(Object tuner) throws Exception {
         Object raw = Class.forName(RADIO_IFACE).getMethod("getRadioAllBsmFreqList").invoke(tuner);
-        if (!(raw instanceof java.util.List)) return java.util.Collections.emptyList();
+        if (!(raw instanceof java.util.List)) {
+            String summary = "unexpected cache type=" + (raw == null ? "null" : raw.getClass().getName());
+            if (!summary.equals(lastScanSummary)) { lastScanSummary = summary; log.log("[radio] FM scan cache " + summary); }
+            return java.util.Collections.emptyList();
+        }
         Class<?> type = Class.forName("com.hkmc.media.RadioAllBsmFreqInfo");
         java.lang.reflect.Field freq = type.getDeclaredField("mBsmFreq");
         java.lang.reflect.Field valid = type.getDeclaredField("mIsBsmValidStaton");
         freq.setAccessible(true); valid.setAccessible(true);
         java.util.TreeSet<Long> frequencies = new java.util.TreeSet<Long>();
-        for (Object entry : (java.util.List<?>)raw) {
+        java.util.List<?> entries = (java.util.List<?>) raw;
+        int invalid = 0, unexpected = 0, offGrid = 0;
+        for (Object entry : entries) {
+            if (!type.isInstance(entry)) { unexpected++; continue; }
+            if (!valid.getBoolean(entry)) { invalid++; continue; }
+            long candidate = fmKhz(freq.getInt(entry));
+            if (candidate < 87900 || candidate > 107900 || (candidate - 87900) % 200 != 0) offGrid++;
             if (type.isInstance(entry) && valid.getBoolean(entry)) {
                 long khz = fmKhz(freq.getInt(entry));
                 if (khz >= 87900 && khz <= 107900 && (khz - 87900) % 200 == 0)
                     frequencies.add(khz);
             }
+        }
+        String scanSummary = "raw=" + entries.size() + " invalid=" + invalid
+                + " unexpected=" + unexpected + " offGrid=" + offGrid + " unique=" + frequencies.size();
+        if (!scanSummary.equals(lastScanSummary)) {
+            lastScanSummary = scanSummary;
+            log.log("[radio] FM scan cache " + scanSummary);
         }
         java.util.List<Object> items = new java.util.ArrayList<Object>();
         for (Long khz : frequencies) {
@@ -145,47 +162,20 @@ final class K5Radio {
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
                     if (!probeActive(generation)) return;
-                    if (!injectSeek(up)) log.log("[radio] OEM key injection unavailable; seek not sent");
+                    Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
+                    if (tuner == null || !probeActive(generation)) return;
+                    java.lang.reflect.Method seek = Class.forName(RADIO_IFACE).getMethod(up ? "seekUp" : "seekDown");
+                    if (seek.getReturnType() != void.class) return;
+                    // Recheck ownership after resolving the tuner, just as for direct tuning.
+                    if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
+                            || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38
+                            || !probeActive(generation)) return;
+                    seek.invoke(tuner);
+                    log.log("[radio] native FM " + (up ? "seekUp" : "seekDown") + " dispatched; awaiting frequency feedback");
                 } catch (Throwable t) { log.log("[radio] FM seek failed: " + t.getClass().getSimpleName()); }
             }
         });
         return true;
-    }
-
-    /** Use the same OEM key names and physical keyboard selection as Button Mapper.
-     * DiPO must have system UID and INJECT_EVENTS; never bypass a denied permission.
-     * No generic media-key fallback. Called only after fresh tuner ownership checks. */
-    private boolean injectSeek(boolean up) throws Exception {
-        if (android.os.Process.myUid() != 1000 ||
-                context.checkCallingOrSelfPermission("android.permission.INJECT_EVENTS")
-                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            log.log("[radio] OEM key injection permission unavailable");
-            return false;
-        }
-        String name = up ? "SEEK_UP" : "SEEK_DOWN";
-        int code = android.view.KeyEvent.class.getField("KEYCODE_" + name).getInt(null);
-        if (code <= 0) return false;
-        int device = -1;
-        for (int id : android.view.InputDevice.getDeviceIds()) {
-            android.view.InputDevice d = android.view.InputDevice.getDevice(id);
-            if (d == null || d.isVirtual() ||
-                    (d.getSources() & android.view.InputDevice.SOURCE_KEYBOARD)
-                    != android.view.InputDevice.SOURCE_KEYBOARD) continue;
-            if (d.getName() != null && d.getName().toLowerCase(java.util.Locale.US).contains("daudio")) {
-                device = id; break;
-            }
-        }
-        // Unlike Button Mapper, fail closed if the physical OEM device is not found.
-        if (device < 0) { log.log("[radio] daudio key device unavailable"); return false; }
-        Object im = Class.forName("android.hardware.input.InputManager").getMethod("getInstance").invoke(null);
-        java.lang.reflect.Method inject = im.getClass().getMethod("injectInputEvent", android.view.InputEvent.class, int.class);
-        long t = android.os.SystemClock.uptimeMillis();
-        android.view.KeyEvent down = new android.view.KeyEvent(t,t,0,code,0,0,device,0,0,android.view.InputDevice.SOURCE_KEYBOARD);
-        android.view.KeyEvent release = new android.view.KeyEvent(t,t,1,code,0,0,device,0,0,android.view.InputDevice.SOURCE_KEYBOARD);
-        Object first = inject.invoke(im, down, 0);
-        Object second = inject.invoke(im, release, 0);
-        log.log("[radio] OEM " + name + " code=" + code + " device=" + device + " down=" + first + " up=" + second);
-        return Boolean.TRUE.equals(first) && Boolean.TRUE.equals(second);
     }
 
     /** US FM: odd 200 kHz channels, OEM frequency in 10 kHz units.

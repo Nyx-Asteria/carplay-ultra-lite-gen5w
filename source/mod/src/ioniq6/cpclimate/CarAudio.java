@@ -69,12 +69,23 @@ final class CarAudio extends Thread {
     final int txMute = CarApi.code(IFACE, "muteAV", "()V"), txUnmute = CarApi.code(IFACE, "unMuteAV", "()V");
     final int txUserMute = CarApi.code(IFACE, "getUserMuteState", "()Z");
     final int txCurrent = CarApi.code(IFACE, "getCurStreamType", "()I");
+    final int txMode = CarApi.code(IFACE, "getAudioMode", "()I");
     /**
      * The stream CarPlay's first (media) level stands for: the one the car's knob moves now, if it has a level
      * (a call, Siri, the radio), else CarPlay's music. On the car, 2026-11-10: with CarPlay silent the current
      * stream was 33, which has no level (getVolume -1), and the knob's level is not DiPOMUSIC's.
      */
     private volatile int mainStream = 14;
+
+    // Only route to native sources verified on DL322; never follow transient
+    // navigation, call, or alert streams for the main media slider.
+    private int mediaStream() throws Exception {
+        if (txCurrent < 0 || txMode < 0) return 14;
+        int mode = call(txMode), stream = call(txCurrent);
+        if (mode == 2 && stream == 38) return 38;
+        if (mode == 4 && stream == 41) return 41;
+        return 14;
+    }
 
     private final VehicleState[] state;
     private final VsChannel[] lanes;
@@ -129,7 +140,7 @@ final class CarAudio extends Thread {
             synchronized (wanted) {
                 wanted[i] = level;
             }
-            if (!sends.offer(new long[] { i, level, CpClimate.sessionGeneration, LINKS[i][1] })) out.log("[audio] queue full; level dropped");
+            if (!sends.offer(new long[] { i, level, CpClimate.sessionGeneration, i == 0 ? mainStream : LINKS[i][1] })) out.log("[audio] queue full; level dropped");
         }
         Object m = written.get(VehicleState.MUTE);
         if (m instanceof Boolean) {
@@ -169,6 +180,10 @@ final class CarAudio extends Thread {
                             if (wanted[(int) s[0]] != s[1]) continue;
                         }
                         int stream = (int) s[3];
+                        if (s[0] == 0 && stream != mediaStream()) {
+                            out.log("[audio] media source changed; stale volume write discarded");
+                            continue;
+                        }
                         call(txSet, stream, (int) s[1], 0);
                         out.log("[audio] stream " + stream + " set to " + s[1] + " for the phone");
                     } catch (Throwable t) {
@@ -202,7 +217,7 @@ final class CarAudio extends Thread {
                 long generation = CpClimate.sessionGeneration;
                 Map<Long, Object> fresh = new LinkedHashMap<Long, Object>();
                 StringBuilder seen = new StringBuilder();
-                int main = 14; // K5: do not redirect media writes to an unrelated native stream.
+                int main = mediaStream();
                 seen.append("main=").append(main).append(' ');
                 for (long[] link : LINKS) {
                     int level = call(txGet, link[0] == VehicleState.VOLUME ? main : (int) link[1], 0);
@@ -218,6 +233,7 @@ final class CarAudio extends Thread {
                 if (!active() || generation != CpClimate.sessionGeneration || vs != state[0]) continue;
                 lanes[1].deliver(vs.fromCar(fresh));
                 synchronized (this) { observed.clear(); observed.addAll(fresh.keySet()); }
+                mainStream = main;
                 observedGeneration = generation;
                 shown = vs;
                 VolumePanel.publishReady(panelContext, panelReady() && mod.settingBoolean("suppress_stock_volume", true));
