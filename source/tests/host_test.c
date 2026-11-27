@@ -543,6 +543,21 @@ int main(void) {
               && th && th->n == 1 && !strcmp(s_of(g(th->v[0], "displayUUID")), "stock-center"));
         m_release(si);
         CHECK("existing alternate screen case releases all objects", live == 0);
+        /* A malformed HID collection must not permit a center rename. */
+        si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        sd = (Arr *)m_new_arr(0, 0, &cb_arr);
+        sm = display("stock-center", 1920, 720, 292, 110);
+        m_append(sd, sm); m_release(sm);
+        k = str("displays"); m_set(si, k, sd); m_release(k); m_release(sd);
+        Str *bad_hid = str("malformed");
+        k = str("hidDevices"); m_set(si, k, bad_hid); m_release(k); m_release(bad_hid);
+        cpc_info_hook(si);
+        ds2 = g(si, "displays");
+        CHECK("malformed HID collection prevents themed display registration",
+              ds2 && ds2->n == 1 && !strcmp(s_of(g(ds2->v[0], "uuid")), "stock-center")
+              && !strcmp(s_of(g(si, "hidDevices")), "malformed"));
+        m_release(si);
+        CHECK("malformed HID case releases all objects", live == 0);
         f = fopen(DIR "cpc-hid", "w");
         if (f) { fputs("1\n", f); fclose(f); }
         si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);

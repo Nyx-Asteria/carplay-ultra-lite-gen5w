@@ -510,17 +510,19 @@ static void add_livi_hid(CF info) {
     LOG("cp-climate: /info hidDevices: %d stock + %d LIVI input devices (knob, media, telephony, cluster knob) (experiment)\n", (int)n, (int)m);
 }
 
-static void move_hid(CF info, CF old, CF now) {
+static int move_hid(CF info, CF old, CF now) {
     CF hid = get(info, &K_hidDevices);
-    if (!old || !is(hid, T_CFArrayGetTypeID)) return;
+    if (!hid || equal(old, now)) return 1;
+    if (!is(hid, T_CFArrayGetTypeID)) return 0;
     CF out = new_array();
-    if (!out) return;
+    if (!out) return 0;
     CFIndex n = count(hid), moved = 0;
     for (CFIndex i = 0; i < n; i++) {
         CF h = at(hid, i);
         CF on = is(h, T_CFDictionaryGetTypeID) ? get(h, &K_displayUUID) : 0;
-        CF copy = on && equal(on, old) ? new_dict() : 0;
-        if (copy) {
+        if (on && equal(on, old)) {
+            CF copy = new_dict();
+            if (!copy) { release(out); return 0; }
             FN(T_CFDictionaryApplyFunction, void (*)(CF, void (*)(CF, CF, void *), void *))(h, copy_entry, (void *)copy);
             set(copy, &K_displayUUID, now);
             append(out, copy);
@@ -532,6 +534,7 @@ static void move_hid(CF info, CF old, CF now) {
     }
     put(info, &K_hidDevices, out);
     LOG("cp-climate: Ultra theme: %d hidDevices moved to Center_Display\n", (int)moved);
+    return 1;
 }
 
 static int add_alt_display(CF info, int themed) {
@@ -596,7 +599,11 @@ static int add_alt_display(CF info, int themed) {
     set_int(alt, &K_mapAppSetting, APPEARANCE_AUTOMATIC);
     append(out, alt);
     release(alt);
-    if (themed) move_hid(info, get(first, &K_uuid), &K_centerId);
+    if (themed && !move_hid(info, get(first, &K_uuid), &K_centerId)) {
+        release(out);
+        LOG("cp-climate: Ultra theme registration skipped: HID reassignment failed\n");
+        return 0;
+    }
     put(info, &K_displays, out);
     LOG("cp-climate: Ultra display registration: main=%s, alternate=%s, original count=%d\n",
         themed ? "Center_Display" : "stock UUID", themed ? "Cluster_Display" : "virtual UUID", (int)n);
