@@ -17,7 +17,7 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [ ] Resolve seat actuation regression, compare feedback experiments independently.
 - [x] Guard queued seat commands by original session generation (CI pending).
 - [ ] Resolve ventilation UI feedback using confirmed iOS identifiers; no speculative unsupported auto mode.
-- [ ] Passenger temperature request/converted commands now logged; still need DATC callback correlation and verified K5 setter.
+- [ ] Passenger temperature request/converted commands and fresh DATC callback correlation implemented (CI pending); verified K5 setter still needed.
 - [ ] Fuel range validity and missing HMG-API/Nemesis shortcuts.
 - [ ] Bose source-dependent setting; clear stale diagnostic sample on read failures, no forced setter.
 

@@ -86,6 +86,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
     }
     private final LinkedBlockingQueue<QueuedCommand> commands = new LinkedBlockingQueue<QueuedCommand>();
     private final SeatCommandTrace seatTrace = new SeatCommandTrace();
+    private final PassengerTempTrace passengerTrace = new PassengerTempTrace();
     private final Body body = new Body();
     private final Binder bodyToken = new Binder();
     private IBinder bcm;
@@ -139,6 +140,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
     static final class Temperatures extends Binder {
         volatile float driverC = Float.NaN, passengerC = Float.NaN, passengerF = Float.NaN;
         volatile int driverState = -1, passengerState = -1;
+        volatile PassengerTempTrace.Sample passengerSample;
 
         @Override
         protected boolean onTransact(int code, Parcel data, Parcel reply, int flags) {
@@ -161,6 +163,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
                     driverState = ds;
                     passengerC = pc;
                     passengerState = ps;
+                    passengerSample = new PassengerTempTrace.Sample(pc,pf,ps,android.os.SystemClock.elapsedRealtime());
                 }
             } catch (Throwable t) {
                 // a callback we can't read: keep the last values
@@ -267,6 +270,8 @@ final class CarClimate extends Thread implements VehicleState.Car {
     boolean send(ClimateMap.Command c, long generation) throws Exception {
         if (!allowed(c)) { out.log("CAR test switch withheld " + c); return false; }
         if (c.kind == ClimateMap.SEAT && !SeatCommandTrace.sessionMatches(generation, CpClimate.sessionGeneration, CpClimate.sessionActive)) return false;
+        boolean passenger = c.kind == ClimateMap.FRONT && (c.a == ClimateMap.FRONT_PASSENGER_C || c.a == ClimateMap.FRONT_PASSENGER_F);
+        long dispatchedAt = android.os.SystemClock.elapsedRealtime();
         int seatBefore = -1;
         if (c.kind == ClimateMap.SEAT) {
             IBinder bodyService = service(BCM);
@@ -307,6 +312,8 @@ final class CarClimate extends Thread implements VehicleState.Car {
             data.recycle();
             reply.recycle();
         }
+        if (passenger && CpClimate.sessionActive && generation == CpClimate.sessionGeneration)
+            out.log(passengerTrace.accepted(c.a == ClimateMap.FRONT_PASSENGER_C,c.b,generation,dispatchedAt));
         if (c.kind == ClimateMap.SEAT && CpClimate.sessionActive && generation == CpClimate.sessionGeneration)
             out.log(seatTrace.accepted(c.a == ClimateMap.SET_DRIVER_SEAT ? 0 : 1, c.b, seatBefore, generation, android.os.SystemClock.elapsedRealtime()));
         return true;
@@ -385,6 +392,8 @@ final class CarClimate extends Thread implements VehicleState.Car {
                 String passengerResult = seatTrace.observe(1, r.passengerSeat, generation, now);
                 if (driverResult != null) out.log(driverResult);
                 if (passengerResult != null) out.log(passengerResult);
+                String tempResult = passengerTrace.observe(temps.passengerSample,r.passengerRaw,r.unit,r.sync,generation,now);
+                if (tempResult != null) out.log(tempResult);
                 Map<Long, Object> values = ClimateMap.toCarPlay(r);
                 String seen = values.toString();
                 if (!seen.equals(last)) {
