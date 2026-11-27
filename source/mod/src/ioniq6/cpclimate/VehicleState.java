@@ -41,10 +41,13 @@ final class VehicleState {
     static final class Out {
         final int lane;
         final byte[] message;
+        final String seatDiagnostic;
 
-        Out(int lane, byte[] message) {
+        Out(int lane, byte[] message) { this(lane,message,null); }
+        Out(int lane, byte[] message, String seatDiagnostic) {
             this.lane = lane;
             this.message = message;
+            this.seatDiagnostic = seatDiagnostic;
         }
     }
 
@@ -62,6 +65,7 @@ final class VehicleState {
     volatile long startedAt;
     private final Map<Long, Long> heldSince = new HashMap<Long, Long>();
     private final Map<Long, Object> actualSeats = new HashMap<Long, Object>();
+    private final Map<Long, Object> requestedSeats = new HashMap<Long, Object>();
     // (1.1.2-1.1.5 held back the echo of cooling writes, testing a drawing-delay theory; 2026-11-11 a level set
     // from the car's own screen showed the same extra dot, so it was an offset, and the held echo made the button
     // flash a stale level. Cooling writes are echoed at once again, as heating's always were.)
@@ -77,6 +81,7 @@ final class VehicleState {
     static volatile VehiclePage vehiclePage;
     static volatile boolean climateEnabled = true;
     static volatile boolean seatFanImmediateFeedback;
+    static volatile boolean seatHeatImmediateFeedback = true;
     interface Controls { void pressed(String name, Object value); }
     static volatile Controls mediaControls;
 
@@ -925,11 +930,12 @@ final class VehicleState {
             handledFans.add(pair[0]); handledFans.add(pair[1]);
             if (!reported.containsKey(pair[0]) || !reported.containsKey(pair[1])) continue;
             long since = Math.max(levelAt == null ? 0L : levelAt, onAt == null ? 0L : onAt);
-            boolean confirmed = (levelAt == null || same(values.get(pair[0]), reported.get(pair[0])))
-                    && (onAt == null || same(values.get(pair[1]), reported.get(pair[1])));
+            boolean confirmed = (levelAt == null || same(requestedSeat(pair[0]), reported.get(pair[0])))
+                    && (onAt == null || same(requestedSeat(pair[1]), reported.get(pair[1])));
             if (!confirmed && now - since < HOLD_MS) continue;
             for (long iid : pair) {
                 heldSince.remove(iid);
+                requestedSeats.remove(iid);
                 Object actual = reported.get(iid);
                 carSets(iid, actual, changed);
                 if (followed.contains(iid)) changed.put(iid, actual);
@@ -944,8 +950,9 @@ final class VehicleState {
             if (since != null) {
                 // the wheel heater's indicator follows a press only after ~5.5 s: its stale reading is held longer
                 long hold = e.getKey() == ClimateMap.WHEEL_LEVEL ? WHEEL_HOLD_MS : HOLD_MS;
-                if (now - since < hold && !same(values.get(e.getKey()), e.getValue())) continue;
+                if (now - since < hold && !same(frontSeatValue(e.getKey()) ? requestedSeat(e.getKey()) : values.get(e.getKey()), e.getValue())) continue;
                 heldSince.remove(e.getKey());
+                requestedSeats.remove(e.getKey());
             }
             if (e.getValue() == ClimateMap.BLANK) {
                 carBlanks(e.getKey(), blanked);
@@ -958,7 +965,7 @@ final class VehicleState {
             // the phone's "no value" for each, as a registerResponse gives it for a value the car doesn't have
             Map<Object, Object> m = dict("command", "updateNotify", "errors", blanked);
             if (!changed.isEmpty()) m.put("values", changed);
-            answers.add(new Out(HIGH, wrap(m)));
+            answers.add(new Out(HIGH, wrap(m), seatNotificationDiagnostic(changed)));
             return answers;
         }
         Out notify = updateNotify(changed);
@@ -983,7 +990,7 @@ final class VehicleState {
             if (iid == null) continue;
             followed.add(iid);
             if (seatFanValue(iid)) out.log("[seat-fan] subscribed iid=" + iid + " cached=" + values.get(iid) + " BCM=" + actualSeats.get(iid));
-            if (car != null && seatFanValue(iid) && actualSeats.containsKey(iid)) held.put(iid, actualSeats.get(iid));
+            if (car != null && frontSeatValue(iid) && !immediateSeatFeedback(iid) && actualSeats.containsKey(iid)) held.put(iid, actualSeats.get(iid));
             else if (values.containsKey(iid)) held.put(iid, values.get(iid));
             else missing.put(iid, NO_VALUE);
             if (names.containsKey(iid)) named.add(names.get(iid));
@@ -1002,7 +1009,7 @@ final class VehicleState {
             Long iid = OpackCodec.asLong(o);
             if (iid == null) continue;
             if (names.containsKey(iid)) named.add(names.get(iid));
-            if (car != null && seatFanValue(iid) && actualSeats.containsKey(iid)) held.put(iid, actualSeats.get(iid));
+            if (car != null && frontSeatValue(iid) && !immediateSeatFeedback(iid) && actualSeats.containsKey(iid)) held.put(iid, actualSeats.get(iid));
             else if (values.containsKey(iid)) held.put(iid, values.get(iid));
             else missing.put(iid, NO_VALUE);
         }
@@ -1020,6 +1027,12 @@ final class VehicleState {
     private static boolean frontSeatValue(long iid) {
         return iid == ClimateMap.DRIVER_SEAT_LEVEL || iid == ClimateMap.DRIVER_SEAT_ON
                 || iid == ClimateMap.PASSENGER_SEAT_LEVEL || iid == ClimateMap.PASSENGER_SEAT_ON || seatFanValue(iid);
+    }
+    private Object requestedSeat(long iid) {
+        return requestedSeats.containsKey(iid) ? requestedSeats.get(iid) : values.get(iid);
+    }
+    static boolean immediateSeatFeedback(long iid) {
+        return seatFanValue(iid) ? seatFanImmediateFeedback : seatHeatImmediateFeedback;
     }
     private static boolean seatFanValue(long iid) {
         for (long[] pair : SEAT_FAN_PAIRS) if (iid == pair[0] || iid == pair[1]) return true;
@@ -1050,8 +1063,12 @@ final class VehicleState {
             else out.log("VS phone wrote " + names.get(iid));
             results.put(iid, WRITTEN);
             // LIVI hides a notification history entry here; M3 keeps no history, so nothing to hide
-            Object before = values.put(iid, v);
-            if (!(car != null && seatFanValue(iid) && !seatFanImmediateFeedback) && !same(before, v) && followed.contains(iid)) changed.put(iid, v);
+            boolean immediate = car == null || !frontSeatValue(iid) || immediateSeatFeedback(iid);
+            Object before = values.get(iid);
+            if (car != null && frontSeatValue(iid)) requestedSeats.put(iid, v);
+            if (immediate) values.put(iid, v);
+            if (immediate && !same(before, v) && followed.contains(iid)) changed.put(iid, v);
+            if (frontSeatValue(iid)) out.log("[seat-feedback] write iid=" + iid + " valueType=" + (v == null ? "null" : v.getClass().getSimpleName()) + " immediate=" + immediate + " subscribed=" + followed.contains(iid) + " queued=" + changed.containsKey(iid));
         }
         VehiclePage page = vehiclePage;
         if (page != null) {
@@ -1263,7 +1280,22 @@ final class VehicleState {
 
     private static Out updateNotify(Map<Object, Object> changed) {
         if (changed.isEmpty()) return null;
-        return new Out(HIGH, wrap(dict("command", "updateNotify", "values", changed)));
+        return new Out(HIGH, wrap(dict("command", "updateNotify", "values", changed)), seatNotificationDiagnostic(changed));
+    }
+
+    static String seatNotificationDiagnostic(Map<Object,Object> changed) {
+        StringBuilder s=new StringBuilder();
+        for(Map.Entry<Object,Object> e:changed.entrySet()) {
+            Long iid=OpackCodec.asLong(e.getKey());
+            if(iid==null||!frontSeatValue(iid))continue;
+            Object value=e.getValue();
+            if(!(value instanceof Long)&&!(value instanceof Boolean)) {
+                s.append(" iid=").append(iid).append(":unexpected-type");
+                continue;
+            }
+            s.append(" iid=").append(iid).append(':').append(value.getClass().getSimpleName()).append('=').append(value);
+        }
+        return s.length()==0?null:s.toString();
     }
 
     static byte[] wrap(Object inner) {

@@ -33,10 +33,10 @@ final class SessionLogging {
         boolean enabled=mod.settingBoolean("session_logging",true);
         boolean usb=mod.settingBoolean("session_usb_export",true);
         settings.append("; session_logging=").append(enabled).append("; session_usb_export=").append(usb);
-        for(String key:new String[]{"k5_integration","seat_fan_immediate_feedback","ultra_theme","ultra_sidebars",
+        for(String key:new String[]{"k5_integration","seat_fan_immediate_feedback","seat_heat_immediate_feedback","ultra_theme","ultra_sidebars",
             "ultra_ui_sync","ultra_force_wallpaper","sxm_schema_test","parked_video","parked_video_picture_only"})
             settings.append("; ").append(key).append('=').append(mod.settingBoolean(key,
-                key.equals("k5_integration")||key.equals("ultra_theme")||key.equals("ultra_sidebars")));
+                key.equals("seat_heat_immediate_feedback")||key.equals("k5_integration")||key.equals("ultra_theme")||key.equals("ultra_sidebars")));
         metadata=settings.toString();
         policy=new SessionLogPolicy(categories);
         writer=enabled?new SessionLogWriter(new File(files,"cpul-session-logs"),
