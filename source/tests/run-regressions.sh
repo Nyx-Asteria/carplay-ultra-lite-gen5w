@@ -15,7 +15,7 @@ run_core_test() {
 }
 
 # Session logging, parked safety, climate and radio.
-for T in SessionLogPolicyTest SessionLogWriterTest SessionUsbExportTest ProjectionLogCaptureTest PreSessionEventsTest ParkedStateTest PassengerTempTraceTest SeatCommandTraceTest RadioActivationTraceTest RadioSourceRequestTest SxmCatalogRequestTest SxmLiveMetadataTest SeatSchemaTest ClimateMapTest VolumePanelPolicyTest RadioPolicyTest; do
+for T in SessionLogPolicyTest SessionLogWriterTest SessionUsbExportTest ProjectionLogCaptureTest PreSessionEventsTest ParkedStateTest PassengerTempTraceTest SeatCommandTraceTest RadioActivationTraceTest FmSeekTraceTest RadioSourceRequestTest SxmCatalogRequestTest SxmLiveMetadataTest SeatSchemaTest ClimateMapTest VolumePanelPolicyTest RadioPolicyTest; do
   run_core_test "$T"
 done
 
