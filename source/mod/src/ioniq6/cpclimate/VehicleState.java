@@ -1137,6 +1137,23 @@ final class VehicleState {
                         && pendingSeatLevels.containsKey(pair[0]))
                     commandState.put(pair[0], pendingSeatLevels.get(pair[0]));
             }
+            // A separate off write for the old mode must not undo a pending
+            // activation of the opposite mode while BCM still reports the old mode.
+            if (extras && !coolingLayout) {
+                for (long[] pair : new long[][]{
+                        {ClimateMap.DRIVER_SEAT_LEVEL, ClimateMap.DRIVER_SEAT_ON, ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.DRIVER_VENT_ON},
+                        {ClimateMap.PASSENGER_SEAT_LEVEL, ClimateMap.PASSENGER_SEAT_ON, ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON}}) {
+                    for (int i=0;i<4;i+=2) {
+                        int opposite=2-i;
+                        boolean off=Boolean.FALSE.equals(sent.get(pair[i+1])) || Long.valueOf(0).equals(sent.get(pair[i]));
+                        Object pending=pendingSeatLevels.get(pair[opposite]);
+                        if (off && !sent.containsKey(pair[opposite]) && !sent.containsKey(pair[opposite+1])
+                                && pending instanceof Long && (Long)pending>0
+                                && !Boolean.FALSE.equals(requestedSeats.get(pair[opposite+1])))
+                            commandState.put(pair[opposite],pending);
+                    }
+                }
+            }
             c.phoneWrote(sent, commandState);
         }
         List<Out> answers = new ArrayList<Out>();

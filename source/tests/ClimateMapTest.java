@@ -536,6 +536,36 @@ public class ClimateMapTest {
         }
         VehicleState.seatHeatImmediateFeedback = true;
         VehicleState.seatFanImmediateFeedback = false;
+        // The phone may turn off the former mode in a separate packet after activating the new mode.
+        for (boolean immediateFeedback : new boolean[]{false,true}) {
+            VehicleState.seatHeatImmediateFeedback=immediateFeedback;
+            VehicleState.seatFanImmediateFeedback=immediateFeedback;
+            for (long[] pair : new long[][]{
+                    {ClimateMap.DRIVER_SEAT_LEVEL,ClimateMap.DRIVER_SEAT_ON,ClimateMap.DRIVER_VENT_LEVEL,ClimateMap.DRIVER_VENT_ON},
+                    {ClimateMap.PASSENGER_SEAT_LEVEL,ClimateMap.PASSENGER_SEAT_ON,ClimateMap.PASSENGER_VENT_LEVEL,ClimateMap.PASSENGER_VENT_ON}}) {
+                for (int direction=0;direction<4;direction+=2) {
+                    final List<ClimateMap.Command> commands=new java.util.ArrayList<ClimateMap.Command>();
+                    VehicleState vs2=new VehicleState(new VsChannel.Log(){public void log(String m){}});
+                    vs2.car=new VehicleState.Car(){public void phoneWrote(Map<Long,Object> w,Map<Long,Object> state){
+                        commands.addAll(ClimateMap.commands(w,state,2));
+                    }};
+                    int old=direction, next=2-direction;
+                    Map<Long,Object> bcm2=new java.util.LinkedHashMap<Long,Object>();
+                    bcm2.put(pair[old],2L);bcm2.put(pair[old+1],true);
+                    bcm2.put(pair[next],0L);bcm2.put(pair[next+1],false);
+                    vs2.fromCar(bcm2);
+                    vs2.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest","transactionID",50L,
+                            "values",VehicleState.dict(pair[next],3L,pair[next+1],true))));
+                    check("new seat mode activation "+pair[next],commands.size()==1&&commands.get(0).b==(next==0?8:5));
+                    commands.clear();
+                    vs2.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest","transactionID",51L,
+                            "values",VehicleState.dict(pair[old+1],false))));
+                    check("old mode off cannot cancel pending opposite activation "+pair[old]+" immediate="+immediateFeedback,commands.isEmpty());
+                }
+            }
+        }
+        VehicleState.seatHeatImmediateFeedback=true;
+        VehicleState.seatFanImmediateFeedback=false;
         System.out.println(fails == 0 ? "ALL OK" : fails + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }
