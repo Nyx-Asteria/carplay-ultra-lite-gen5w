@@ -74,3 +74,5 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [x] Distinguish confirmed registry contribution from uncertain ownership after failed registration/withdrawal; uncertain state must be withdrawn successfully before re-registration. CI pending; native activation remains separate.
 
 - [x] Extract production theme ownership state and regression-test confirmed, uncertain, replacement and withdrawal transitions in the shared CI suite. Reflective provider/native integration still needs runtime validation.
+
+- [x] FM station name, artwork and individual HD tags reject older callback timestamps within the observed frequency/session scope; additional generation rechecks and host policy tests. Same-frequency delayed callbacks after a retune still need source-side evidence. CI pending.

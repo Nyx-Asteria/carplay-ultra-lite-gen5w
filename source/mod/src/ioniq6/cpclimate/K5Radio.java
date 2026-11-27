@@ -35,22 +35,27 @@ final class K5Radio {
     private final Object tagLock = new Object();
     private long tagFrequency = -1, tagGeneration = -1;
     private final String[] hdTags = {"", "", ""};
+    private final long[] hdTagReceived = {-1,-1,-1};
     private void clearTags() {
         synchronized (tagLock) {
             tagFrequency = -1;
             tagGeneration = -1;
             java.util.Arrays.fill(hdTags, "");
+            java.util.Arrays.fill(hdTagReceived, -1);
         }
     }
-    private void receiveTag(long khz, int tag, String value) {
+    private void receiveTag(long khz, int tag, String value, long received, long generation) {
         if (tag < 0 || tag > 2 || value == null || value.length() > 256) return;
         synchronized (tagLock) {
-            long generation = CpClimate.sessionGeneration;
+            if (generation != CpClimate.sessionGeneration || khz != lastFmFrequency || !fmActive) return;
             if (tagFrequency != khz || tagGeneration != generation) {
                 java.util.Arrays.fill(hdTags, "");
+            java.util.Arrays.fill(hdTagReceived, -1);
                 tagFrequency = khz;
                 tagGeneration = generation;
             }
+            if (received < hdTagReceived[tag]) return;
+            hdTagReceived[tag] = received;
             hdTags[tag] = value.trim();
         }
     }
@@ -64,10 +69,10 @@ final class K5Radio {
     }
     private static final byte[] EMPTY_ARTWORK = new byte[0];
     private static final class StationArtwork {
-        final long khz, generation;
+        final long khz, generation, received;
         final byte[] bytes;
-        StationArtwork(long khz, long generation, byte[] bytes) {
-            this.khz = khz; this.generation = generation; this.bytes = bytes;
+        StationArtwork(long khz, long generation, long received, byte[] bytes) {
+            this.khz = khz; this.generation = generation; this.received=received; this.bytes = bytes;
         }
     }
     // Observed OEM logo naming: 0000102049_Z100_10030.logo (100.3 MHz).
@@ -89,27 +94,34 @@ final class K5Radio {
             this.khz = khz; this.generation = generation; this.received = received; this.name = name;
         }
     }
+    static boolean metadataNewEnough(long khz,long generation,long received,long previousKhz,long previousGeneration,long previousReceived) {
+        return khz!=previousKhz || generation!=previousGeneration || received>=previousReceived;
+    }
     private void listenMetadata() {
         try {
             context.registerReceiver(new android.content.BroadcastReceiver() {
                 @Override public void onReceive(Context c, Intent i) {
                     if (!enabled() || !CpClimate.sessionActive || !fmActive) return;
+                    long generation=CpClimate.sessionGeneration;
                     long khz = i.getLongExtra("frequency", -1);
                     long received = i.getLongExtra("received", -1);
                     long now = android.os.SystemClock.elapsedRealtime();
                     String name = i.getStringExtra("name");
                     if (khz < 87500 || khz > 108000 || received < 0 || now < received
                             || now - received > 2000) return;
-                    if (khz != lastFmFrequency) return;
-                    if (name != null && name.length() <= 256) {
-                        stationName = new StationName(khz, CpClimate.sessionGeneration, received, name);
+                    if (khz != lastFmFrequency || generation!=CpClimate.sessionGeneration) return;
+                    StationName prior=stationName;
+                    if (name != null && name.length() <= 256 && (prior==null || metadataNewEnough(khz,generation,received,prior.khz,prior.generation,prior.received))) {
+                        stationName = new StationName(khz, generation, received, name);
                     }
-                    receiveTag(khz, i.getIntExtra("tag", -1), i.getStringExtra("text"));
+                    receiveTag(khz, i.getIntExtra("tag", -1), i.getStringExtra("text"), received, generation);
                     byte[] image = i.getByteArrayExtra("artwork");
                     if (image != null && logoMatchesFrequency(i.getStringExtra("file"), khz)) {
                         if (supportedArtwork(image)) {
                             StationArtwork previous=stationArtwork;
-                            stationArtwork = new StationArtwork(khz, CpClimate.sessionGeneration, image);
+                            if (generation!=CpClimate.sessionGeneration || khz!=lastFmFrequency || !fmActive) return;
+                            if(previous!=null && !metadataNewEnough(khz,generation,received,previous.khz,previous.generation,previous.received))return;
+                            stationArtwork = new StationArtwork(khz, generation, received, image);
                             if(previous==null || previous.khz!=khz || previous.generation!=CpClimate.sessionGeneration || !java.util.Arrays.equals(previous.bytes,image))
                                 log.log("[radio-meta] station logo received " + khz + " kHz bytes=" + image.length);
                         } else log.log("[radio-meta] unsupported station logo encoding bytes=" + image.length);

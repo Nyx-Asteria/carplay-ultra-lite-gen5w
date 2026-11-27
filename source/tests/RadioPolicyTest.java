@@ -32,6 +32,11 @@ public final class RadioPolicyTest {
         byte[] oversized = new byte[131073];
         oversized[0]=(byte)255; oversized[1]=(byte)216; oversized[2]=(byte)255;
         check(!K5Radio.supportedArtwork(oversized), "reject oversized artwork");
+        check(!K5Radio.metadataNewEnough(100300,1,99,100300,1,100),"older callback rejected");
+        check(K5Radio.metadataNewEnough(100300,1,100,100300,1,100),"same timestamp accepted");
+        check(K5Radio.metadataNewEnough(100300,1,101,100300,1,100),"new callback accepted");
+        check(K5Radio.metadataNewEnough(100500,1,99,100300,1,100),"new frequency independent");
+        check(K5Radio.metadataNewEnough(100300,2,99,100300,1,100),"new session independent");
         System.out.println("Radio policy regressions passed");
     }
 }
