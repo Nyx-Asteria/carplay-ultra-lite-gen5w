@@ -35,10 +35,17 @@ final class SessionUsbExport {
         }
         return count;
     }
-    private static void export(File source,File root) throws Exception {
+    private void requireDestination(File root) throws Exception {
+        File usb=destination.find();
+        if(usb==null || !new File(usb,"CPUL-LOGS").getCanonicalFile().equals(root.getCanonicalFile()) || !root.isDirectory())
+            throw new IOException("USB destination changed or unavailable");
+    }
+    private void export(File source,File root) throws Exception {
+        requireDestination(root);
         File target=new File(root,source.getName());
         File partial=new File(root,source.getName()+".partial");
         String manifest=manifest(source);
+        requireDestination(root);
         if(target.exists()) {
             if(!new File(target,"COMPLETE.txt").isFile() || !manifest.equals(readSmall(new File(target,"COMPLETE.txt"))) ||
                 !manifest.equals(manifest(target))) throw new IOException("USB destination conflict");
@@ -47,12 +54,18 @@ final class SessionUsbExport {
             SessionLogWriter.ensureDir(partial);
             if(root.getUsableSpace()<SessionLogWriter.size(source)+1048576L) throw new IOException("insufficient USB space");
             copyTree(source,partial);
+            requireDestination(root);
             if(!manifest.equals(manifest(partial))) throw new IOException("USB verification failed");
             SessionLogWriter.writeText(new File(partial,"COMPLETE.txt"),manifest);
+            requireDestination(root);
             if(!partial.renameTo(target)) throw new IOException("USB final rename failed");
         }
         // Local marker only after verified completion. If power is lost before this,
         // the existing destination is verified on retry rather than duplicated.
+        requireDestination(root);
+        if(!manifest.equals(manifest(target)) || !manifest.equals(readSmall(new File(target,"COMPLETE.txt"))))
+            throw new IOException("USB final verification failed");
+        requireDestination(root);
         SessionLogWriter.writeText(new File(source,".exported"),"verified\n");
     }
     private static boolean allowed(String name) {

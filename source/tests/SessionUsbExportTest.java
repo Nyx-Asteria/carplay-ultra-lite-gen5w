@@ -30,6 +30,13 @@ public final class SessionUsbExportTest {
             SessionLogWriter.writeText(new File(dest,"session.log"),"corrupt");
             boolean failed=false;try{x.pending(spool);}catch(IOException e){failed=true;}
             check(failed&&!new File(s,".exported").exists());
+            // A destination disappearing during an export must not mark the source complete.
+            SessionLogWriter.writeText(new File(dest,"session.log"),"data");
+            final int[] probes={0};
+            SessionUsbExport unstable=new SessionUsbExport(new SessionUsbExport.Destination(){public File find(){return ++probes[0]<=2?usb:null;}});
+            failed=false;try{unstable.pending(spool);}catch(IOException e){failed=true;}
+            check(failed&&!new File(s,".exported").exists());
+            check(x.pending(spool)==1);
             System.out.println("SessionUsbExportTest passed");
         }finally{SessionLogWriter.delete(root);}
     }
