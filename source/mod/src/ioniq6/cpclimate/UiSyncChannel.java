@@ -39,10 +39,12 @@ final class UiSyncChannel extends Thread {
 
     @Override
     public void run() {
-        try {
-            ServerSocket s = new ServerSocket();
+        long started = System.nanoTime();
+        out.log("[listener] uiSync bind requested port=" + PORT);
+        try (ServerSocket s = new ServerSocket()) {
             s.setReuseAddress(true);
             s.bind(new InetSocketAddress(PORT));
+            out.log("[listener] uiSync ready elapsed_ms=" + (System.nanoTime()-started)/1000000L);
             out.log("SYNC listening on port " + PORT + " (uiSync experiment, cluster layout "
                     + (sync.wanted == null ? "not requested" : sync.wanted.name + " " + sync.wanted.palette) + ", force center Wallpaper=" + sync.legacyCenterLayout + ")");
             while (true) {
@@ -55,7 +57,7 @@ final class UiSyncChannel extends Thread {
                 }.start();
             }
         } catch (Throwable t) {
-            out.log("SYNC listener stopped: " + t);
+            out.log("[listener] uiSync listener stopped: " + t.getClass().getSimpleName());
         }
     }
 
