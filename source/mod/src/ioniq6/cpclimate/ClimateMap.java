@@ -456,6 +456,10 @@ final class ClimateMap {
         Command vent = !separate ? null : written.containsKey(ventLevel)
                 ? ventSeat(code, false, written.get(ventLevel), now.get(ventLevel), now.get(heatLevel))
                 : ventSeat(code, true, written.get(ventOn), now.get(ventLevel), now.get(heatLevel));
+        // A level may be retained by the phone while the corresponding power
+        // is explicitly off. Do not treat that retained level as activation.
+        if (separate && Boolean.FALSE.equals(written.get(heatOn))) heat = seat(code, true, false, now.get(heatLevel));
+        if (separate && Boolean.FALSE.equals(written.get(ventOn))) vent = ventSeat(code, true, false, now.get(ventLevel), now.get(heatLevel));
         if (separate && heat != null && heat.b == 2 && number(now.get(ventLevel), 0) > 0) heat = null;
         // If both modes request activation, prefer an explicit nonzero level over
         // an On-only request; reject genuinely ambiguous dual activation.
