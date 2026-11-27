@@ -168,6 +168,10 @@ final class CarAudio extends Thread {
     private final hmgapi.hook.ModContext mod;
     private final java.util.Set<Long> observed = new java.util.HashSet<Long>();
     private volatile long observedGeneration = -1;
+    private volatile long observedAt = -1;
+    static boolean observationFresh(long observedAt,long now){
+        return observedAt>=0 && now>=observedAt && now-observedAt<VolumePanelPolicy.LEASE_MS;
+    }
     private final int[] wanted = new int[LINKS.length];
     private int failures;
 
@@ -199,7 +203,7 @@ final class CarAudio extends Thread {
         return owner!=null && owner==shown && owner==current && generation==observed && generation==activeGeneration;
     }
     private boolean authorized(VehicleState owner,long generation,long iid){
-        return active() && commandOwned(owner,shown,state[0],generation,observedGeneration,CpClimate.sessionGeneration) && hasObserved(iid);
+        return active() && commandOwned(owner,shown,state[0],generation,observedGeneration,CpClimate.sessionGeneration) && observationFresh(observedAt,android.os.SystemClock.elapsedRealtime()) && hasObserved(iid);
     }
     boolean phoneWrote(VehicleState owner,Map<Long, Object> written) {
         final long generation=CpClimate.sessionGeneration;
@@ -230,7 +234,7 @@ final class CarAudio extends Thread {
         return mine;
     }
 
-    boolean panelReady() { return active() && shown != null && shown == state[0] && observedGeneration == CpClimate.sessionGeneration && hasObserved(VehicleState.VOLUME); }
+    boolean panelReady() { return active() && shown != null && shown == state[0] && observedGeneration == CpClimate.sessionGeneration && observationFresh(observedAt,android.os.SystemClock.elapsedRealtime()) && hasObserved(VehicleState.VOLUME); }
 
     private synchronized boolean hasObserved(long iid) { return observed.contains(iid); }
 
@@ -296,8 +300,9 @@ final class CarAudio extends Thread {
                 }
                 VehicleState vs;
                 synchronized (state) { vs=state[0]; }
-                if (!active() || vs == null || !(lanes[0].isOpen() || lanes[1].isOpen())) { shown = null; observedGeneration = -1; boseSample=null; lastBoseGeneration=-1; synchronized (this) { observed.clear(); } sends.clear(); VolumePanel.publishReady(panelContext, false); continue; }
+                if (!active() || vs == null || !(lanes[0].isOpen() || lanes[1].isOpen())) { shown = null; observedGeneration = -1; observedAt=-1; boseSample=null; lastBoseGeneration=-1; synchronized (this) { observed.clear(); } sends.clear(); VolumePanel.publishReady(panelContext, false); continue; }
                 long generation = CpClimate.sessionGeneration;
+                long sampledAt=android.os.SystemClock.elapsedRealtime();
                 Map<Long, Object> fresh = new LinkedHashMap<Long, Object>();
                 StringBuilder seen = new StringBuilder();
                 int main = mediaStream();
@@ -315,16 +320,18 @@ final class CarAudio extends Thread {
                     out.log("[audio] " + last);
                 }
                 if (!active() || generation != CpClimate.sessionGeneration || vs != state[0]) continue;
-                if (!lanes[1].deliverOwned(vs,vs.fromCar(fresh)) || !active()
+                if (!observationFresh(sampledAt,android.os.SystemClock.elapsedRealtime())
+                        || !lanes[1].deliverOwned(vs,vs.fromCar(fresh)) || !active()
                         || generation!=CpClimate.sessionGeneration) {
                     shown=null;
-                    observedGeneration=-1;
+                    observedGeneration=-1; observedAt=-1;
                     synchronized(this){observed.clear();}
                     VolumePanel.publishReady(panelContext,false);
                     continue;
                 }
                 synchronized (this) { observed.clear(); observed.addAll(fresh.keySet()); }
                 mainStream = main;
+                observedAt = sampledAt;
                 observedGeneration = generation;
                 shown = vs;
                 VolumePanel.publishReady(panelContext, panelReady() && mod.settingBoolean("suppress_stock_volume", true));
@@ -335,7 +342,7 @@ final class CarAudio extends Thread {
                 // Do not accept writes or suppress the OEM panel using an
                 // observation that could no longer be verified.
                 shown=null;
-                observedGeneration=-1;
+                observedGeneration=-1; observedAt=-1;
                 boseSample=null;
                 lastBoseGeneration=-1;
                 synchronized(this){observed.clear();}

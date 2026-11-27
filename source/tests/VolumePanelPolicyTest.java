@@ -14,6 +14,10 @@ public final class VolumePanelPolicyTest {
         check(!VolumePanelPolicy.suppress(true,true,true,3500,3500,true,true),"expired");
         check(!VolumePanelPolicy.suppress(true,true,true,9000,1000,true,true),"implausible");
         check(!VolumePanelPolicy.suppress(true,true,true,0,1000,true,true),"revoked");
+        check(CarAudio.observationFresh(1000,3499),"audio observation fresh");
+        check(!CarAudio.observationFresh(1000,3500),"audio observation expired");
+        check(!CarAudio.observationFresh(-1,1000),"audio observation absent");
+        check(!CarAudio.observationFresh(1001,1000),"audio observation future");
         check(CarAudio.boseSampleCurrent(1,1,14,14,1000,1100),"Bose stable media sample");
         check(!CarAudio.boseSampleCurrent(1,2,14,14,1000,1100),"Bose session replaced");
         check(!CarAudio.boseSampleCurrent(1,1,14,38,1000,1100),"Bose source changed to FM");
