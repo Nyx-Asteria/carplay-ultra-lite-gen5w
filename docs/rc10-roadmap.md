@@ -32,7 +32,7 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 - [x] Reject live metadata callbacks for mismatched observed channel and out-of-order delivery (CI pending); early callbacks before tuner observation may be withheld, same-ID delayed callbacks remain ambiguous.
 
 ## AirPlay and themes
-- [ ] First-frame session collapse: correlate WCP/CPUL timestamps and playback state; fix generation race in Park-loss stop.
+- [ ] First-frame session collapse: correlate WCP/CPUL timestamps and playback state; generation-aware queued stop protection implemented (CI pending).
 - [ ] Keep parked-only restriction, no DRM bypass.
 - [ ] Center display negotiation, Midnight/wallpaper and theme catalog; isolate experiments.
 - [ ] UI Sync interleaving/no-display tests and legacy compatibility; no physical cluster changes requested.

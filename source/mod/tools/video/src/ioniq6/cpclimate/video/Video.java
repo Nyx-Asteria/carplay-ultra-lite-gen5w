@@ -64,6 +64,8 @@ public final class Video {
     static boolean firstFrame;
     static Object itemUuid;
     static long streamId = -1;
+    // Main-thread ownership, independent of the generation at which a stop was queued.
+    static long playbackGeneration = -1;
     static boolean shown;
     static String currentUrl;
     static boolean requestedPlaying;
@@ -237,13 +239,23 @@ public final class Video {
 
     public static void onParkLost(final String reason) {
         if (main == null) return;
+        final long requestedGeneration=sessionGeneration();
         main.post(new Runnable() { public void run() {
+            if (VideoSessionPolicy.ignoreStop(requestedGeneration,sessionGeneration(),playbackGeneration,parkAllowed())) {
+                log("[video] stale stop ignored generation="+requestedGeneration+" owner="+playbackGeneration);
+                return;
+            }
             if (player != null || shown || itemUuid != null) {
                 log("[video] stopping: " + reason);
                 stop(reason);
             }
             callCore("ioniq6.cpclimate.VideoUi", "engineClosed", new Class<?>[0]);
         }});
+    }
+
+    private static void claimPlayback(long generation) {
+        if(playbackGeneration>=0 && playbackGeneration!=generation) stop("previous playback session");
+        playbackGeneration=generation;
     }
 
     /** a playback message from the phone (insertPlayQueueItem, setRate, seek, playbackInfo, ...) */
@@ -256,6 +268,7 @@ public final class Video {
                 try {
                     if(generation<0||generation!=sessionGeneration())return;
                     if (!parkAllowed()) { stop("Park or session unavailable"); return; }
+                    claimPlayback(generation);
                     handle(sid, m);
                 } catch (Throwable t) {
                     log("video: message " + m.get("type") + " failed: " + t);
@@ -273,6 +286,7 @@ public final class Video {
             public void run() {
                 if(generation<0||generation!=sessionGeneration())return;
                 if (!parkAllowed()) { stop("Park or session unavailable"); return; }
+                claimPlayback(generation);
                 show();
             }
         });
@@ -888,6 +902,7 @@ public final class Video {
         currentUrl = null;
         rateReceived = false;
         requestedPlaying = false;
+        playbackGeneration = -1;
     }
 
     static void release() {
