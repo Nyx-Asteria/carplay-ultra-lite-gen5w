@@ -419,12 +419,34 @@ public class UiSyncTest {
             blocked.join(3000);
             check("failed uiSync listener exits",!blocked.isAlive());
         }
-        ClusterSink sink=new ClusterSink(quiet,ClusterSink.PORT,"test-cluster");
+        final java.util.concurrent.CountDownLatch firstClosed=new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch secondClosed=new java.util.concurrent.CountDownLatch(1);
+        final List<String> clusterLogs=java.util.Collections.synchronizedList(new ArrayList<String>());
+        ClusterSink sink=new ClusterSink(new VsChannel.Log(){
+            public void log(String msg){
+                clusterLogs.add(msg);
+                if(msg.contains("stream closed bytes=")&&msg.contains(" connection=1 "))firstClosed.countDown();
+                if(msg.contains("stream closed bytes=")&&msg.contains(" connection=2 "))secondClosed.countDown();
+            }
+        },ClusterSink.PORT,"test-cluster");
         sink.start();
         check("cluster listener reports ready",sink.awaitReady(3000));
         try(Socket socket=new Socket("127.0.0.1",ClusterSink.PORT)){
             socket.getOutputStream().write(new byte[]{1,2,3});
         }
+        check("first cluster stream closes",firstClosed.await(3,java.util.concurrent.TimeUnit.SECONDS));
+        try(Socket socket=new Socket("127.0.0.1",ClusterSink.PORT)){
+            socket.getOutputStream().write(new byte[]{4,5});
+        }
+        check("cluster listener accepts reconnect",secondClosed.await(3,java.util.concurrent.TimeUnit.SECONDS));
+        boolean first=false,second=false;
+        synchronized(clusterLogs){
+            for(String line:clusterLogs){
+                first|=line.contains("stream closed bytes=3 ")&&line.endsWith("connection=1 eof=true");
+                second|=line.contains("stream closed bytes=2 ")&&line.endsWith("connection=2 eof=true");
+            }
+        }
+        check("cluster connections have independent byte counts and EOF evidence",first&&second);
     }
 
     static void independentConnections() {

@@ -34,6 +34,8 @@ final class ClusterSink extends Thread {
 
     private final java.util.concurrent.CountDownLatch bindFinished=new java.util.concurrent.CountDownLatch(1);
     private volatile boolean bound;
+    private long nextConnection;
+
     boolean awaitReady(long timeoutMs) {
         try {
             return bindFinished.await(timeoutMs,java.util.concurrent.TimeUnit.MILLISECONDS) && bound;
@@ -55,12 +57,17 @@ final class ClusterSink extends Thread {
             out.log("[listener] " + what + " ready port=" + port + " elapsed_ms=" + (System.nanoTime()-started)/1000000L);
             while (true) {
                 final Socket sock = s.accept();
-                new Thread("cp-climate-cluster-conn") {
+                final long connection=++nextConnection;
+                Thread worker=new Thread("cp-climate-"+what+"-conn-"+connection) {
                     @Override
                     public void run() {
-                        drain(sock);
+                        drain(sock,connection);
                     }
-                }.start();
+                };
+                worker.setDaemon(true);
+                try {worker.start();}
+                catch(RuntimeException e){VsChannel.close(sock);throw e;}
+                catch(Error e){VsChannel.close(sock);throw e;}
             }
         } catch (Throwable t) {
             out.log("[listener] " + what + " listener stopped: " + t.getClass().getSimpleName());
@@ -70,30 +77,34 @@ final class ClusterSink extends Thread {
         }
     }
 
-    void drain(Socket sock) {
-        out.log("[listener] " + what + " stream opened");
+    private void drain(Socket sock,long connection) {
         long total = 0, next = REPORT_BYTES;
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
+        String label="[listener] "+what;
+        String id=" connection="+connection;
+        boolean eof=false;
         try {
+            out.log(label+" stream opened"+id);
             InputStream in = sock.getInputStream();
             byte[] buf = new byte[64 * 1024];
             int n;
             while ((n = in.read(buf)) > 0) {
-                if(total==0)out.log("[listener] " + what + " first bytes=" + n);
+                if(total==0)out.log(label+" first bytes="+n+id);
                 total += n;
                 if (total >= next) {
-                    out.log(what + " stream: " + total / 1024 + " KB in " + (System.currentTimeMillis() - start) / 1000 + " s");
+                    out.log(what+" stream: "+total/1024+" KB in "+(System.nanoTime()-start)/1000000000L+" s"+id);
                     next += REPORT_BYTES;
                 }
             }
+            eof=n<0;
         } catch (Throwable t) {
-            out.log("[listener] " + what + " stream failed: " + t.getClass().getSimpleName());
+            out.log(label+" stream failed: "+t.getClass().getSimpleName()+id);
         } finally {
             try {
                 sock.close();
             } catch (Throwable ignored) {
             }
-            out.log("[listener] " + what + " stream closed bytes=" + total + " elapsed_ms=" + Math.max(0,System.currentTimeMillis()-start));
+            out.log(label+" stream closed bytes="+total+" elapsed_ms="+Math.max(0,(System.nanoTime()-start)/1000000L)+id+" eof="+eof);
         }
     }
 }
