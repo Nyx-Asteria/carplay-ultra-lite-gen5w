@@ -602,6 +602,21 @@ public class ClimateMapTest {
                     "transactionID",62L,"values",VehicleState.dict(pair[1],false))));
             check("optimistic contradictory off withheld "+pair[0],off.size()==1&&VehicleState.validFanFeedback(ps.values.get(pair[0]),ps.values.get(pair[1])));
         }
+        // The cache must remain consistent even before a registerRequest subscribes.
+        for(long[] pair:pairs){
+            VehicleState unsubscribed=new VehicleState(new VsChannel.Log(){public void log(String m){}});
+            final List<ClimateMap.Command> sentUnsubscribed=new java.util.ArrayList<ClimateMap.Command>();
+            unsubscribed.car=new VehicleState.Car(){public void phoneWrote(Map<Long,Object> w,Map<Long,Object> state){
+                sentUnsubscribed.addAll(ClimateMap.commands(w,state,2));
+            }};
+            Map<Long,Object> baseline=new java.util.LinkedHashMap<Long,Object>();
+            baseline.put(pair[0],0L);baseline.put(pair[1],false);unsubscribed.fromCar(baseline);
+            unsubscribed.handle(VehicleState.HIGH,VehicleState.wrap(VehicleState.dict("command","writeRequest","transactionID",63L,
+                    "values",VehicleState.dict(pair[0],3L))));
+            check("unsubscribed incomplete fan pair withheld "+pair[0],VehicleState.validFanFeedback(unsubscribed.values.get(pair[0]),unsubscribed.values.get(pair[1]))
+                    && Long.valueOf(0).equals(unsubscribed.values.get(pair[0])));
+            check("unsubscribed OEM command retained "+pair[0],sentUnsubscribed.size()==1&&sentUnsubscribed.get(0).b==5);
+        }
         VehicleState.seatFanImmediateFeedback=false;
         ClimateMap.Reading snap=new ClimateMap.Reading();
         ClimateMap.TemperatureSample firstTemperatureSample=new ClimateMap.TemperatureSample(20,65535,25,77,65535,100);
