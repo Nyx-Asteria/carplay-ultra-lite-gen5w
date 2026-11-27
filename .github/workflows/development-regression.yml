@@ -4,6 +4,9 @@ on:
     branches: [k5-compatibility]
     paths:
       - 'source/mod/src/**'
+      - 'source/mod/tools/video/**'
+      - 'source/mod/build.sh'
+      - 'source/native/**'
       - 'source/tests/**'
       - '.github/workflows/development-regression.yml'
   workflow_dispatch:
@@ -36,6 +39,8 @@ jobs:
           AJ=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
           sh "$SDK/bin/build-mod.sh" source/mod out/core out/work
           CP="$PWD/out/work/classes:$AJ:$SDK/lib/hmgapi-runtime.jar:$SDK/lib/hmgapi-runtime-stubs.jar"
+          javac --release 8 -cp "$CP" -d out/tests source/tests/ParkedStateTest.java
+          java -cp "out/tests:$CP" ioniq6.cpclimate.ParkedStateTest
           javac --release 8 -cp "$CP" -d out/tests source/tests/ClimateMapTest.java
           java -cp "out/tests:$CP" ioniq6.cpclimate.ClimateMapTest
           javac --release 8 -cp "$CP" -d out/tests source/tests/VolumePanelPolicyTest.java
@@ -47,3 +52,6 @@ jobs:
           PY
           javac --release 8 -cp "$CP" -d out/tests source/tests/UiSyncTest.java
           java -cp "out/tests:$CP" ioniq6.cpclimate.UiSyncTest out/tests out/python.bplist out/java.bplist
+          sh source/mod/tools/video/fetch-libs.sh
+          HMGAPI_MOD_CLASSES="$PWD/out/work/classes" HMGAPI_R8_CLASSPATH_ARGS="--classpath $SDK/lib/hmgapi-runtime.jar --classpath $SDK/lib/hmgapi-runtime-stubs.jar" sh source/mod/build.sh "$PWD/out/core"
+          unzip -t out/core/hooks.jar
