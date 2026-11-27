@@ -977,6 +977,26 @@ static void append_feature(CF array, CF feature) {
     append(array,feature);
 }
 
+/* Report the actual published list, without logging arbitrary OEM strings. */
+static void log_enabled_features(CF reply) {
+    CF list = get(reply, &K_enabledFeatures);
+    if (!is(list, T_CFArrayGetTypeID)) return;
+    int vsp=0, alt=0, areas=0, sync=0, iap=0, video=0, hevc=0, other=0;
+    for (CFIndex i=0,n=count(list);i<n;i++) {
+        CF f=at(list,i);
+        if (equal(f,&K_vsp)) vsp=1;
+        else if (equal(f,&K_altScreen)) alt=1;
+        else if (equal(f,&K_viewAreas)) areas=1;
+        else if (equal(f,&K_uiSync)) sync=1;
+        else if (equal(f,&K_iapChannel)) iap=1;
+        else if (equal(f,&K_videoPlayback)) video=1;
+        else if (equal(f,&K_hevc)) hevc=1;
+        else other++;
+    }
+    LOG("cp-climate: SETUP actual enabledFeatures vehicleStateProtocol=%d altScreen=%d viewAreas=%d uiSync=%d iAPChannel=%d videoPlayback=%d hevc=%d other=%d\n",
+        vsp,alt,areas,sync,iap,video,hevc,other);
+}
+
 __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) {
     if (!request || !reply) return;
     CF offered = get(request, &K_features);
@@ -1015,6 +1035,7 @@ __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) 
             if (!have) append(merged,&K_uiSync);
             put(reply,&K_enabledFeatures,merged);
             LOG("cp-climate: SETUP independent uiSync enabled; stock features preserved, VSP not offered\n");
+            log_enabled_features(reply);
             return;
         }
         LOG("cp-climate: SETUP without vehicleStateProtocol from the phone: reply unchanged\n");
@@ -1048,10 +1069,7 @@ __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) 
         LOG("cp-climate: SETUP extra features experiment: videoPlayback %s, hevc %s\n",
             (extra & 1) ? (video ? "enabled" : "not offered") : "off", (extra & 2) ? (hevc ? "enabled" : "not offered") : "off");
     put(reply, &K_enabledFeatures, features);
-    if (prior) LOG("cp-climate: SETUP OEM enabledFeatures preserved; merged count=%d\n", (int)count(features));
-    else LOG("cp-climate: SETUP reply has enabledFeatures [vehicleStateProtocol%s%s%s%s%s%s]\n",
-        enable_areas ? ", viewAreas" : "", ultra && alt ? ", altScreen" : "", iapx && iap ? ", iAPChannel" : "",
-        syncx && sync ? ", uiSync" : "", (extra & 1) && video ? ", videoPlayback" : "", (extra & 2) && hevc ? ", hevc" : "");
+    log_enabled_features(reply);
 }
 
 /* ---- M2: the vehicle state data streams (SETUP type 130) ---- */

@@ -28,6 +28,9 @@ public final class ProjectionLogCaptureTest {
         check(snapshot.equals(ProjectionLogCapture.classify("I CPULCrossProcess: "+snapshot)));
         check(ProjectionLogCapture.classify("I CPULCrossProcess: "+snapshot+" secret=private")==null);
         check("[theme] negotiation snapshot unavailable".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation snapshot unavailable")));
+        String actual=ProjectionLogCapture.classify("cp-climate: SETUP actual enabledFeatures vehicleStateProtocol=1 altScreen=0 viewAreas=1 uiSync=1 iAPChannel=0 videoPlayback=0 hevc=1 other=2");
+        check(actual.equals("[projection-theme] enabled vehicleStateProtocol=1 altScreen=0 viewAreas=1 uiSync=1 iAPChannel=0 videoPlayback=0 hevc=1 other=2"));
+        check(ProjectionLogCapture.classify("cp-climate: SETUP actual enabledFeatures vehicleStateProtocol=1 altScreen=0 viewAreas=1 uiSync=1 iAPChannel=0 videoPlayback=0 hevc=1 other=private")==null);
         System.out.println("ProjectionLogCaptureTest passed");
     }
 }

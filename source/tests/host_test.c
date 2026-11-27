@@ -732,7 +732,7 @@ int main(void) {
         echo = g(rep, "enabledFeatures");
         CHECK("Ultra: enabledFeatures [vehicleStateProtocol, viewAreas, altScreen]", echo && echo->n == 3
               && !strcmp(s_of(echo->v[1]), "viewAreas") && !strcmp(s_of(echo->v[2]), "altScreen"));
-        CHECK("Ultra: the offer logged", strstr(lastlog, "viewAreas, altScreen") != 0);
+        CHECK("Ultra: the offer logged", strstr(lastlog, "altScreen=1 viewAreas=1") != 0);
         m_release(rep);
         /* Themed sidebars restore ViewAreas even when only VSP is offered. */
         Dict *limited=(Dict *)m_new_dict(0,0,&cb_dkey,&cb_dval);
@@ -806,7 +806,7 @@ int main(void) {
         echo = g(rep, "enabledFeatures");
         CHECK("uiSync experiment on, offered: enabledFeatures [vehicleStateProtocol, uiSync]", echo && echo->n == 2
               && !strcmp(s_of(echo->v[1]), "uiSync"));
-        CHECK("uiSync: the reply logged", strstr(lastlog, ", uiSync]") != 0);
+        CHECK("uiSync: the reply logged", strstr(lastlog, "uiSync=1") != 0);
         m_release(rep);
         remove(DIR "cpc-uisync");
         rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
@@ -830,6 +830,7 @@ int main(void) {
         cpc_setup_hook(req,rep);
         echo=g(rep,"enabledFeatures");
         CHECK("VSP merge is idempotent",echo && echo->n==2);
+        CHECK("actual merged diagnostics include OEM count and VSP",strstr(lastlog,"vehicleStateProtocol=1") && strstr(lastlog,"other=1"));
         m_set(rep,enabled,stock);
         cpc_setup_hook(req,rep);
         CHECK("VSP merge leaves malformed OEM reply untouched",g(rep,"enabledFeatures")==stock);
@@ -867,6 +868,7 @@ int main(void) {
         cpc_setup_hook(rq, rep);
         echo = g(rep, "enabledFeatures");
         CHECK("independent UI Sync preserves stock", echo && echo->n == 2 && !strcmp(s_of(echo->v[0]), "hevc") && !strcmp(s_of(echo->v[1]), "uiSync"));
+        CHECK("independent actual diagnostics include OEM hevc",strstr(lastlog,"vehicleStateProtocol=0") && strstr(lastlog,"uiSync=1") && strstr(lastlog,"hevc=1 other=0"));
         cpc_setup_hook(rq, rep);
         echo = g(rep, "enabledFeatures");
         CHECK("independent UI Sync idempotent", echo && echo->n == 2 && !strcmp(s_of(echo->v[0]), "hevc") && !strcmp(s_of(echo->v[1]), "uiSync"));

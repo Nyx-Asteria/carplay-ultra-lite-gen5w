@@ -15,7 +15,14 @@ final class ProjectionLogCapture extends Thread {
     private static final String[] FEATURES={"vehicleStateProtocol","altScreen","viewAreas","uiSync","iAPChannel","videoPlayback","hevc"};
     private static final Pattern OFFER=Pattern.compile("SETUP: the phone offers vehicleStateProtocol ([01]), altScreen ([01]), viewAreas ([01]), uiSync ([01]), iAPChannel ([01])(?:, videoPlayback ([01]), hevc ([01]))? \\(Ultra experiment (?:on|off), iAPChannel experiment (?:on|off), uiSync experiment (?:on|off)\\)");
     private static final Pattern ENABLED=Pattern.compile("SETUP reply has enabledFeatures \\[([^\\]\\r\\n]{1,160})\\]");
+    private static final Pattern ACTUAL=Pattern.compile("SETUP actual enabledFeatures vehicleStateProtocol=([01]) altScreen=([01]) viewAreas=([01]) uiSync=([01]) iAPChannel=([01]) videoPlayback=([01]) hevc=([01]) other=(\\d{1,9})(?:\\s|$)");
     static String featureEvent(String body) {
+        Matcher actual=ACTUAL.matcher(body);
+        if(actual.find()){
+            StringBuilder b=new StringBuilder("[projection-theme] enabled");
+            for(int i=0;i<FEATURES.length;i++)b.append(' ').append(FEATURES[i]).append('=').append(actual.group(i+1));
+            return b.append(" other=").append(actual.group(8)).toString();
+        }
         Matcher offer=OFFER.matcher(body);
         if(offer.find()){
             StringBuilder b=new StringBuilder("[projection-theme] offered");

@@ -9,6 +9,9 @@ Updated 2026-11-27. Repository Nyx-Asteria/carplay-ultra-lite-gen5w, branch rc11
 Cleanup 95%; logging 100% implementation; evidence-backed corrections 100% for available evidence; legacy heated-seat compatibility 100%; themes/virtual cluster 72%; companion integration 45%; final consolidation/regression 0%. These are estimates, not proof of on-car functionality. Parent 2f09919 / CI 46059257627 green; de3f487 / 46058796683 and 47ba9ca / 46058618602 green. Native C fixture not executed by those runs. This commit CI pending. No release published.
 
 ## Changes in this commit
+Native SETUP diagnostics now inspect published enabledFeatures after both VSP and independent UI Sync merges, logging seven recognized capability bits and count of other entries only; no arbitrary strings. Java persistent capture recognizes the bounded format and retains historical parser. Updated native log expectations and added two native/two Java assertions. No negotiation behavior changes. Theme 72%, companion 45% held (diagnostic refinement). Parent 4643e3b CI unavailable; new tests unexecuted. Next audit panel/stream capability consistency. No WCP changes or release.
+
+Previous OEM capability preservation:
 VSP SETUP now retains OEM enabledFeatures in original order and adds only missing CPUL contributions; rejects malformed existing array without mutation. No-VSP fallback unchanged. Existing OEM feature ownership retained, including any OEM-enabled features not selected by CPUL. Three native regression assertions cover preservation, idempotence and malformed reply. Merged reply log reports count, not a misleading CPUL-only list; exact allowlisted merged feature diagnostics remain next. Existing themed ViewAreas exception unchanged. Parent a06fbf0 CI unavailable, new tests unexecuted; theme 72%, companion 45% estimate. No vehicle validation, release or WCP changes.
 
 Previous early identity recovery:
