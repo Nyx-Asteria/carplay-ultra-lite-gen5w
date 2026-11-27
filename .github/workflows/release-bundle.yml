@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Nyx-Asteria/HMG-IconDump
-          ref: f7864038c9d3bf11a1a1d1f3db8008fd400760a2
+          ref: 55e8de065f32776ab9eb466207364e0bb66bf29b
           path: .collector
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -113,22 +113,10 @@ jobs:
           javac --release 8 -d out/park-tests source/mod/src/ioniq6/cpclimate/ParkedState.java source/tests/ParkedStateTest.java
           java -cp out/park-tests ioniq6.cpclimate.ParkedStateTest
           sh "$SDK/bin/build-mod.sh" source/mod out/core out/work
-          CP="$PWD/out/work/classes:$AJ:$SDK/lib/hmgapi-runtime.jar:$SDK/lib/hmgapi-runtime-stubs.jar"
-          javac --release 8 -cp "$CP" -d out/tests source/tests/ClimateMapTest.java
-          java -cp "out/tests:$CP" ioniq6.cpclimate.ClimateMapTest
-          javac --release 8 -cp "$CP" -d out/tests source/tests/VolumePanelPolicyTest.java
-          java -cp "out/tests:$CP" ioniq6.cpclimate.VolumePanelPolicyTest
-          javac --release 8 -cp "$CP" -d out/tests source/tests/RadioPolicyTest.java
-          java -cp "out/tests:$CP" ioniq6.cpclimate.RadioPolicyTest
-          python3 - <<'PY'
-          import plistlib
-          with open('out/python.bplist','wb') as f:
-              plistlib.dump(dict(small=7,mid=300,wide=70000,huge=5000000000,neg=-2,s='Cluster_Display',u='Zürich ✓',t=True,f=False,d=bytes([1,2,3]),l=[1,'two'],n={'x':2},r=1.5,long='x'*40),f,fmt=plistlib.FMT_BINARY)
-          PY
-          javac --release 8 -cp "$CP" -d out/tests source/tests/UiSyncTest.java
-          java -cp "out/tests:$CP" ioniq6.cpclimate.UiSyncTest out/tests out/python.bplist out/java.bplist
+          bash source/tests/run-regressions.sh
           sh source/mod/tools/video/fetch-libs.sh
           HMGAPI_MOD_CLASSES="$PWD/out/work/classes" HMGAPI_R8_CLASSPATH_ARGS="--classpath $SDK/lib/hmgapi-runtime.jar --classpath $SDK/lib/hmgapi-runtime-stubs.jar" sh source/mod/build.sh "$PWD/out/core"
+          unzip -t out/core/hooks.jar
           cp -a source/mod out/staging/cpul
           rm -f out/staging/cpul/build.sh
           HMGAPI_MOD_BUILD="$PWD/out/core" sh "$SDK/bin/mkmodpkg.sh" out/staging/cpul "$KEY"
