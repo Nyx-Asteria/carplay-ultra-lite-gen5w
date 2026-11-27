@@ -4,19 +4,20 @@
 
 ### Climate
 - Preserve explicit seat-level requests across companion power writes; arbitrate heating/ventilation transitions without inactive-mode zero writes cancelling the selected mode.
-- Validate paired ventilation power/level feedback and reconcile requested values with authoritative BCM readings.
+- Validate paired ventilation power/level feedback and reconcile requested values with authoritative BCM readings; protect cached values even before a phone subscription.
 - Preserve full high-ventilation command in the optional four-step combined seat layout.
 - Use a single immutable DATC callback snapshot for climate readings and passenger-temperature correlation; reset it on service reconnect.
 
 ### Radio and audio
 - Separate OEM FM scan frequencies from observed fallback stations; retain the last nonempty OEM scan without treating observed stations as a complete scan.
-- Correlate delayed SiriusXM metadata with tuner observations and prevent explicitly excluded channels from reappearing through the full catalog.
+- Correlate delayed SiriusXM metadata with tuner observations; propagate explicit channel exclusions across the RadioNA bridge, distinguish all-excluded catalogs from transient empty responses, and recheck source and eligibility before native tuning.
 - Correlate read-only Bose availability/setting samples with source, session and elapsed sampling time. No amplifier writes or entitlement changes.
+- Bind queued volume and mute requests to their authorizing VehicleState and projection generation; recheck authorization before native dispatch and restore OEM panel fallback on failed observation delivery.
 
 ### Projection, themes and vehicle application
 - Associate AirPlay screen borrowing and recovery callbacks with the owning playback generation; isolate recovery from unrelated thread failures. Park enforcement unchanged.
 - Refresh theme preferences under a shared lock; preserve independent display selections and avoid overwriting malformed preference files.
-- Replay authoritative Vehicle page values on session replacement. Capture session-owned writers before sending page updates outside the shared session lock and retry delivery on failure.
+- Replay authoritative Vehicle page values on session replacement. Capture session-owned writers before sending updates outside the shared session lock; reject incoming packets from replaced connections and use the owned delivery path for climate and audio observations. Delivery retry is best-effort, not a guarantee of phone receipt.
 
 ### Release preparation
 - Target HMG-API RC10 and Nemesis 1.17.1 on DL322 USA 260507; retain existing API 19 compatibility requirements.
