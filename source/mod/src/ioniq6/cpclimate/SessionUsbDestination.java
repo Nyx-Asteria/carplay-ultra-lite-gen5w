@@ -26,6 +26,27 @@ final class SessionUsbDestination implements SessionUsbExport.Destination {
         }
         return null;
     }
+    /** Mount ID plus device and filesystem root; a re-mount at the same path is a different export target. */
+    public String identity(File folder) throws IOException {
+        String path=folder.getCanonicalPath();
+        BufferedReader in=new BufferedReader(new FileReader("/proc/self/mountinfo"));
+        try { return mountIdentity(path,in); } finally { in.close(); }
+    }
+    static String mountIdentity(String path,BufferedReader in) throws IOException {
+        String best=null; int depth=-1; String line;
+        while((line=in.readLine())!=null) {
+            String[] fields=line.split(" ");
+            if(fields.length<10)continue;
+            String mount=fields[4];
+            boolean known=false;
+            for(String candidate:ROOTS)if(candidate.equals(mount)){known=true;break;}
+            if(known && (path.equals(mount)||path.startsWith(mount+"/")) && mount.length()>depth) {
+                best=fields[0]+" "+fields[2]+" "+fields[3]+" "+mount;
+                depth=mount.length();
+            }
+        }
+        return best;
+    }
     private static boolean onKnownMount(File folder) throws IOException {
         String path=folder.getCanonicalPath();
         for(String p:ROOTS) {

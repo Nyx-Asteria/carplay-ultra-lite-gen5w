@@ -52,6 +52,15 @@ public final class SessionUsbExportTest {
             failed=false;try{unstable.pending(spool);}catch(IOException e){failed=true;}
             check(failed&&!new File(s,".exported").exists());
             check(x.pending(spool)==1);
+            check(new File(s,".exported").delete());
+            final int[] identities={0};
+            SessionUsbExport swapped=new SessionUsbExport(new SessionUsbExport.Destination(){
+                public File find(){return usb;}
+                public String identity(File folder){return ++identities[0]<=3?"mount-31":"mount-32";}
+            });
+            failed=false;try{swapped.pending(spool);}catch(IOException e){failed=true;}
+            check(failed&&!new File(s,".exported").exists());
+            check(x.pending(spool)==1);
             System.out.println("SessionUsbExportTest passed");
         }finally{for(java.security.Provider provider:providers)java.security.Security.addProvider(provider);SessionLogWriter.delete(root);}
     }

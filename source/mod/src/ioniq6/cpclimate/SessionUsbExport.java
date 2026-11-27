@@ -5,7 +5,11 @@ import java.util.Arrays;
 
 /** Exports only finalized CPUL session files. Call on the spool owner thread, never on a protocol thread. */
 final class SessionUsbExport {
-    interface Destination { File find() throws Exception; }
+    interface Destination {
+        File find() throws Exception;
+        default String identity(File folder) throws Exception { return folder.getCanonicalPath(); }
+    }
+    private String mountIdentity;
     private final Destination destination;
     SessionUsbExport(Destination destination) { this.destination=destination; }
 
@@ -16,7 +20,11 @@ final class SessionUsbExport {
         File usb=destination.find();
         if(usb==null)return null;
         File root=new File(usb,"CPUL-LOGS");
+        mountIdentity=destination.identity(usb);
+        if(mountIdentity==null)throw new IOException("USB mount identity unavailable");
+        requireMount(usb);
         SessionLogWriter.ensureDir(root);
+        requireDestination(root);
         return root;
     }
     void exportOne(File source,File root)throws Exception { export(source,root); }
@@ -34,10 +42,14 @@ final class SessionUsbExport {
         }
         return count;
     }
+    private void requireMount(File usb) throws Exception {
+        if(mountIdentity==null || !mountIdentity.equals(destination.identity(usb)))throw new IOException("USB mount identity changed");
+    }
     private void requireDestination(File root) throws Exception {
         File usb=destination.find();
         if(usb==null || !new File(usb,"CPUL-LOGS").getCanonicalFile().equals(root.getCanonicalFile()) || !root.isDirectory())
             throw new IOException("USB destination changed or unavailable");
+        requireMount(usb);
     }
     private void export(File source,File root) throws Exception {
         requireDestination(root);
@@ -52,7 +64,7 @@ final class SessionUsbExport {
             if(partial.exists()) SessionLogWriter.delete(partial);
             SessionLogWriter.ensureDir(partial);
             if(root.getUsableSpace()<SessionLogWriter.size(source)+1048576L) throw new IOException("insufficient USB space");
-            copyTree(source,partial);
+            copyTree(source,partial,root);
             requireDestination(root);
             if(!manifest.equals(manifest(partial))) throw new IOException("USB verification failed");
             SessionLogWriter.writeText(new File(partial,"COMPLETE.txt"),manifest);
@@ -71,17 +83,18 @@ final class SessionUsbExport {
         return name.equals("summary.txt") || name.equals("session.log") || name.equals("errors.log") ||
                name.matches("[a-z_]+\\.log");
     }
-    private static void copyTree(File from,File to) throws IOException {
+    private void copyTree(File from,File to,File root) throws Exception {
         File[] files=from.listFiles();
         if(files==null) throw new IOException("cannot list session");
         for(File f:files) {
+            requireMount(root.getParentFile());
             if(f.isDirectory() && f.getName().equals("diagnostics")) {
-                File d=new File(to,"diagnostics"); SessionLogWriter.ensureDir(d); copyTree(f,d);
+                File d=new File(to,"diagnostics"); SessionLogWriter.ensureDir(d); copyTree(f,d,root);
             } else if(f.isFile() && allowed(f.getName())) {
                 InputStream in=new FileInputStream(f);
                 try {
                     FileOutputStream out=new FileOutputStream(new File(to,f.getName()));
-                    try { byte[] b=new byte[32768];int n;while((n=in.read(b))!=-1)out.write(b,0,n);out.getFD().sync(); }
+                    try { byte[] b=new byte[32768];int n;while((n=in.read(b))!=-1){requireMount(root.getParentFile());out.write(b,0,n);}out.getFD().sync(); }
                     finally {out.close();}
                 } finally {in.close();}
             }
