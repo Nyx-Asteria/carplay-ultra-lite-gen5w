@@ -18,3 +18,7 @@ Freeze runtime changes pending WCP cross-project review. The owner controls when
 - Do not trigger the release commit or publish without WCP clearance and owner authorization.
 
 Vehicle testing is not an RC10 development gate. The documented runtime unknowns remain unverified.
+
+## Cross-project clearance
+
+WCP/STBT audit source dispositions complete; WCP 92e9569 and STBT 4d66231 runtime CI green. Bundle pins include final documentation commits 4885b9fd7c05c2755aad6b32d8fdc15b5bddb0c6 and e8770256ff6679546c483af43aed3f7a6b19b998. CPUL manifest RC10 and minimum RC10 aligned. Shared API v2 and native verify-region coexistence confirmed at source level. Signed bundle workflow supports manual build without publication (publish defaults false); no signed artifact has yet been verified. Vehicle validation separate.

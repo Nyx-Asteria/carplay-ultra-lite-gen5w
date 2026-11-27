@@ -22,7 +22,7 @@
 ### Release preparation
 - Target HMG-API RC10 and Nemesis 1.17.1 on DL322 USA 260507; retain existing API 19 compatibility requirements.
 - Persistent session logs, incremental firmware collection and automated regression coverage support focused RC10 evidence gathering.
-- Companion versions and final source revisions will be recorded after integration; this entry is provisional until the release audit and signed bundle build are complete.
+- WCP 2.2.1-rc.6 (4885b9f), STBT 1.0.0-rc.3 (e877025), HMG-API RC10 (daa0837). Companion source audits and shared identity compatibility reviewed; signed bundle verification pending. Companion journal/exporter and transport policy regressions included in bundle workflow. Publication requires explicit manual opt-in.
 - No new vehicle verification is claimed. See [RC10 test plan](docs/rc10-testing.md).
 
 ## K5 1.0.0-rc.9 (vehicle testing)
