@@ -73,7 +73,21 @@ final class ThemeContribution {
                 Object previous = null;
                 try {
                     while (!Thread.currentThread().isInterrupted()) {
+                        if (!mod.enabled() || !mod.settingBoolean("ultra_theme", true)
+                                || !mod.settingBoolean("ultra_sidebars", true)) {
+                            synchronized (ThemeContribution.this) {
+                                if (observer != Thread.currentThread()) return;
+                                unregister(mod);
+                            }
+                            Thread.sleep(2000);
+                            continue;
+                        }
                         Object service = mod.use(PROVIDER, SERVICE);
+                        synchronized (ThemeContribution.this) {
+                            if (observer != Thread.currentThread()) return;
+                            if (service == null) unregister(mod);
+                            else if (!ownership.confirmed(service)) register(mod);
+                        }
                         String next = "unavailable";
                         if (service != null) {
                             try {
