@@ -1139,16 +1139,29 @@ __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stre
             !u ? "absent" : equal(u,&K_centerId) ? "Center_Display" : equal(u,&K_clusterId) ? "Cluster_Display" : "other",
             !d ? "absent" : equal(d,&K_centerId) ? "Center_Display" : equal(d,&K_clusterId) ? "Cluster_Display" : "other");
     }
-    if (type == STREAM_ALT_SCREEN) return ultra_mode() ? alt_stream(reply) : 0;
+    if (type == STREAM_ALT_SCREEN) {
+        if (!ultra_mode()) return 0;
+        CF u = get(stream, &K_uuid), d = get(stream, &K_displayUUID);
+        /* Never send an explicitly center-addressed screen to the discard sink.
+         * Missing or unfamiliar IDs retain the existing type-based routing:
+         * their semantics are not established by the available captures. */
+        if ((u && equal(u,&K_centerId)) || (d && equal(d,&K_centerId))) {
+            LOG("cp-climate: alternate screen explicitly addressed to center; native path retained\n");
+            return 0;
+        }
+        return alt_stream(reply);
+    }
     if (type != STREAM_DATA) {
         if (ui_sync_mode()) LOG("cp-climate: theme stream audit: native path type %d\n", (int)type);
         return 0;
     }
     CF kind = get(stream, &K_clientTypeUUID);
     if (ui_sync_mode()) {
-        const char *uuid = is(kind, T_CFStringGetTypeID)
-            ? FN(T_CFStringGetCStringPtr, const char *(*)(CF, unsigned))(kind, UTF8) : 0;
-        LOG("cp-climate: theme stream audit: type 130 clientTypeUUID %s\n", uuid ? uuid : "(unavailable)");
+        const char *category = !kind ? "absent" : equal(kind,&K_vsNormal) ? "vehicle-normal"
+            : equal(kind,&K_vsHigh) ? "vehicle-high" : equal(kind,&K_iapStream) ? "iap"
+            : equal(kind,&K_syncStream) ? "uiSync" : equal(kind,&K_vpData) ? "video-data"
+            : equal(kind,&K_vpSettings) ? "video-settings" : equal(kind,&K_vpOverlay) ? "video-overlay" : "other";
+        LOG("cp-climate: theme stream audit: type 130 client category %s\n", category);
     }
     if (kind && (extra_features() & 1) && (equal(kind, &K_vpData) || equal(kind, &K_vpSettings) || equal(kind, &K_vpOverlay))) {
         int which = equal(kind, &K_vpData) ? 0 : equal(kind, &K_vpSettings) ? 1 : 2;

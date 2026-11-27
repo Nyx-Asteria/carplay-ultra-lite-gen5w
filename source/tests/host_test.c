@@ -946,6 +946,18 @@ int main(void) {
         CHECK("cluster screen stream, Ultra off: left to DiPO", cpc_stream_hook(&session, st, reply, 111) == 0 && streams->n == 3);
         f = fopen(DIR "cpc-ultra", "w");
         if (f) { fputs("1\n", f); fclose(f); }
+        /* Explicit center identity must never reach the virtual discard sink. */
+        Str *screenKey = str("displayUUID"), *centerId = str("Center_Display"), *clusterId = str("Cluster_Display");
+        m_set(st,screenKey,centerId);
+        CHECK("center-addressed alternate screen remains native",cpc_stream_hook(&session,st,reply,111)==0 && streams->n==3);
+        Str *uuidKey = str("uuid");
+        m_set(st,screenKey,clusterId);m_set(st,uuidKey,centerId);
+        CHECK("conflicting explicit center and cluster identities remain native",cpc_stream_hook(&session,st,reply,111)==0 && streams->n==3);
+        m_set(st,uuidKey,clusterId);
+        m_set(st,uuidKey,centerId);
+        CHECK("explicit center main stream remains native",cpc_stream_hook(&session,st,reply,110)==0 && streams->n==3);
+        m_set(st,uuidKey,clusterId);
+        m_release(screenKey);m_release(uuidKey);m_release(centerId);m_release(clusterId);
         CHECK("cluster screen stream, Ultra on: {type 111, dataPort 7132}", cpc_stream_hook(&session, st, reply, 111) == 1
               && streams->n == 4 && n_of(g(streams->v[3], "type")) == 111 && n_of(g(streams->v[3], "dataPort")) == 7132);
         remove(DIR "cpc-ultra");
