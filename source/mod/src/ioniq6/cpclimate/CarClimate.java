@@ -230,8 +230,8 @@ final class CarClimate extends Thread implements VehicleState.Car {
                     }
                     ClimateMap.Command c = queued.command;
                     try {
-                        if (c.kind == ClimateMap.SEAT && !SeatCommandTrace.sessionMatches(queued.generation, CpClimate.sessionGeneration, CpClimate.sessionActive)) {
-                            out.log("[seat-command] discarded stale queued "+c+" generation="+queued.generation);
+                        if (sessionScoped(c) && !SeatCommandTrace.sessionMatches(queued.generation, CpClimate.sessionGeneration, CpClimate.sessionActive)) {
+                            out.log((c.kind==ClimateMap.SEAT?"[seat-command]":"[climate-passenger]")+" discarded stale queued "+c+" generation="+queued.generation);
                             continue;
                         }
                         if (send(c, queued.generation)) out.log("CAR sent " + c);
@@ -266,10 +266,14 @@ final class CarClimate extends Thread implements VehicleState.Car {
         return false;
     }
 
+    static boolean sessionScoped(ClimateMap.Command c) {
+        return c.kind==ClimateMap.SEAT || (c.kind==ClimateMap.FRONT && (c.a==ClimateMap.FRONT_PASSENGER_C || c.a==ClimateMap.FRONT_PASSENGER_F));
+    }
+
     /** sends a command; false if nothing needed sending */
     boolean send(ClimateMap.Command c, long generation) throws Exception {
         if (!allowed(c)) { out.log("CAR test switch withheld " + c); return false; }
-        if (c.kind == ClimateMap.SEAT && !SeatCommandTrace.sessionMatches(generation, CpClimate.sessionGeneration, CpClimate.sessionActive)) return false;
+        if (sessionScoped(c) && !SeatCommandTrace.sessionMatches(generation, CpClimate.sessionGeneration, CpClimate.sessionActive)) return false;
         boolean passenger = c.kind == ClimateMap.FRONT && (c.a == ClimateMap.FRONT_PASSENGER_C || c.a == ClimateMap.FRONT_PASSENGER_F);
         long dispatchedAt = android.os.SystemClock.elapsedRealtime();
         int seatBefore = -1;
@@ -305,7 +309,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
                 data.writeInt(c.b);
                 if (c.kind == ClimateMap.VR) data.writeInt(c.c);
             }
-            if (c.kind == ClimateMap.SEAT && (!CpClimate.sessionActive || generation != CpClimate.sessionGeneration)) return false;
+            if (sessionScoped(c) && (!CpClimate.sessionActive || generation != CpClimate.sessionGeneration)) return false;
             if (!b.transact(code, data, reply, 0)) throw new IllegalStateException("vehicle transaction rejected");
             reply.readException();
         } finally {
