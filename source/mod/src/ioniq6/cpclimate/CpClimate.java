@@ -200,6 +200,8 @@ public final class CpClimate extends ModEntry {
             VehicleState.extras = ClimateMap.extras = climate;
             VehicleState.seatFanImmediateFeedback = climate && m.settingBoolean("seat_fan_immediate_feedback", false);
             VehicleState.seatHeatImmediateFeedback = m.settingBoolean("seat_heat_immediate_feedback", true);
+            ClimateMap.legacySeatHeatArbitration = climate && m.settingBoolean("legacy_seat_heat_arbitration", false);
+            runtimeLog("[seat-command] legacy heat arbitration=" + ClimateMap.legacySeatHeatArbitration);
             runtimeLog("[seat-fan] immediate feedback experiment=" + VehicleState.seatFanImmediateFeedback + "; heating immediate=" + VehicleState.seatHeatImmediateFeedback);
             VehicleState.climateEnabled = climate;
             // Keep the front-seat layout and expose wheel heating only when OEM methods are available.

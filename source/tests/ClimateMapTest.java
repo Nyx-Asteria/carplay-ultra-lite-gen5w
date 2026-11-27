@@ -618,6 +618,26 @@ public class ClimateMapTest {
             check("unsubscribed OEM command retained "+pair[0],sentUnsubscribed.size()==1&&sentUnsubscribed.get(0).b==5);
         }
         VehicleState.seatFanImmediateFeedback=false;
+        // Legacy heat arbitration is opt-in; preserve modern fan off precedence.
+        ClimateMap.legacySeatHeatArbitration=false;
+        for(long[] pair:new long[][]{
+            {ClimateMap.DRIVER_SEAT_LEVEL,ClimateMap.DRIVER_SEAT_ON,ClimateMap.DRIVER_VENT_LEVEL,ClimateMap.DRIVER_VENT_ON},
+            {ClimateMap.PASSENGER_SEAT_LEVEL,ClimateMap.PASSENGER_SEAT_ON,ClimateMap.PASSENGER_VENT_LEVEL,ClimateMap.PASSENGER_VENT_ON}}){
+            Map<Long,Object> writes=new java.util.LinkedHashMap<Long,Object>();
+            Map<Long,Object> current=new java.util.LinkedHashMap<Long,Object>();
+            current.put(pair[0],0L);current.put(pair[2],0L);
+            writes.put(pair[0],3L);writes.put(pair[1],false);
+            ClimateMap.legacySeatHeatArbitration=false;
+            List<ClimateMap.Command> modern=ClimateMap.commands(writes,current,2);
+            check("modern heat off precedence",modern.size()==1&&modern.get(0).b==2);
+            ClimateMap.legacySeatHeatArbitration=true;
+            List<ClimateMap.Command> legacy=ClimateMap.commands(writes,current,2);
+            check("legacy explicit heat level precedence",legacy.size()==1&&legacy.get(0).b==8);
+            writes.clear();writes.put(pair[2],3L);writes.put(pair[3],false);
+            List<ClimateMap.Command> fan=ClimateMap.commands(writes,current,2);
+            check("legacy leaves fan off precedence unchanged",fan.size()==1&&fan.get(0).b==2);
+        }
+        ClimateMap.legacySeatHeatArbitration=false;
         ClimateMap.Reading snap=new ClimateMap.Reading();
         ClimateMap.TemperatureSample firstTemperatureSample=new ClimateMap.TemperatureSample(20,65535,25,77,65535,100);
         ClimateMap.TemperatureSample secondTemperatureSample=new ClimateMap.TemperatureSample(21,65535,26,79,65535,200);

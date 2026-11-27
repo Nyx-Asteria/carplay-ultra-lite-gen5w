@@ -18,6 +18,14 @@
       "apply": "restart"
     },
     {
+      "key": "legacy_seat_heat_arbitration",
+      "type": "toggle",
+      "default": false,
+      "title": "Legacy Heated Seat Compatibility (Experimental)",
+      "description": "Restore RC5/RC6 heated-seat level precedence and cached-level selection. Retains current ventilation feedback and session safety checks. Requires K5 Vehicle Integration.",
+      "apply": "restart"
+    },
+    {
       "key": "seat_fan_immediate_feedback",
       "type": "toggle",
       "default": false,

@@ -8,6 +8,7 @@ final class SessionSettings {
     static final String[] KEYS = {
         "k5_integration",
         "seat_heat_immediate_feedback",
+        "legacy_seat_heat_arbitration",
         "seat_fan_immediate_feedback",
         "ultra_theme",
         "ultra_sidebars",
@@ -26,6 +27,7 @@ final class SessionSettings {
     static final boolean[] DEFAULTS = {
         true,
         true,
+        false,
         false,
         true,
         true,
