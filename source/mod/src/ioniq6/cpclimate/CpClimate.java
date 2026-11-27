@@ -102,7 +102,10 @@ public final class CpClimate extends ModEntry {
             m.log("[theme] iAP2 process preflight="+themePreflight);
             if (themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true) && m.settingBoolean("ultra_sidebars", true)) {
                 theme.register(m);
-            } else m.log("[theme] iAP2 contribution withheld by boot preflight/settings");
+            } else {
+                theme.unregister(m);
+                m.log("[theme] iAP2 contribution withheld by boot preflight/settings");
+            }
             return;
         }
         if (K5Radio.PACKAGE.equals(app.packageName)) {
