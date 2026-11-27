@@ -399,12 +399,16 @@ final class K5Radio {
             context.registerReceiver(new android.content.BroadcastReceiver() {
                 @Override public void onReceive(Context c, Intent i) {
                     if (!enabled() || !CpClimate.sessionActive || !VehicleState.sxmSchemaTest) return;
-                    long age = android.os.SystemClock.elapsedRealtime() - i.getLongExtra("received", -1);
+                    long received = i.getLongExtra("received", -1);
+                    long age = android.os.SystemClock.elapsedRealtime() - received;
                     if (age < 0 || age > 2000) return;
                     if(i.hasExtra("liveChannel")){
                         int id=i.getIntExtra("liveChannel",-1);
+                        long generation=CpClimate.sessionGeneration;
                         if(sxmActive&&id>=0){
-                            sxmLive.receive(new SxmLiveMetadata(CpClimate.sessionGeneration,id,i.getStringExtra("liveName"),i.getStringExtra("liveTitle"),i.getStringExtra("liveArtist")));
+                            boolean accepted=sxmLive.receive(new SxmLiveMetadata(generation,id,i.getStringExtra("liveName"),i.getStringExtra("liveTitle"),i.getStringExtra("liveArtist")),received,generation,currentSxmChannel);
+                            if(!accepted)log.log("[radio-sxm] live callback withheld ID="+id+" observed="+currentSxmChannel);
+                            else log.log("[radio-sxm] live callback accepted ID="+id);
                         }
                         return;
                     }

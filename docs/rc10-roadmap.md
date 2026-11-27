@@ -24,7 +24,8 @@ Baseline: RC9 vehicle Session A, HMG-API RC10 SDK migration. Comfort only adjust
 ## Radio
 - [ ] FM catalog publication, seek, metadata/artwork and direct activation reliability.
 - [ ] HD2–4 discovery and control only with verified protocol evidence.
-- [ ] SXM channel identity mapping, source activation, delayed callback rejection, song/artist/artwork and seek validation.
+- [ ] SXM channel identity mapping, source activation, song/artist/artwork and seek validation.
+- [x] Reject live metadata callbacks for mismatched observed channel and out-of-order delivery (CI pending); early callbacks before tuner observation may be withheld, same-ID delayed callbacks remain ambiguous.
 
 ## AirPlay and themes
 - [ ] First-frame session collapse: correlate WCP/CPUL timestamps and playback state; fix generation race in Park-loss stop.
