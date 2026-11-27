@@ -9,6 +9,9 @@ Updated 2026-11-27. Repository Nyx-Asteria/carplay-ultra-lite-gen5w, branch rc11
 Cleanup 95%; logging 100% implementation; evidence-backed corrections 100% for available evidence; legacy heated-seat compatibility 100%; themes/virtual cluster 79%; companion integration 53%; final consolidation/regression 0%. These are estimates, not proof of on-car functionality. Parent 2f09919 / CI 46059257627 green; de3f487 / 46058796683 and 47ba9ca / 46058618602 green. Native C fixture not executed by those runs. This commit CI pending. No release published.
 
 ## Changes in this commit
+Moved native host regression into independent Development regression job, so SDK download/build, Java regression or video dependency failures cannot hide native fixture results. Existing Java/video job and triggers unchanged; no production behavior changes. Rechecked parent 0407557: combined status and PR-only workflow queries returned empty, not evidence of success/failure. Native job still requires its actual run result; no claims of execution. Theme 79%, companion 53% held. Next obtain independent job results and validate pinned companion source. No release or WCP changes.
+
+Previous native UI Sync eligibility:
 Native ui_sync_mode now enforces the same themed mode 2 prerequisite as Java display profile publication, across /info, SETUP and lane 3 stream claims. Stale sync flag alone or generic cluster cannot advertise/claim CPUL UI Sync. Updated host fixtures to explicitly enable themed mode and account for themed ViewAreas, added four stale/generic assertions. OEM-negotiated features are still preserved. Parent a5218b4 CI unavailable; tests unexecuted. Theme 79%, companion 53% estimates. Next validate host fixture and companion source compatibility; no WCP changes or release.
 
 Previous display profile consistency:
