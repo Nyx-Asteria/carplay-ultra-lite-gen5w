@@ -50,11 +50,11 @@ final class SessionLogging {
             String write=writer.failure(),export=writer.exportFailure();
             if(!java.util.Objects.equals(write,lastWriterFailure)){
                 lastWriterFailure=write;
-                mod.log(write==null?"[session-log] writer recovered":"[session-log] writer failed: "+SessionLogPolicy.sanitize(write));
+                log(write==null?"[session-log] writer recovered":"[session-log] writer failed: "+SessionLogPolicy.sanitize(write));
             }
             if(!java.util.Objects.equals(export,lastExportFailure)){
                 lastExportFailure=export;
-                mod.log(export==null?"[session-log] USB export recovered":"[session-log] USB export failed: "+SessionLogPolicy.sanitize(export));
+                log(export==null?"[session-log] USB export recovered":"[session-log] USB export failed: "+SessionLogPolicy.sanitize(export));
             }
         }catch(RuntimeException ignored){ /* health monitoring must not stop the teardown timer */ }
     }
@@ -91,6 +91,7 @@ final class SessionLogging {
         final long id=generation;
         endingAt=System.currentTimeMillis();
         endingReason=reason;
+        logAt("[session] finalization observed; teardown collection window opened",endingAt);
         timer.schedule(new Runnable(){public void run(){
             synchronized(SessionLogging.this){
                 if(generation==id&&endingAt>=0)closeNow(endingReason);
@@ -98,7 +99,11 @@ final class SessionLogging {
         }},2000,java.util.concurrent.TimeUnit.MILLISECONDS);
     }
     private void closeNow(String reason) {
-        if(writer!=null)writer.finishAt(generation,reason,policy.suppressed(),endingAt<0?System.currentTimeMillis():endingAt);
+        long now=System.currentTimeMillis();
+        if(writer!=null) {
+            writer.recordAt(generation,Level.INFO,Category.CORE,"[session] teardown collection completed elapsed_ms="+(endingAt<0?0:Math.max(0,now-endingAt)),now);
+            writer.finishAt(generation,reason,policy.suppressed(),endingAt<0?now:endingAt);
+        }
         previousEndedAt=System.currentTimeMillis();
         generation=-1; endingAt=-1; endingReason=null;
     }
@@ -108,7 +113,8 @@ final class SessionLogging {
     synchronized void projection(String message,long at) {
         long now=System.currentTimeMillis();
         if(generation<0) {
-            if(!teardown(message))preSession.add(message,at,now,previousEndedAt);
+            if(writer!=null && (!teardown(message)||level(message,category(message))==Level.ERROR||level(message,category(message))==Level.WARN))
+                preSession.add(message,at,now,previousEndedAt);
         } else if(at>=sessionStartedAt-PreSessionEvents.MAX_AGE_MS && at>previousEndedAt
                 && at<=now+1000 && (endingAt<0 || teardown(message))) logAt(message,at);
     }
@@ -118,7 +124,7 @@ final class SessionLogging {
     }
     synchronized void log(String message) {
         long now=System.currentTimeMillis();
-        if(writer!=null && generation<0)preSession.add(message,now,now,previousEndedAt);
+        if(writer!=null && generation<0 && (!teardown(message)||level(message,category(message))==Level.ERROR||level(message,category(message))==Level.WARN))preSession.add(message,now,now,previousEndedAt);
         logAt(message,now);
     }
     private void logAt(String message,long at) {
@@ -149,7 +155,7 @@ final class SessionLogging {
     static Level level(String message,Category category) {
         String s=message.toLowerCase(Locale.US);
         if(s.contains("failed")||s.contains("didn't authenticate")||s.contains("implausible package"))return Level.ERROR;
-        if(s.contains("unsupported stream")||s.contains("timed out")||s.contains("timeout")||s.contains("unavailable")||s.contains("refused")||s.contains("queue full")||s.contains("listener stopped"))return Level.WARN;
+        if(s.contains("bcm unconfirmed")||s.contains("accepted_without_acquisition")||s.contains("request_unconfirmed")||s.contains("observation_incomplete")||s.contains("unsupported stream")||s.contains("timed out")||s.contains("timeout")||s.contains("unavailable")||s.contains("refused")||s.contains("queue full")||s.contains("listener stopped"))return Level.WARN;
         if(category==Category.VS_RAW||category==Category.PROJECTION_RAW||s.startsWith("sync phone:")||s.startsWith("sync car:"))return Level.TRACE;
         if(s.startsWith("car reader and sender started")||s.startsWith("vs phone follows")||s.startsWith("vs phone reads ")||s.startsWith("[seat-fan] subscribed")||s.startsWith("[seat-feedback] subscribed")||
            s.startsWith("[radio-api]")||s.startsWith("[radio-sxm] catalog accessor")||s.startsWith("[radio-probe]")||s.startsWith("[video] message #")||
