@@ -6,8 +6,8 @@
 
 An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by HMG-API.
 
-[![Development](https://img.shields.io/badge/development-RC9_testing-f59e0b?style=flat-square)](#development)
-[![HMG-API](https://img.shields.io/badge/HMG--API-1.1.0--rc.8%2B-2563eb?style=flat-square)](https://github.com/Open-HMG/HMG-API)
+[![Development](https://img.shields.io/badge/development-RC11_development-f59e0b?style=flat-square)](#development)
+[![HMG-API](https://img.shields.io/badge/HMG--API-1.1.0--rc.10%2B-2563eb?style=flat-square)](https://github.com/Open-HMG/HMG-API)
 [![Platform](https://img.shields.io/badge/platform-K5_Gen5W__M-64748b?style=flat-square)](#compatibility)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-22c55e?style=flat-square)](LICENSE)
 
@@ -19,7 +19,7 @@ An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by 
 
 An independent K5 port of [SafariForest's CarPlay Ultra-Lite](https://github.com/SafariForest/carplay-ultra-lite-gen5w). Native vehicle controls, Ultra-style appearance and parked video are integrated into CarPlay without adding EV routing or changing the physical instrument cluster.
 
-> **RC9 vehicle testing build.** Retain RC8 for rollback. See the [RC9 testing guide](docs/rc9-testing.md), [changelog](CHANGELOG.md) and [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases).
+> **RC11 is in development; RC10 is the current vehicle-testing baseline.** See the [RC11 development plan](docs/rc11-plan.md), [RC10 testing guide](docs/rc10-testing.md), [changelog](CHANGELOG.md) and [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases). Retain a known-working rollback package.
 
 ## Features
 
@@ -75,7 +75,7 @@ RC7 observed hardware decoder initialization and a DRM unsupported error on prot
 | Firmware | `DL322.USA.0000.V015.012.260507` |
 | Android | 4.4.2 / API 19 |
 | Display | 1920 × 720 |
-| Framework | HMG-API 1.1.0-rc.8 or later |
+| Framework | HMG-API 1.1.0-rc.10 (pinned build) |
 | Phone | iOS 26 or later for Ultra features |
 
 Exact firmware fingerprints gate activation. Other cars and firmware are unsupported.
@@ -84,19 +84,19 @@ Exact firmware fingerprints gate activation. Other cars and firmware are unsuppo
 
 Download a published package from [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases). Preserve a rollback copy of working wireless projection and back up settings first.
 
-The RC9 bundle includes:
+The RC10 bundle includes:
 
 | Package | Role |
 | --- | --- |
 | CPUL K5 | Vehicle integration and Ultra |
-| [Wireless CP/AA fork](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa) | 2.2.1-rc.5 wireless projection and Ultra identity/session-start |
+| [Wireless CP/AA fork](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa) | 2.2.1-rc.6 wireless projection and Ultra identity/session-start |
 | [Phone Projection Scaling](https://github.com/Nyx-Asteria/Phone-Projection-Scaling) | Stable 1.0.0 relative projection scaling |
 | [Comfort fork](https://github.com/Nyx-Asteria/hmgapi-comfort) | Optional comfort thresholds |
-| [Standalone TBT](https://github.com/Nyx-Asteria/Standalone_TBT) | 1.0.0-rc.2; experimental Waze recovery, single navigation publisher |
+| [Standalone TBT](https://github.com/Nyx-Asteria/Standalone_TBT) | 1.0.0-rc.3; experimental Waze recovery, single navigation publisher |
 | Compatibility check | Firmware and environment checks |
 | Firmware collector | Incremental navigation/iAP2 binaries and opt-in CPUL runtime logs |
 
-The RC9 bundle is configured to use one permanent author identity. Older test-signed packages may need removal before installing packages signed with the permanent key. Do not install competing identity patches. Disable WCP cluster/HUD TBT before installing Standalone TBT; keep wireless bridge, audio, shared identity and Now Playing enabled. Remove the original TBT fork first. Test wireless reconnect and rollback while parked.
+The RC10 bundle is configured to use one permanent author identity. Older test-signed packages may need removal before installing packages signed with the permanent key. Do not install competing identity patches. Explicitly disable WCP Integrated turn-by-turn, apply and restart before using Standalone TBT. Keep Enable wireless CarPlay on; audio and Now Playing follow that master switch, and shared identity is independent. Remove the original TBT fork first. Test wireless reconnect and rollback while parked.
 
 ## Settings
 
@@ -121,7 +121,7 @@ UI Synchronization requires Ultra Sidebars and CarPlay Ultra. The wallpaper expe
 
 ## Development
 
-RC9 is a vehicle testing candidate. See the [RC9 test plan](docs/rc9-testing.md) and [changelog](CHANGELOG.md).
+RC11 development begins with a content-identical rebase of RC10. See the [RC11 plan](docs/rc11-plan.md), [RC10 test plan](docs/rc10-testing.md), and [changelog](CHANGELOG.md). No RC11 release has been approved.
 
 | Milestone | Status |
 | --- | --- |
@@ -131,7 +131,7 @@ RC9 is a vehicle testing candidate. See the [RC9 test plan](docs/rc9-testing.md)
 | RC8 | Testing: radio, climate feedback, theme diagnostics, companion TBT and incremental collector |
 | Future | HD multicast control, confirmed SXM/Bose support, theme selector, standalone AirPlay and YouTube discovery |
 
-[Development regression](.github/workflows/development-regression.yml) compiles the main module and video engine and runs climate, Park, volume policy and UI synchronization checks without publishing. [Release bundle](.github/workflows/release-bundle.yml) builds seven packages and verifies author signatures before publishing a non-draft release marked Latest. The release is a testing build despite its publication status.
+[Development regression](.github/workflows/development-regression.yml) compiles the main module and video engine and runs climate, Park, volume policy and UI synchronization checks without publishing. [Release bundle](.github/workflows/release-bundle.yml) builds seven packages and verifies author signatures. Publication requires separate explicit approval. The release is a testing build despite its publication status.
 
 Read [development notes](docs/next-development.md), [radio diagnostics](docs/k5-radio.md) and [integration details](docs/integration.md) for technical background. Host tests do not establish vehicle functionality.
 
@@ -151,6 +151,8 @@ The firmware collector exports allowlisted OEM binaries for interface analysis. 
 - **[lemoyneiv](https://github.com/lemoyneiv/hmgapi-comfort)** — Comfort & Startup and threshold validation.
 - **[CubbyNINJA / ParkCast](https://github.com/CubbyNINJA/g5w-parkcast)** — standalone AirPlay research reference; no receiver code incorporated yet.
 - **[Nyx-Asteria](https://github.com/Nyx-Asteria)** — K5 port, development and testing.
+
+Based on LIVI by Lasse Heitgres (https://github.com/f-io/LIVI).
 
 Released under **[GPL-3.0-or-later](LICENSE)**. Applicable upstream notices and corresponding source must be retained.
 
