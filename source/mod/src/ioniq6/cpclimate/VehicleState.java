@@ -1184,6 +1184,23 @@ final class VehicleState {
                     }
                 }
             }
+            if (ClimateMap.legacySeatHeatArbitration) {
+                // Restore the historical post-write cached heat level only for a
+                // heat request. Retain physical/pending opposite-mode guards,
+                // modern fan feedback and session-scoped command dispatch.
+                for(long[] pair:new long[][]{
+                    {ClimateMap.DRIVER_SEAT_LEVEL,ClimateMap.DRIVER_SEAT_ON},
+                    {ClimateMap.PASSENGER_SEAT_LEVEL,ClimateMap.PASSENGER_SEAT_ON}}) {
+                    if(sent.containsKey(pair[0])||sent.containsKey(pair[1])) {
+                        // A fresh explicit level awaiting BCM confirmation must not be replaced
+                        // by a stale display cache when immediate feedback is disabled.
+                        Object cached=sent.containsKey(pair[0])?sent.get(pair[0]):
+                                Boolean.TRUE.equals(sent.get(pair[1]))&&pendingSeatLevels.containsKey(pair[0])
+                                ?pendingSeatLevels.get(pair[0]):values.get(pair[0]);
+                        if(cached instanceof Long && (Long)cached>=0 && (Long)cached<=3)commandState.put(pair[0],cached);
+                    }
+                }
+            }
             c.phoneWrote(sent, commandState);
         }
         List<Out> answers = new ArrayList<Out>();
