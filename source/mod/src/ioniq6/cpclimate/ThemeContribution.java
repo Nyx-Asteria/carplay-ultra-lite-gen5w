@@ -64,6 +64,63 @@ final class ThemeContribution {
         }
     }
 
+    private Thread observer;
+    synchronized void observe(final ModContext mod) {
+        if (observer != null) return;
+        observer = new Thread(new Runnable() {
+            public void run() {
+                String last = null;
+                Object previous = null;
+                try {
+                    while (!Thread.currentThread().isInterrupted()) {
+                        if (!mod.enabled() || !mod.settingBoolean("ultra_theme", true)
+                                || !mod.settingBoolean("ultra_sidebars", true)) {
+                            synchronized (ThemeContribution.this) {
+                                if (observer != Thread.currentThread()) return;
+                                unregister(mod);
+                            }
+                            Thread.sleep(2000);
+                            continue;
+                        }
+                        Object service = mod.use(PROVIDER, SERVICE);
+                        synchronized (ThemeContribution.this) {
+                            if (observer != Thread.currentThread()) return;
+                            if (service == null) unregister(mod);
+                            else if (!ownership.confirmed(service)) register(mod);
+                        }
+                        String next = "unavailable";
+                        if (service != null) {
+                            try {
+                                Class<?> api = Class.forName(API, false, service.getClass().getClassLoader());
+                                if (api.isInstance(service) && api.getField("API_VERSION").getInt(null) == 3)
+                                    next = ThemeNegotiation.sample(api, service);
+                            } catch (Exception e) { next = "observation_failed"; }
+                            catch (LinkageError e) { next = "observation_failed"; }
+                        }
+                        if (service != mod.use(PROVIDER, SERVICE)) { service = null; next = "provider_changed"; }
+                        if (service != previous || !next.equals(last)) {
+                            mod.log("[theme] negotiation " + next);
+                            previous = service;
+                            last = next;
+                        }
+                        Thread.sleep(2000);
+                    }
+                } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                finally {
+                    synchronized (ThemeContribution.this) {
+                        if (observer == Thread.currentThread()) observer = null;
+                    }
+                }
+            }
+        }, "cpul-theme-evidence");
+        observer.setDaemon(true);
+        observer.start();
+    }
+
+    synchronized void stopObservation() {
+        if (observer != null) { observer.interrupt(); observer = null; }
+    }
+
     synchronized boolean unregister(ModContext mod) {
         if (ownership.owner() == null) return true;
         ownership.uncertain();

@@ -137,6 +137,7 @@ final class UiSync {
     long session, nextTx, lastRx, version;
     boolean ready, awaitingResetComplete;
     Object phoneId;
+    private byte[] pendingResetReply;
     /** the panel's keys from the phone's last message, copied into ours */
     Map<Object, Object> panel = new LinkedHashMap<Object, Object>();
     /** what the phone picked, for the log: "layout X", "palette Y of X", "appearance dark" */
@@ -147,6 +148,7 @@ final class UiSync {
         session = nextTx = lastRx = version = 0;
         ready = awaitingResetComplete = false;
         phoneId = null;
+        pendingResetReply = null;
         panel = new LinkedHashMap<Object, Object>();
     }
 
@@ -162,12 +164,28 @@ final class UiSync {
         Object h = Bplist.decode((byte[]) d);
         if (!(h instanceof Map)) return out;
         Map<String, Object> header = (Map<String, Object>) h;
-        panel = new LinkedHashMap<Object, Object>(frame);
-        panel.remove("data");
         Long type = OpackCodec.asLong(header.get("type"));
         Long ssn = OpackCodec.asLong(header.get("ssn"));
+        // Rejected frames must not change the envelope used for subsequent replies.
+        if (type == null) return out;
+        if (type == RESET) {
+            // Retry the same response without changing the session or sequence.
+            // A distinct peer reset identity is not assumed to be a retry.
+            if (awaitingResetComplete && nextTx == 2
+                    && java.util.Objects.equals(phoneId, header.get("id"))) {
+                if (pendingResetReply != null) out.add(pendingResetReply.clone());
+                return out;
+            }
+        } else {
+            if (ssn == null || ssn != session) return out;
+            if (!(type == RESET_COMPLETE && awaitingResetComplete)
+                    && !(type == COMMAND && ready)
+                    && !(type == COMMAND_ACK && ready)) return out;
+        }
+        panel = new LinkedHashMap<Object, Object>(frame);
+        panel.remove("data");
         if (type != null && type == RESET) {
-            if (awaitingResetComplete && nextTx == 2) return out;
+
             session++;
             nextTx = 1;
             lastRx = 0;
@@ -177,11 +195,13 @@ final class UiSync {
             Map<String, Object> extra = new LinkedHashMap<String, Object>();
             extra.put("version", VERSION);
             withId(extra);
-            out.add(message(RESET, null, extra));
+            pendingResetReply = message(RESET, null, extra);
+            out.add(pendingResetReply.clone());
         } else if (ssn == null || ssn != session) {
             return out;
         } else if (type != null && type == RESET_COMPLETE && awaitingResetComplete) {
             awaitingResetComplete = false;
+            pendingResetReply = null;
             ready = true;
             Long v = OpackCodec.asLong(header.get("version"));
             version = Math.min(v == null ? 1 : v, VERSION);

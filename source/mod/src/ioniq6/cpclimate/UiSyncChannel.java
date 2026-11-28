@@ -95,8 +95,20 @@ final class UiSyncChannel extends Thread {
             this.preferences=preferences;this.configuration=configuration;
         }
         UiSync select(byte[] body) {
-            String id=panelId(body);
-            if(id==null)id="legacy";
+            // Missing displayUUID is the historical legacy lane; an explicit
+            // unknown or malformed display must not share its handshake state.
+            String id;
+            try {
+                Object decoded=OpackCodec.decode(body);
+                if (!(decoded instanceof java.util.Map)) return null;
+                java.util.Map<?,?> frame=(java.util.Map<?,?>)decoded;
+                if (!frame.containsKey("displayUUID")) id="legacy";
+                else {
+                    Object display=frame.get("displayUUID");
+                    if (!"Center_Display".equals(display) && !"Cluster_Display".equals(display)) return null;
+                    id=(String)display;
+                }
+            } catch (RuntimeException e) { return null; }
             UiSync state=panels.get(id);
             if(state==null){
                 state=new UiSync(preferences,true);
@@ -162,13 +174,24 @@ final class UiSyncChannel extends Thread {
                         List<byte[]> answers;
                         List<String> picked;
                         UiSync sync=router.select(body);
+                        if (sync == null) {
+                            if (logged++ < MAX_LOGGED) out.log("[theme-sync] unsupported or malformed panel frame ignored");
+                            at += size;
+                            continue;
+                        }
+                        boolean becameReady;
+                        boolean resetStarted;
                         synchronized (sync) {
+                            boolean wasReady = sync.ready;
+                            long previousSession = sync.session;
                             try {
                                 answers = sync.handle(body);
                             } catch (IllegalArgumentException e) {
                                 answers = java.util.Collections.emptyList();
                                 if (logged++ < MAX_LOGGED) out.log("SYNC unreadable message bytes=" + body.length);
                             }
+                            becameReady = !wasReady && sync.ready;
+                            resetStarted = previousSession != sync.session && sync.awaitingResetComplete;
                             picked = new java.util.ArrayList<String>(sync.choices);
                             sync.choices.clear();
                         }
@@ -188,6 +211,11 @@ final class UiSyncChannel extends Thread {
                             w.send(VsChannel.pack(VsChannel.ASYNC, VsChannel.COMMAND, 0, a));
                             if (logged++ < MAX_LOGGED) out.log("SYNC car: bytes=" + a.length);
                         }
+                        String display = panelId(body);
+                        String lane = display == null ? "legacy" : display;
+                        if (resetStarted) out.log("[theme-sync] panel=" + lane + " reset session=" + sync.session);
+                        if (becameReady) out.log("[theme-sync] panel=" + lane + " initialization replies written session="
+                                + sync.session + " version=" + sync.version + " replies=" + answers.size());
                         for (String c : picked) out.log("SYNC the phone picked " + c);
                     }
                     at += size;
