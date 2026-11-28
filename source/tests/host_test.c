@@ -117,9 +117,11 @@ static long long m_get_int(const void *d, const void *k, int *err) {
 static int add_stream_fail;
 static int m_add_stream(const void *reply, const void *stream);
 static char lastlog[512];
-static int vspi_file_logs, vspi_fallback_logs;
+static int vspi_file_logs, vspi_fallback_logs, discovery_logs;
+static char discovery_log[512];
 static void m_log(void *cat, const char *fn, int level, const char *fmt, ...) {
     va_list ap; va_start(ap, fmt); vsnprintf(lastlog, sizeof lastlog, fmt, ap); va_end(ap);
+    if (strstr(lastlog,"RCS discovery ")) { discovery_logs++; snprintf(discovery_log,sizeof discovery_log,"%s",lastlog); }
     if (strstr(lastlog, "from files/cpc-vspi.bplist")) vspi_file_logs++;
     if (strstr(lastlog, "cpc-vspi.bplist not used")) vspi_fallback_logs++;
     printf("    log [%s %d] %s", fn, level, lastlog); (void)cat;
@@ -990,6 +992,27 @@ int main(void) {
         Str *unknownRcs=str("00000000-0000-0000-0000-000000000000");
         m_set(st,kt,unknownRcs);m_release(unknownRcs);
         CHECK("themed UI Sync does not claim unknown remote-control client",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==4);
+        CHECK("discovery default off",discovery_logs==0);
+        f=fopen(DIR "cpc-rcs-discovery","wb");
+        unsigned pid=(unsigned)getpid();
+        if(f){for(int shift=24;shift>=0;shift-=8)fputc((pid>>shift)&255,f);fclose(f);}
+        Str *ck=str("clientUUID"), *cv=str("PRIVATE-CLIENT-ID");m_set(st,ck,cv);m_release(ck);m_release(cv);
+        ck=str("channelID");cv=str("PRIVATE-CHANNEL-ID");m_set(st,ck,cv);m_release(ck);m_release(cv);
+        ck=str("controlType");m_set_int(st,ck,2);m_release(ck);
+        CHECK("opt-in candidate stays unclaimed",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==4 && discovery_logs==1);
+        CHECK("validated type UUID and metadata only",strstr(discovery_log,"clientTypeUUID=00000000-0000-0000-0000-000000000000")&&strstr(discovery_log,"clientUUID=string channelID=string seed=number")&&strstr(discovery_log,"controlType=number-2")&&!strstr(discovery_log,"PRIVATE"));
+        CHECK("duplicate discovery suppressed",cpc_stream_hook(&session,st,reply,130)==0&&discovery_logs==1);
+        Str *badRcs=str("PRIVATE-invalid-uuid");m_set(st,kt,badRcs);m_release(badRcs);
+        CHECK("invalid UUID never echoed",cpc_stream_hook(&session,st,reply,130)==0&&discovery_logs==2&&strstr(discovery_log,"clientTypeUUID=invalid")&&!strstr(discovery_log,"PRIVATE"));
+        Str *knownRcs=str("e9459fd0-bcad-4c45-820f-1e72447ef2f2");m_set(st,kt,knownRcs);m_release(knownRcs);
+        CHECK("known disabled UUID excluded from discovery",cpc_stream_hook(&session,st,reply,130)==0&&discovery_logs==2);
+        for(unsigned j=0;j<40;j++){
+            char u[37];snprintf(u,sizeof u,"10000000-0000-0000-0000-%012x",j);
+            Str *v=str(u);m_set(st,kt,v);m_release(v);
+            CHECK("bounded candidate never claimed",cpc_stream_hook(&session,st,reply,130)==0&&streams->n==4);
+        }
+        CHECK("discovery capped at 32 distinct records",discovery_logs==32);
+        remove(DIR "cpc-rcs-discovery");
         Str *syncAgain=str("07D9F906-8D64-4B54-A808-A20BCA2C51C2");
         m_set(st,kt,syncAgain);m_release(syncAgain);
         unsigned char published[72]; memcpy(published,kf,72);

@@ -256,6 +256,10 @@ public final class CpClimate extends ModEntry {
                 return;
             }
             runtimeLog("[theme] listener-gated profile cluster="+cluster+" themedIds="+themedIds+" uiSync="+uiSync+" widescreen="+wide);
+            if(!NativeProfile.writeDiscovery(dir,m.enabled() && m.settingBoolean("rcs_discovery",false),android.os.Process.myPid())) {
+                runtimeLog("[native] discovery configuration could not be safely cleared; patch withheld");
+                return;
+            }
             m.nativePatch(app, "libCarPlayCore.so");
             runtimeLog("[climate] profile=K5 front heat/vent -3..3, rear seats=false, ambient=false");
             CarClimate car = climate ? new CarClimate(state, lanes, log) : null;

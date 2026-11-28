@@ -20,7 +20,8 @@ final class SessionSettings {
         "session_logging",
         "session_usb_export",
         "diagnostic_detail",
-        "diagnostic_packets"
+        "diagnostic_packets",
+        "rcs_discovery"
     };
     static final boolean[] DEFAULTS = {
         true,
@@ -37,6 +38,7 @@ final class SessionSettings {
         true,
         true,
         true,
+        false,
         false
     };
     static final String WIDE_KEY="ultra_widescreen_areas";
