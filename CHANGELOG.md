@@ -1,5 +1,16 @@
 # Changelog
 
+## K5 1.0.0-rc.11 (development candidate; not released)
+
+- Reworked bounded session diagnostics and USB evidence, including initial theme registration, native feature negotiation, per-panel sync and virtual cluster lifecycle; redacted companion configuration and phone choices.
+- Evidence-backed climate, radio, media and vehicle-state corrections and optional legacy heated-seat compatibility. Existing Park restriction and physical-cluster boundaries retained.
+- API v3 WCP theme-only registration, full legacy theme tuple, provider-classloader compatibility, generation-consistent observations and withdrawal. WCP exclusively owns gasoline identity and StartSession; FileTransfer remains separate and disabled.
+- Phone-managed center and virtual cluster layouts; no forced wallpaper, no shared layout persistence in production; listener-gated display profiles, coherent rollback, guarded native stream routing and UI Sync state/key handling. Theme selector and wallpaper not yet proven fixed.
+- Independent widescreen experiment, PPS setting delegation, STBT exclusive guidance with WCP integrated TBT off. Pinned companion source/recipe checks and RC10 loader audit.
+- Existing-versus-fresh pairing comparison, explicit Classic/Ultra preferences, staged/current asset and acquisition/transfer distinctions from WCP research. No preference bypass or automatic re-pairing.
+- Regenerate native ARM recipe during CI and packaging from pinned stock metadata; exact-tree host tests and signed package verification required before owner-approved release. No vehicle validation claimed.
+
+
 ## K5 1.0.0-rc.10 (unreleased development candidate)
 
 ### Climate

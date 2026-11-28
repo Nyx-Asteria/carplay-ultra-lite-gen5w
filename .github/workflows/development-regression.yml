@@ -1,7 +1,7 @@
 name: Development regression
 on:
   push:
-    branches: [k5-compatibility, rc11]
+    branches: [k5-compatibility, rc11, rc11-consolidated]
     paths:
       - 'source/mod/src/**'
       - 'source/mod/recipes/**'
@@ -28,6 +28,55 @@ jobs:
           persist-credentials: false
       - name: Native hook regression (host CFLite mock)
         run: bash source/tests/run-native-regressions.sh
+      - name: Compile ARM payload and regenerate recipe
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq clang lld python3-pyelftools
+          /usr/bin/python3 source/tools/rebuild-pinned-recipe.py source/mod/recipes/carplay-climate-m1.recipe out/native/carplay-climate-m1.recipe
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          (
+            cd out/native
+            printf 'source_commit=%s\n' "$GITHUB_SHA" > BUILD-PROVENANCE.txt
+            clang --version >> BUILD-PROVENANCE.txt
+            ld.lld --version >> BUILD-PROVENANCE.txt
+            sha256sum carplay-climate-m1.recipe > SHA256SUMS.txt
+            sha256sum --strict -c SHA256SUMS.txt
+          )
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-recipe-${{ github.sha }}
+          path: out/native/
+          if-no-files-found: error
+          retention-days: 14
+  companion-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Nyx-Asteria/hmgapi-wireless-cp-aa
+          ref: 3b951c745ce78fde4ca6085b28d682c7d629bb98
+          path: .wireless
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Nyx-Asteria/Standalone_TBT
+          ref: e8770256ff6679546c483af43aed3f7a6b19b998
+          path: .tbt
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Nyx-Asteria/Phone-Projection-Scaling
+          ref: bd57be364d95d9542b5aaf81269fa2b8dc1d35e2
+          path: .pps
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: bash source/tests/run-companion-contract.sh .wireless .tbt .pps
   test:
     runs-on: ubuntu-24.04
     steps:
