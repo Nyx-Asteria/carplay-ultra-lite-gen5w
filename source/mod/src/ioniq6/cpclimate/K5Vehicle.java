@@ -99,23 +99,32 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
             ClassLoader cl = new dalvik.system.PathClassLoader("/system/framework/com.hkmc.ext.hcan.jar", context.getClassLoader());
             odometer = CarApi.code(cl, HSCAN, "getOdometer", "(B)F");
             range = CarApi.code(cl, HSCAN, "ableDriveDistance", "(B)I");
-            unit = CarApi.code(CarApi.USM, "getDistanceSpeedUnit", "()I");
-        } catch (Throwable t) { log.log("[vehicle] getter lookup failed: " + t.getClass().getSimpleName()); }
+        } catch (Throwable t) { log.log("[vehicle] HSCAN getter lookup failed: " + t.getClass().getSimpleName()); }
+        unit = CarApi.code(CarApi.USM, "getDistanceSpeedUnit", "()I");
         log.log("[vehicle] getter availability odometer=" + (odometer >= 0) + " range=" + (range >= 0) + " unit=" + (unit >= 0));
     }
-    double read(String service, String iface, int code, boolean arg, boolean floating) {
-        if (code < 0) return Double.NaN;
+    private final Map<String,String> readHealth=new LinkedHashMap<String,String>();
+    private long readHealthGeneration=-1;
+    private void readHealth(String name,String status){
+        long generation=CpClimate.sessionGeneration;
+        if(readHealthGeneration!=generation){readHealth.clear();readHealthGeneration=generation;}
+        if(!status.equals(readHealth.put(name,status)))log.log("[vehicle] "+name+" read="+status);
+    }
+    double read(String name,String service, String iface, int code, boolean arg, boolean floating) {
+        if (code < 0) {readHealth(name,"method_unavailable");return Double.NaN;}
         Parcel data = Parcel.obtain(), reply = Parcel.obtain();
         try {
             IBinder b = CarClimate.service(service);
-            if (b == null) return Double.NaN;
+            if (b == null) {readHealth(name,"service_unavailable");return Double.NaN;}
             data.writeInterfaceToken(iface);
             if (arg) data.writeByte((byte)0);
-            if (!b.transact(code, data, reply, 0)) return Double.NaN;
+            if (!b.transact(code, data, reply, 0)) {readHealth(name,"transaction_rejected");return Double.NaN;}
             reply.readException();
-            if(reply.dataAvail()<4)return Double.NaN;
-            return floating ? reply.readFloat() : reply.readInt();
-        } catch (Throwable t) { return Double.NaN; }
+            if(reply.dataAvail()<4){readHealth(name,"short_reply");return Double.NaN;}
+            double value=floating ? reply.readFloat() : reply.readInt();
+            readHealth(name,Double.isNaN(value)||Double.isInfinite(value)?"nonfinite_reply":"reply_received");
+            return value;
+        } catch (Throwable t) {readHealth(name,"failed:"+t.getClass().getSimpleName());return Double.NaN;}
         finally { data.recycle(); reply.recycle(); }
     }
     @Override public void run() {
@@ -126,9 +135,9 @@ final class K5Vehicle extends Thread implements VehiclePage.Listener {
                     long generation=CpClimate.sessionGeneration;
                     Map<String,Object> fresh = new LinkedHashMap<String,Object>();
                     if (enabled()) {
-                    double u = read("com.hkmc.micom.usm", CarApi.USM, unit, false, false);
-                    double o = read(SERVICE, HSCAN, odometer, true, true);
-                    double r = read(SERVICE, HSCAN, range, true, false);
+                    double u = read("unit","com.hkmc.micom.usm", CarApi.USM, unit, false, false);
+                    double o = read("odometer",SERVICE, HSCAN, odometer, true, true);
+                    double r = read("range",SERVICE, HSCAN, range, true, false);
                     // EV6 semantics are candidate mappings only; unknown unit is never guessed.
                     boolean knownUnit = u == 0 || u == 1;
                     fresh.put("odometer", knownUnit && o > 0 ? VehiclePage.distance(o, u == 1) : VehiclePage.NONE);
