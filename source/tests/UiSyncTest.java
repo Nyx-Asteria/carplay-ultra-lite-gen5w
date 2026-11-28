@@ -110,7 +110,15 @@ public class UiSyncTest {
         sync.handle(fromPhone(5, UiSync.APPEARANCE_PREFERENCE_CHANGE, map("preference", 2L)));
         sync.handle(fromPhone(6, UiSync.APPEARANCE_PREFERENCE_CHANGE, map("preference", 7L)));
         check("the phone's choices are recorded: " + sync.choices, sync.choices.equals(Arrays.asList(
-                "layout 0D38B526 palette starlight", "palette racingGreen of layout 0D38B526", "appearance dark")));
+                "layout unknown palette unknown", "palette unknown of layout unknown", "appearance dark")));
+
+        UiSync redacted=new UiSync();
+        redacted.followPhone(map("data",Bplist.encode(UiSync.command(UiSync.START_LAYOUT_TRANSITION,"layoutID","private-id"))));
+        check("unknown layout and missing palette use fixed labels",redacted.choices.equals(Arrays.asList("layout unknown palette absent")));
+        redacted.followPhone(map("data",Bplist.encode(map("type",UiSync.PALETTE_CHANGE,"data",map("layoutIdentifier",UiSync.layout("Modular").id,"paletteIdentifier","private-token")))));
+        check("unknown palette cannot leak peer string",redacted.choices.get(1).equals("palette unknown of layout Modular"));
+        redacted.followPhone(map("data",Bplist.encode(map("type",UiSync.START_LAYOUT_TRANSITION,"data",map("layoutID",UiSync.layout("DigiRing").id,"paletteID","green")))));
+        check("catalog layout and palette remain identifiable",redacted.choices.get(2).equals("layout DigiRing palette green"));
 
         out = sync.handle(fromPhone(7, UiSync.REQUEST_FOCUS, map("tokenID", 4711L)));
         check("a focus request: acked, then the focus goes back",
@@ -411,12 +419,34 @@ public class UiSyncTest {
             blocked.join(3000);
             check("failed uiSync listener exits",!blocked.isAlive());
         }
-        ClusterSink sink=new ClusterSink(quiet,ClusterSink.PORT,"test-cluster");
+        final java.util.concurrent.CountDownLatch firstClosed=new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch secondClosed=new java.util.concurrent.CountDownLatch(1);
+        final List<String> clusterLogs=java.util.Collections.synchronizedList(new ArrayList<String>());
+        ClusterSink sink=new ClusterSink(new VsChannel.Log(){
+            public void log(String msg){
+                clusterLogs.add(msg);
+                if(msg.contains("stream closed bytes=")&&msg.contains(" connection=1 "))firstClosed.countDown();
+                if(msg.contains("stream closed bytes=")&&msg.contains(" connection=2 "))secondClosed.countDown();
+            }
+        },ClusterSink.PORT,"test-cluster");
         sink.start();
         check("cluster listener reports ready",sink.awaitReady(3000));
         try(Socket socket=new Socket("127.0.0.1",ClusterSink.PORT)){
             socket.getOutputStream().write(new byte[]{1,2,3});
         }
+        check("first cluster stream closes",firstClosed.await(3,java.util.concurrent.TimeUnit.SECONDS));
+        try(Socket socket=new Socket("127.0.0.1",ClusterSink.PORT)){
+            socket.getOutputStream().write(new byte[]{4,5});
+        }
+        check("cluster listener accepts reconnect",secondClosed.await(3,java.util.concurrent.TimeUnit.SECONDS));
+        boolean first=false,second=false;
+        synchronized(clusterLogs){
+            for(String line:clusterLogs){
+                first|=line.contains("stream closed bytes=3 ")&&line.endsWith("connection=1 eof=true");
+                second|=line.contains("stream closed bytes=2 ")&&line.endsWith("connection=2 eof=true");
+            }
+        }
+        check("cluster connections have independent byte counts and EOF evidence",first&&second);
     }
 
     static void independentConnections() {
@@ -474,6 +504,37 @@ public class UiSyncTest {
         check("rejected frames preserve all panel states",cluster.ready&&center.ready&&legacy.ready);
         UiSyncChannel.PanelRouter reconnect=new UiSyncChannel.PanelRouter(null,config);
         check("reconnect creates fresh state without mutating old connection",reconnect.select(centerReset)!=center&&center.ready);
+    }
+
+    static void phoneManagedStorage(File dir) throws Exception {
+        File isolated=new File(dir,"phone-managed-storage");
+        if(!isolated.mkdir())throw new AssertionError("isolated preference fixture");
+        File legacy=new File(isolated,"cpc-theme-preferences.properties");
+        try {
+            try(FileOutputStream out=new FileOutputStream(legacy)){
+                out.write("Cluster_Display.layout=legacy-marker\n".getBytes("UTF-8"));
+            }
+            byte[] before=read(legacy);
+            check("production mode does not open persisted layout preferences",
+                    UiSyncChannel.preferenceFile(isolated,null,false)==null);
+            check("legacy fixtures retain explicit preference path",
+                    legacy.equals(UiSyncChannel.preferenceFile(isolated,UiSync.layout("Modular"),false))
+                    &&legacy.equals(UiSyncChannel.preferenceFile(isolated,null,true)));
+            UiSync config=new UiSync();
+            UiSyncChannel.PanelRouter router=new UiSyncChannel.PanelRouter(
+                    UiSyncChannel.preferenceFile(isolated,null,false),config);
+            UiSync cluster=router.select(panelFrame("Cluster_Display",0));
+            cluster.handle(panelFrame("Cluster_Display",0));
+            check("production cluster starts phone-managed",cluster.handle(panelFrame("Cluster_Display",1)).size()==3);
+            cluster.remember("Cluster_Display",UiSync.layout("DigiRing").id,"green",true);
+            check("phone choice does not modify old shared preference file",Arrays.equals(before,read(legacy)));
+            UiSyncChannel.PanelRouter fresh=new UiSyncChannel.PanelRouter(
+                    UiSyncChannel.preferenceFile(isolated,null,false),config);
+            UiSync next=fresh.select(panelFrame("Cluster_Display",0));
+            next.handle(panelFrame("Cluster_Display",0));
+            check("fresh connection never restores old layout",next.handle(panelFrame("Cluster_Display",1)).size()==3);
+            check("no staged preference file in production",!new File(legacy.getPath()+".tmp").exists());
+        } finally {new File(legacy.getPath()+".tmp").delete();legacy.delete();isolated.delete();}
     }
 
     static void sharedPreferences(File dir) throws Exception {
@@ -551,6 +612,7 @@ public class UiSyncTest {
         layoutRequest();
         independentConnections();
         panelRouting();
+        phoneManagedStorage(new File(args[0]));
         sharedPreferences(new File(args[0]));
         variant();
         plists(new File(args[1]), new File(args[2]));

@@ -651,12 +651,21 @@ int main(void) {
         }
         si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
         cpc_info_hook(si);
+        CHECK("stale UI Sync flag without themed mode does not advertise", !g(si,"uiSyncInfo"));
+        m_release(si);
+        {
+            FILE *us = fopen(DIR "cpc-ultra","w");
+            if (us) { fputs("2\n",us); fclose(us); }
+        }
+        si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        cpc_info_hook(si);
         {
             const Dict *usi = g(si, "uiSyncInfo");
             CHECK("uiSync experiment on: /info has an empty uiSyncInfo", usi && usi->n == 0);
         }
         m_release(si);
         remove(DIR "cpc-uisync");
+        remove(DIR "cpc-ultra");
         {
             FILE *xf = fopen(DIR "cpc-xenable", "w");
             if (xf) { fputs("1\n", xf); fclose(xf); }
@@ -796,7 +805,7 @@ int main(void) {
         rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
         cpc_setup_hook(req, rep);
         echo = g(rep, "enabledFeatures");
-        CHECK("uiSync experiment on, uiSync not offered: enabledFeatures stay [vehicleStateProtocol]", echo && echo->n == 1);
+        CHECK("stale sync flag without themed mode leaves only VSP", echo && echo->n == 1);
         m_release(rep);
         Dict *rq = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
         Arr *fs = (Arr *)m_new_arr(0, 0, &cb_arr);
@@ -804,13 +813,21 @@ int main(void) {
         for (int i = 0; i < 2; i++) { Str *s = str(offer[i]); m_append(fs, s); m_release(s); }
         Str *kq = str("features"); m_set(rq, kq, fs); m_release(fs); m_release(kq);
         rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        cpc_setup_hook(rq,rep);
+        echo=g(rep,"enabledFeatures");
+        CHECK("offered sync plus stale flag without themed mode leaves only VSP",echo && echo->n==1);
+        m_release(rep);
+        uf=fopen(DIR "cpc-ultra","w");
+        if(uf){fputs("2\n",uf);fclose(uf);}
+        rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
         cpc_setup_hook(rq, rep);
         echo = g(rep, "enabledFeatures");
-        CHECK("uiSync experiment on, offered: enabledFeatures [vehicleStateProtocol, uiSync]", echo && echo->n == 2
-              && !strcmp(s_of(echo->v[1]), "uiSync"));
+        CHECK("themed UI Sync offered: VSP, ViewAreas and UI Sync", echo && echo->n == 3
+              && !strcmp(s_of(echo->v[1]), "viewAreas") && !strcmp(s_of(echo->v[2]), "uiSync"));
         CHECK("uiSync: the reply logged", strstr(lastlog, "uiSync=1") != 0);
         m_release(rep);
         remove(DIR "cpc-uisync");
+        remove(DIR "cpc-ultra");
         rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
         cpc_setup_hook(rq, rep);
         echo = g(rep, "enabledFeatures");
@@ -855,6 +872,8 @@ int main(void) {
         FILE *uf = fopen(DIR "cpc-uisync", "w");
         if (!uf) { perror("cpc-uisync"); return 1; }
         fputs("1\n", uf); fclose(uf);
+        uf=fopen(DIR "cpc-ultra","w");
+        if(uf){fputs("2\n",uf);fclose(uf);}
         rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
         Arr *prior = (Arr *)m_new_arr(0, 0, &cb_arr);
         m_append(prior, stock); m_set(rep, enabled, prior); m_release(prior);
@@ -882,7 +901,7 @@ int main(void) {
         rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
         cpc_setup_hook(rq, rep);
         CHECK("independent flag alone cannot enable UI Sync", rep->n == 0);
-        m_release(rep); remove(DIR "cpc-sync-independent");
+        m_release(rep); remove(DIR "cpc-sync-independent"); remove(DIR "cpc-ultra");
         m_release(rq); m_release(sync); m_release(stock); m_release(enabled);
     }
     Dict *req3 = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
@@ -936,6 +955,12 @@ int main(void) {
         f = fopen(DIR "cpc-uisync", "w");
         if (f) { fputs("1\n", f); fclose(f); }
         remove(DIR "cpc-vs-3.key");
+        CHECK("stale sync flag cannot claim a stream without themed mode",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==3);
+        f=fopen(DIR "cpc-ultra","w");
+        if(f){fputs("1\n",f);fclose(f);}
+        CHECK("generic cluster cannot claim UI Sync stream",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==3);
+        f=fopen(DIR "cpc-ultra","w");
+        if(f){fputs("2\n",f);fclose(f);}
         CHECK("uiSync stream, experiment on: {type 130, streamID 133, dataPort 7135}", cpc_stream_hook(&session, st, reply, 130) == 1
               && streams->n == 4 && n_of(g(streams->v[3], "dataPort")) == 7135 && n_of(g(streams->v[3], "streamID")) == 133);
         f = fopen(DIR "cpc-vs-3.key", "rb"); kn = f ? fread(kf, 1, sizeof kf, f) : 0; if (f) fclose(f);
@@ -953,6 +978,7 @@ int main(void) {
         CHECK("failed UI Sync reply invalidates newly published keys",access(DIR "cpc-vs-3.key",F_OK)!=0);
         add_stream_fail=0;
         remove(DIR "cpc-uisync");
+        remove(DIR "cpc-ultra");
         ((Arr *)streams)->n--;   /* the later checks count the streams added before this one */
         m_release(streams->v[3]);
         Str *u5 = str("3E2F3C61-AAD0-42CB-A8AA-BF22186DA62E"); m_set(st, kt, u5); m_release(u5);

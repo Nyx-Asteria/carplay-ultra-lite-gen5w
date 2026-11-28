@@ -801,7 +801,8 @@ static int iap_mode(void) {
 
 /* the uiSync experiment (files/cpc-uisync): 1 negotiates the theme's layout/palette channel (LIVI ui_sync.rs) */
 static int ui_sync_mode(void) {
-    return read_number(DIR "cpc-uisync") == 1;
+    /* Match Java display profile eligibility even if a stale sync flag survives. */
+    return ultra_mode() == 2 && read_number(DIR "cpc-uisync") == 1;
 }
 
 /* the extra features experiment (files/cpc-xenable): bit 1 videoPlayback, bit 2 hevc, when the phone offers them */

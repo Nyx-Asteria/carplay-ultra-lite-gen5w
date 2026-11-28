@@ -36,6 +36,11 @@ public final class ProjectionLogCaptureTest {
         check("[theme] negotiation contribution_withdrawn".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation contribution_withdrawn")));
         check("[theme] negotiation withdrawal_pending".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation withdrawal_pending")));
         check(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation withdrawal_pending reason=private")==null);
+        for(String phase:new String[]{"attempt","confirmed","unconfirmed","withheld"}){
+            String event="[theme] initial contribution "+phase;
+            check(event.equals(ProjectionLogCapture.classify("I CPULCrossProcess: "+event)));
+            check(ProjectionLogCapture.classify("I CPULCrossProcess: "+event+" secret=private")==null);
+        }
         System.out.println("ProjectionLogCaptureTest passed");
     }
 }

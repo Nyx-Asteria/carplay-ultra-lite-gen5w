@@ -20,6 +20,14 @@ on:
 permissions:
   contents: read
 jobs:
+  native-regression:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Native hook regression (host CFLite mock)
+        run: bash source/tests/run-native-regressions.sh
   test:
     runs-on: ubuntu-24.04
     steps:
@@ -56,8 +64,6 @@ jobs:
           AJ=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
           sh "$SDK/bin/build-mod.sh" source/mod out/core out/work
           bash source/tests/run-regressions.sh
-      - name: Native hook regression (host CFLite mock)
-        run: bash source/tests/run-native-regressions.sh
       - name: Compile video engine without publishing
         run: |
           set -euo pipefail

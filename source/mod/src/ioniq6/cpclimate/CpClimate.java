@@ -103,12 +103,15 @@ public final class CpClimate extends ModEntry {
             if (targetVerified && m.enabled() && m.settingBoolean("ultra_theme", true) && m.settingBoolean("ultra_sidebars", true)) {
                 // Publication/configuration may lag appLoaded. Keep observing and
                 // retry registration even if the initial attempt is unsuccessful.
-                theme.register(m);
+                android.util.Log.i("CPULCrossProcess", "[theme] initial contribution attempt");
+                boolean registered=theme.register(m);
+                android.util.Log.i("CPULCrossProcess", "[theme] initial contribution " + (registered?"confirmed":"unconfirmed"));
                 theme.observe(m);
             } else {
                 theme.stopObservation();
                 theme.unregister(m);
                 m.log("[theme] iAP2 contribution withheld by boot preflight/settings");
+                android.util.Log.i("CPULCrossProcess", "[theme] initial contribution withheld");
             }
             return;
         }
@@ -130,7 +133,7 @@ public final class CpClimate extends ModEntry {
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
         if (sessionLogging == null) {
-            sessionLogging = new SessionLogging(m, dir, property("ro.build.display.id"), RuntimeEnvironment.describe(property("ro.product.device"), app.context));
+            sessionLogging = new SessionLogging(m, dir, property("ro.build.display.id"), RuntimeEnvironment.describe(property("ro.product.device"), app.context) + "; " + RuntimeEnvironment.readCompanionState());
             new ProjectionLogCapture(sessionLogging).start();
         }
         ClimateMap.loadSetpoints(new File(dir, "cpc-setpoints"));
