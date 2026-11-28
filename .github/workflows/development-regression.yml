@@ -26,6 +26,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Release workflow safety and shell syntax
+        run: python3 source/tests/release_workflow_test.py
       - name: Native hook regression (host CFLite mock)
         run: bash source/tests/run-native-regressions.sh
       - name: Compile ARM payload and regenerate recipe
