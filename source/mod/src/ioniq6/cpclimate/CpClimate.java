@@ -142,8 +142,7 @@ public final class CpClimate extends ModEntry {
             NativeProfile.writeVersion(m, dir, ultra ? "950" : "off");                             // receiver version 950.7.1 in /info
             NativeProfile.writeFlag(m, dir, "cpc-extras", ultra, "LIVI display extras");
             NativeProfile.writeCluster(m, dir, "full");                            // the instrument panel with its plugin (climate overlay)
-            NativeProfile.writeWide(m, dir, "0");
-            NativeProfile.writeUltra(m, dir, themedIds ? 2 : cluster ? 1 : 0);                       // virtual cluster + the theme's display names
+            String wide=SessionSettings.widescreen(m);
             boolean iapBridge = false, iap = false;               // iAP over CarPlay: an experiment, off
             NativeProfile.writeFlag(m, dir, "cpc-iap", false, "iAPChannel");
             // the theme's vehicle: the Aston Martin DBX unless the vehicle_variant test setting picks another
@@ -151,8 +150,6 @@ public final class CpClimate extends ModEntry {
             VehicleState.variant = variant ? "DBX" : "";
             runtimeLog("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
             boolean uiSync = themedIds && m.settingBoolean("ultra_ui_sync", false);                               // the theme's layouts, palettes and wallpapers
-            NativeProfile.writeFlag(m, dir, "cpc-uisync", uiSync, "uiSync (CarPlay theme layouts and palettes)");
-            NativeProfile.writeFlag(m, dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
             NativeProfile.writeFeatures(m, dir, features ? "livi_all" : "off");
             NativeProfile.writeFlag(m, dir, "cpc-xfeat", enhanced, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
@@ -224,6 +221,38 @@ public final class CpClimate extends ModEntry {
                 VehicleState.vehiclePage = vehicle.page;
             } else { VehicleState.vehiclePage = null; runtimeLog("[vehicle] page disabled or context unavailable"); }
             if (!writeVspi(dir, log)) { runtimeLog("[native] dynamic schema unavailable; patch withheld"); return; }
+            // Do not advertise a display or UI Sync until its local listener is bound.
+            if(cluster) {
+                ClusterSink sink=new ClusterSink(log);
+                sink.start();
+                if(!sink.awaitReady(1000)) {
+                    runtimeLog("[theme] cluster listener not ready; virtual display withheld");
+                    cluster=false; themedIds=false; uiSync=false;
+                }
+            }
+            if(uiSync) {
+                runtimeLog("[theme] center and virtual cluster layout policy=phone-managed");
+                UiSyncChannel sync=new UiSyncChannel(dir,log,null,false);
+                sync.start();
+                if(!sync.awaitReady(1000)) {
+                    runtimeLog("[theme] uiSync listener not ready; UI Sync withheld");
+                    uiSync=false;
+                }
+            }
+            // Evaluate every flag even after a failure so stale settings are cleared where possible.
+            boolean profileReady=NativeProfile.writeWide(m,dir,wide);
+            profileReady &= NativeProfile.writeUltra(m,dir,themedIds?2:cluster?1:0);
+            profileReady &= NativeProfile.writeFlag(m,dir,"cpc-uisync",uiSync,"uiSync (CarPlay theme layouts and palettes)");
+            profileReady &= NativeProfile.writeFlag(m,dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
+            if(!profileReady) {
+                NativeProfile.writeWide(m,dir,"0");
+                NativeProfile.writeUltra(m,dir,0);
+                NativeProfile.writeFlag(m,dir,"cpc-uisync",false,"uiSync");
+                NativeProfile.writeFlag(m,dir,"cpc-sync-independent",false,"independent uiSync");
+                runtimeLog("[native] display profile persistence failed; patch withheld");
+                return;
+            }
+            runtimeLog("[theme] listener-gated profile cluster="+cluster+" themedIds="+themedIds+" uiSync="+uiSync+" widescreen="+wide);
             m.nativePatch(app, "libCarPlayCore.so");
             runtimeLog("[climate] profile=K5 front heat/vent -3..3, rear seats=false, ambient=false");
             CarClimate car = climate ? new CarClimate(state, lanes, log) : null;
@@ -308,7 +337,6 @@ public final class CpClimate extends ModEntry {
             }
             runtimeLog("[climate] reader and both vehicle-state lanes started");
             // the Ultra experiment: the virtual cluster's video goes here and is thrown away
-            if (cluster) new ClusterSink(log).start();
             if ((extraBits & 1) != 0) new ClusterSink(log, 7134, "videoPlayback").start();
             if ((extraBits & 1) != 0) VideoMessages.instance.start();
             // video stage 1: requestUI("videoplayback:") kept from DiPO (no jump to the launcher), screen borrowed as LIVI does
@@ -320,15 +348,7 @@ public final class CpClimate extends ModEntry {
                 IapBridge.loader = app.classLoader;
                 new IapChannel(dir, log, iapBridge).start();
             }
-            // the uiSync experiment: the theme's layout/palette channel, answered by UiSync
-            // Bootstrap the known Modular layout; palette selection is still subject to asset verification.
-            if (uiSync) {
-                boolean forceWallpaper = m.settingBoolean("ultra_force_wallpaper", false);
-                runtimeLog("[theme] center Wallpaper layout request=" + forceWallpaper);
-                boolean phoneManagedCluster=m.settingBoolean("ultra_phone_managed_cluster",false);
-                runtimeLog("[theme] cluster layout policy="+(phoneManagedCluster?"phone-managed":"legacy Modular/saved"));
-                new UiSyncChannel(dir, log, phoneManagedCluster?null:UiSync.layout("Modular"), forceWallpaper).start();
-            }
+
         }
         MethodHook copy = new MethodHook() {
             @Override

@@ -37,6 +37,17 @@ final class UiSyncChannel extends Thread {
         setDaemon(true);
     }
 
+    private final java.util.concurrent.CountDownLatch bindFinished=new java.util.concurrent.CountDownLatch(1);
+    private volatile boolean bound;
+    boolean awaitReady(long timeoutMs) {
+        try {
+            return bindFinished.await(timeoutMs,java.util.concurrent.TimeUnit.MILLISECONDS) && bound;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
     @Override
     public void run() {
         long started = System.nanoTime();
@@ -44,6 +55,8 @@ final class UiSyncChannel extends Thread {
         try (ServerSocket s = new ServerSocket()) {
             s.setReuseAddress(true);
             s.bind(new InetSocketAddress(PORT));
+            bound=true;
+            bindFinished.countDown();
             out.log("[listener] uiSync ready elapsed_ms=" + (System.nanoTime()-started)/1000000L);
             out.log("SYNC listening on port " + PORT + " (uiSync experiment, cluster layout "
                     + (sync.wanted == null ? "not requested" : sync.wanted.name + " " + sync.wanted.palette) + ", force center Wallpaper=" + sync.legacyCenterLayout + ")");
@@ -58,6 +71,9 @@ final class UiSyncChannel extends Thread {
             }
         } catch (Throwable t) {
             out.log("[listener] uiSync listener stopped: " + t.getClass().getSimpleName());
+        } finally {
+            bound=false;
+            bindFinished.countDown();
         }
     }
 

@@ -32,6 +32,17 @@ final class ClusterSink extends Thread {
         setDaemon(true);
     }
 
+    private final java.util.concurrent.CountDownLatch bindFinished=new java.util.concurrent.CountDownLatch(1);
+    private volatile boolean bound;
+    boolean awaitReady(long timeoutMs) {
+        try {
+            return bindFinished.await(timeoutMs,java.util.concurrent.TimeUnit.MILLISECONDS) && bound;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
     @Override
     public void run() {
         long started = System.nanoTime();
@@ -39,6 +50,8 @@ final class ClusterSink extends Thread {
         try (ServerSocket s = new ServerSocket()) {
             s.setReuseAddress(true);
             s.bind(new InetSocketAddress(port));
+            bound=true;
+            bindFinished.countDown();
             out.log("[listener] " + what + " ready port=" + port + " elapsed_ms=" + (System.nanoTime()-started)/1000000L);
             while (true) {
                 final Socket sock = s.accept();
@@ -51,6 +64,9 @@ final class ClusterSink extends Thread {
             }
         } catch (Throwable t) {
             out.log("[listener] " + what + " listener stopped: " + t.getClass().getSimpleName());
+        } finally {
+            bound=false;
+            bindFinished.countDown();
         }
     }
 

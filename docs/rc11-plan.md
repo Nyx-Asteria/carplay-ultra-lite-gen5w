@@ -34,3 +34,7 @@ Keep Ultra Sidebars and identity dependency gates. Prepare display configuration
 13. Final regression, consolidation, signed candidate, changelog and owner-authorized release; targeted parked vehicle acceptance.
 
 These are tracking subdivisions, not additional promises of fixes or a change to the agreed scope. Evidence-limited functionality can remain deferred with explicit acceptance tests. Waze investigation belongs to WCP/STBT; CPUL must preserve working TBT. Host regression success is not vehicle validation.
+
+## RC11 phone-managed layout policy
+
+Production UI Sync now always passes null cluster layout and false forced center wallpaper. Retired settings ultra_phone_managed_cluster and ultra_force_wallpaper are removed from the manifest and session header; previously persisted values are ignored rather than migrated into forced requests. The existing protocol fixtures for legacy requests remain as historical regression coverage. UI Sync master and sidebar gates are unchanged. This is not a verified theme selector or wallpaper fix.
