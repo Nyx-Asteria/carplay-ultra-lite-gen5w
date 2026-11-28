@@ -137,35 +137,34 @@ public final class CpClimate extends ModEntry {
             m.log("[theme] identity=" + themePreflight + " cluster=" + cluster + " themedIds=" + themedIds + " variant=" + variant + " features=" + features + " enhanced=" + enhanced);
             m.log("[theme] DiPO display profile enabled=" + ultra + " (shared provider native result not exposed)");
             writeDelegatedScale(dir, m); // Optional Phone Projection Scaling integration.
-            writeDock(dir, "1");                                  // the bottom dock with the climate bar
-            writeVersion(dir, ultra ? "950" : "off");                             // receiver version 950.7.1 in /info
-            writeFlag(dir, "cpc-extras", ultra, "LIVI display extras");
-            writeCluster(dir, "full");                            // the instrument panel with its plugin (climate overlay)
-            writeWide(dir, "0");
-            writeUltra(dir, themedIds ? 2 : cluster ? 1 : 0);                       // virtual cluster + the theme's display names
+            NativeProfile.writeDock(m, dir, "1");                                  // the bottom dock with the climate bar
+            NativeProfile.writeVersion(m, dir, ultra ? "950" : "off");                             // receiver version 950.7.1 in /info
+            NativeProfile.writeFlag(m, dir, "cpc-extras", ultra, "LIVI display extras");
+            NativeProfile.writeCluster(m, dir, "full");                            // the instrument panel with its plugin (climate overlay)
+            NativeProfile.writeWide(m, dir, "0");
+            NativeProfile.writeUltra(m, dir, themedIds ? 2 : cluster ? 1 : 0);                       // virtual cluster + the theme's display names
             boolean iapBridge = false, iap = false;               // iAP over CarPlay: an experiment, off
-            writeFlag(dir, "cpc-iap", false, "iAPChannel");
+            NativeProfile.writeFlag(m, dir, "cpc-iap", false, "iAPChannel");
             // the theme's vehicle: the Aston Martin DBX unless the vehicle_variant test setting picks another
             // (the Climate app shows a placeholder instead of its car picture with DBX; which model it needs is a test)
-            String model = "DBX";
-            VehicleState.variant = variant && !"none".equals(model) ? model : "";
+            VehicleState.variant = variant ? "DBX" : "";
             m.log("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
             boolean uiSync = themedIds && m.settingBoolean("ultra_ui_sync", false);                               // the theme's layouts, palettes and wallpapers
-            writeFlag(dir, "cpc-uisync", uiSync, "uiSync (CarPlay theme layouts and palettes)");
-            writeFlag(dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
-            writeFeatures(dir, features ? "livi_all" : "off");
-            writeFlag(dir, "cpc-xfeat", enhanced, "/info enhancedRequestCarUI");
+            NativeProfile.writeFlag(m, dir, "cpc-uisync", uiSync, "uiSync (CarPlay theme layouts and palettes)");
+            NativeProfile.writeFlag(m, dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
+            NativeProfile.writeFeatures(m, dir, features ? "livi_all" : "off");
+            NativeProfile.writeFlag(m, dir, "cpc-xfeat", enhanced, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
-            // Stage 2 is not validated: do not offer video even if an old setting is saved.
+            // Video is opt-in and requires a compatible Park getter and initialized engine.
             int extraBits = m.settingBoolean("parked_video", false) && app.context != null ? 1 : 0;
             if (extraBits != 0) {
                 ParkedVideo park = new ParkedVideo(m);
                 if (!park.available()) { m.log("[video] Park getter missing; video withheld"); extraBits = 0; }
                 else {
                     boolean sound = !m.settingBoolean("parked_video_picture_only", false); // opt-in isolation; default retains audio fallback
-                    writeNumber(dir, "cpc-video-nosound", sound ? 0 : 1, "video: picture only");
+                    NativeProfile.writeNumber(m, dir, "cpc-video-nosound", sound ? 0 : 1, "video: picture only");
                     m.log("[video-audio] local player audio requested=" + sound + "; stock projection route untouched");
-                    writeNumber(dir, "cpc-video-nopicture", 0, "video: picture enabled");
+                    NativeProfile.writeNumber(m, dir, "cpc-video-nopicture", 0, "video: picture enabled");
                     new VideoMessages(new VsChannel.Log() { public void log(String s) { runtimeLog("[video] " + s); } });
                     if (!VideoMessages.startEngine(app.context)) {
                         m.log("[video] engine unavailable; feature withheld");
@@ -173,8 +172,8 @@ public final class CpClimate extends ModEntry {
                     } else { park.start(); m.log("[video] engine initialized; Park confirmation required"); }
                 }
             }
-            writeNumber(dir, "cpc-xenable", extraBits, extraBits != 0 ? "SETUP extra features: videoPlayback" : "SETUP extra features off");
-            writeNumber(dir, "cpc-hid", 0, "LIVI input devices in /info");   // on, iOS drew a knob-focus box
+            NativeProfile.writeNumber(m, dir, "cpc-xenable", extraBits, extraBits != 0 ? "SETUP extra features: videoPlayback" : "SETUP extra features off");
+            NativeProfile.writeNumber(m, dir, "cpc-hid", 0, "LIVI input devices in /info");   // on, iOS drew a knob-focus box
             m.log("[native] requesting CarPlayCore recipe; application result is reported by HMG-API");
 
             // M2: the vehicle state data streams the native SETUP handler sends the phone to;
@@ -197,15 +196,13 @@ public final class CpClimate extends ModEntry {
             VehicleState.ambientTest = CarClimate.ambientTest = false;
             VehicleState.sxmSchemaTest = m.settingBoolean("k5_integration", true)
                     && m.settingBoolean("sxm_schema_test", false);
-            // the extra seat and wheel controls (off): rear seat heat, front seat ventilation, steering wheel heater
+            // Front-seat and wheel controls follow the K5 integration setting.
             VehicleState.extras = ClimateMap.extras = climate;
             VehicleState.seatFanImmediateFeedback = climate && m.settingBoolean("seat_fan_immediate_feedback", false);
             VehicleState.seatHeatImmediateFeedback = m.settingBoolean("seat_heat_immediate_feedback", true);
             m.log("[seat-fan] immediate feedback experiment=" + VehicleState.seatFanImmediateFeedback + "; heating immediate=" + VehicleState.seatHeatImmediateFeedback);
             VehicleState.climateEnabled = climate;
-            // A: ventilation as separate SeatFan services; B: as the seats' own cooling levels, plus a rear zone
-            // the driver card has room for three buttons: AUTO, vent position, seat (2026-11-10: more were drawn on top
-            // of each other). The wheel heater and the per-seat power are off unless turned on.
+            // Keep the front-seat layout and expose wheel heating only when OEM methods are available.
             VehicleState.wheelHeater = climate && CarClimate.wheelAvailable();
             m.log("[wheel] OEM methods available=" + VehicleState.wheelHeater);
             VehicleState.zonePower = false;
@@ -213,10 +210,10 @@ public final class CpClimate extends ModEntry {
             ClimateMap.blankWhenOff = true;
             VehicleState.ventCard = "driver";
             VehicleState.coolingMin = -3;
-            String layout = "a"; // upstream separate SeatFan services for front ventilation
-            VehicleState.coolingLayout = "b".equals(layout) || "c".equals(layout) || "d".equals(layout);
-            VehicleState.rowRear = "c".equals(layout);
-            VehicleState.twoRear = "d".equals(layout);
+            // K5 uses separate front SeatFan services; no rear-seat services.
+            VehicleState.coolingLayout = false;
+            VehicleState.rowRear = false;
+            VehicleState.twoRear = false;
             // /info's copy of the car (the phone builds its car from it): cp-climate's description, not LIVI's
             K5Vehicle vehicle = null;
             if (app.context != null && (m.settingBoolean("k5_integration", true))) {
@@ -425,187 +422,6 @@ public final class CpClimate extends ModEntry {
                 try { reset.write("100\n"); } finally { reset.close(); }
             } catch (Exception ignored) {}
             m.error("[scaling] cannot reset/write hosted scale; verify stock dimensions", e);
-        }
-    }
-
-    /** the dock position setting, for the native /info hook (files/cpc-dock: 0 auto, 1 bottom, 2 side) */
-    static void writeDock(File dir, String dock) {
-        File f = new File(dir, "cpc-dock");
-        try {
-            int edge = Integer.parseInt(dock.trim());
-            if (edge < 0 || edge > 4) edge = 1;
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(edge + "\n");
-            } finally {
-                w.close();
-            }
-            mod.log("CarPlay dock edge " + edge);
-        } catch (Exception e) {
-            f.delete();
-            mod.log("CarPlay dock: bottom (" + e + ")");
-        }
-    }
-
-    /** the receiver version experiment, for the native /info hook (files/cpc-version: 1 for 950.7.1) */
-    static void writeVersion(File dir, String version) {
-        File f = new File(dir, "cpc-version");
-        if (!"950".equals(version.trim())) {
-            f.delete();
-            return;
-        }
-        try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write("1\n");
-            } finally {
-                w.close();
-            }
-            mod.log("CarPlay receiver version 950.7.1 in /info (experiment)");
-        } catch (Exception e) {
-            f.delete();
-        }
-    }
-
-    /** an on/off experiment for the native /info hook: the file holds 1 while on */
-    static void writeFlag(File dir, String name, boolean on, String what) {
-        File f = new File(dir, name);
-        if (!on) {
-            f.delete();
-            return;
-        }
-        try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write("1\n");
-            } finally {
-                w.close();
-            }
-            mod.log(what + " on (experiment)");
-        } catch (Exception e) {
-            f.delete();
-        }
-    }
-
-    /** LIVI's /info feature bits that DiPO's lacks, without its audio ones (CARPLAY_AUDIO_FEATURES: bits 9, 11, 18, 20, 22, 26, 40) */
-    static final long LIVI_NON_AUDIO = 0x205203a462L;
-    /** all of LIVI's bits that DiPO's lacks, audio ones too */
-    static final long LIVI_ALL = 0x615653aee2L & ~0x4104040280L;
-
-    /** the /info feature bits experiment (files/cpc-feat, hex): livi_nonaudio, livi_all or bit_N; off deletes it */
-    static void writeFeatures(File dir, String value) {
-        File f = new File(dir, "cpc-feat");
-        String v = value.trim();
-        long bits = 0;
-        if ("livi_nonaudio".equals(v)) bits = LIVI_NON_AUDIO;
-        else if ("livi_all".equals(v)) bits = LIVI_ALL;
-        else if (v.startsWith("bit_")) {
-            try {
-                int bit = Integer.parseInt(v.substring(4));
-                if (bit >= 0 && bit < 63) bits = 1L << bit;
-            } catch (NumberFormatException e) {
-                bits = 0;
-            }
-        }
-        if (bits == 0) {
-            f.delete();
-            return;
-        }
-        try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(Long.toHexString(bits) + "\n");
-            } finally {
-                w.close();
-            }
-            mod.log("/info feature bits 0x" + Long.toHexString(bits) + " (" + v + ") on (experiment)");
-        } catch (Exception e) {
-            f.delete();
-        }
-    }
-
-    /** a small number for the native hooks; 0 deletes the file */
-    static void writeNumber(File dir, String name, int value, String what) {
-        File f = new File(dir, name);
-        if (value == 0) {
-            f.delete();
-            return;
-        }
-        try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(value + "\n");
-            } finally {
-                w.close();
-            }
-            mod.log(what + " on (experiment)");
-        } catch (Exception e) {
-            f.delete();
-        }
-    }
-
-    /** the Ultra experiment for the native hooks (files/cpc-ultra: 1 virtual cluster, 2 with the theme's display ids) */
-    static void writeUltra(File dir, int mode) {
-        File f = new File(dir, "cpc-ultra");
-        if (mode == 0) {
-            f.delete();
-            return;
-        }
-        try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(mode + "\n");
-            } finally {
-                w.close();
-            }
-            mod.log("CarPlay Ultra virtual cluster on" + (mode == 2 ? ", with the theme's display ids" : "") + " (experiment)");
-        } catch (Exception e) {
-            f.delete();
-        }
-    }
-
-    /** the Apple widescreen view areas experiment (files/cpc-wide: 1 start whole, 2 start right) */
-    static void writeWide(File dir, String value) {
-        File f = new File(dir, "cpc-wide");
-        String v = value.trim();
-        if (!"1".equals(v) && !"2".equals(v)) {
-            f.delete();
-            return;
-        }
-        try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(v + "\n");
-            } finally {
-                w.close();
-            }
-            mod.log("Apple widescreen view areas, start " + ("2".equals(v) ? "right" : "whole") + " (experiment)");
-        } catch (Exception e) {
-            f.delete();
-        }
-    }
-
-    /** the instrument panel experiment (files/cpc-nocluster: 1 off, 2 no showsInstruments, 3 no plugin) */
-    static void writeCluster(File dir, Object value) {
-        File f = new File(dir, "cpc-nocluster");
-        String v = value == null ? "full" : String.valueOf(value);
-        // an older version saved this setting as a toggle: false meant off
-        int code = "off".equals(v) || "false".equals(v) ? 1 : "no_instruments".equals(v) ? 2 : "no_plugin".equals(v) ? 3
-                : "plugin_main".equals(v) ? 4 : "plugin_stream".equals(v) ? 5 : 0;
-        if (code == 0) {
-            f.delete();
-            return;
-        }
-        try {
-            FileWriter w = new FileWriter(f);
-            try {
-                w.write(code + "\n");
-            } finally {
-                w.close();
-            }
-            mod.log("instrument panel: " + v + " (experiment)");
-        } catch (Exception e) {
-            f.delete();
         }
     }
 
