@@ -178,6 +178,8 @@ final class CarClimate extends Thread implements VehicleState.Car {
     public void phoneWrote(Map<Long, Object> written, Map<Long, Object> now) {
         final long generation = CpClimate.sessionGeneration;
         List<ClimateMap.Command> list = ClimateMap.commands(written, now, unit);
+        logSeatArbitration(written, now, list, generation, true);
+        logSeatArbitration(written, now, list, generation, false);
         if (written.containsKey(ClimateMap.PASSENGER_TARGET))
             out.log("[climate-passenger] request="+written.get(ClimateMap.PASSENGER_TARGET)
                     +" unit="+unit+" sync="+now.get(ClimateMap.ZONES_SYNCED)
@@ -209,6 +211,31 @@ final class CarClimate extends Thread implements VehicleState.Car {
                 if(command.kind==ClimateMap.SEAT)out.log("[seat-command] queued " + command + " generation=" + generation);
             } else out.log((command.kind==ClimateMap.SEAT?"[seat-command]":"CAR") + " test switch withheld " + command);
         }
+    }
+
+    /** Capture only bounded scalar inputs and the selected command for the affected seat.
+     * The effective state is arbitration input, not necessarily live BCM readback. */
+    private void logSeatArbitration(Map<Long,Object> written, Map<Long,Object> now,
+                                    List<ClimateMap.Command> list,long generation,boolean driver) {
+        long hl=driver?ClimateMap.DRIVER_SEAT_LEVEL:ClimateMap.PASSENGER_SEAT_LEVEL;
+        long ho=driver?ClimateMap.DRIVER_SEAT_ON:ClimateMap.PASSENGER_SEAT_ON;
+        long vl=driver?ClimateMap.DRIVER_VENT_LEVEL:ClimateMap.PASSENGER_VENT_LEVEL;
+        long vo=driver?ClimateMap.DRIVER_VENT_ON:ClimateMap.PASSENGER_VENT_ON;
+        if(!written.containsKey(hl)&&!written.containsKey(ho)&&!written.containsKey(vl)&&!written.containsKey(vo))return;
+        int code=driver?ClimateMap.SET_DRIVER_SEAT:ClimateMap.SET_PASSENGER_SEAT;
+        String selected="none";
+        for(ClimateMap.Command c:list)if(c.kind==ClimateMap.SEAT&&c.a==code)selected=String.valueOf(c.b);
+        out.log("[seat-command] arbitration side="+(driver?"driver":"passenger")+" generation="+generation
+                +" legacy="+ClimateMap.legacySeatHeatArbitration+" separate="+(ClimateMap.extras&&!ClimateMap.cooling())
+                +" heatLevel="+seatInput(written,hl)+" heatOn="+seatInput(written,ho)
+                +" ventLevel="+seatInput(written,vl)+" ventOn="+seatInput(written,vo)
+                +" effectiveHeat="+seatInput(now,hl)+" effectiveHeatOn="+seatInput(now,ho)
+                +" effectiveVent="+seatInput(now,vl)+" effectiveVentOn="+seatInput(now,vo)
+                +" selectedRaw="+selected);
+    }
+
+    private static String seatInput(Map<Long,Object> map,long iid) {
+        return map.containsKey(iid)?VehicleState.seatDiagnosticValue(map.get(iid)):"absent";
     }
 
     /** sends the queued commands, one at a time */

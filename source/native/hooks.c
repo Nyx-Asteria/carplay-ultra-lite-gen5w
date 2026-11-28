@@ -638,6 +638,9 @@ static CF load_vspi(void) {
     return vspi;
 }
 
+/* Only the diagnostic variant calls this helper. Keep strict ARM -Werror
+ * enabled for production without removing the historical diagnostic path. */
+#if CPC_DIAG
 static CFIndex add_additions(CF info, CF into, int cluster) {
     CF vspi = load_vspi();
     if (!vspi) return -2;
@@ -645,6 +648,7 @@ static CFIndex add_additions(CF info, CF into, int cluster) {
     if (!CPC_PANELS) return -1;
     return add_display_panels(info, into, cluster);
 }
+#endif
 
 /* files in DiPO's own files folder (no libc here: plain system calls) */
 #ifndef DIR

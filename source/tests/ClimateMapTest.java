@@ -630,6 +630,13 @@ public class ClimateMapTest {
             ClimateMap.legacySeatHeatArbitration=false;
             List<ClimateMap.Command> modern=ClimateMap.commands(writes,current,2);
             check("modern heat off precedence",modern.size()==1&&modern.get(0).b==2);
+            writes.put(pair[1],true);
+            List<ClimateMap.Command> modernOn=ClimateMap.commands(writes,current,2);
+            check("modern heat activation with same level and power true",modernOn.size()==1&&modernOn.get(0).b==8);
+            writes.remove(pair[1]);
+            List<ClimateMap.Command> modernLevel=ClimateMap.commands(writes,current,2);
+            check("modern heat level-only activation",modernLevel.size()==1&&modernLevel.get(0).b==8);
+            writes.put(pair[1],false);
             ClimateMap.legacySeatHeatArbitration=true;
             List<ClimateMap.Command> legacy=ClimateMap.commands(writes,current,2);
             check("legacy explicit heat level precedence",legacy.size()==1&&legacy.get(0).b==8);

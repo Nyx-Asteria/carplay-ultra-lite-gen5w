@@ -178,4 +178,5 @@ SECTIONS {{
     print(out / "carplay-climate-m1.recipe")
 
 
-main()
+if __name__ == "__main__":
+    main()
