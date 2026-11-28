@@ -157,6 +157,7 @@ final class K5Radio {
     // mIsBsmValidStaton (boolean). Keep the OEM spelling.
     private long lastListPoll;
     private String lastScanSummary = "";
+    private String lastPublishedFmSummary = "";
     private java.util.Set<Long> fmScan = java.util.Collections.emptySet();
     // Observed stations are a fallback, not a claimed complete RF scan.
     private final java.util.TreeMap<Long,String> observedFm = new java.util.TreeMap<Long,String>();
@@ -202,6 +203,7 @@ final class K5Radio {
         all.addAll(observedFm.keySet());
         java.util.List<Object> items = new java.util.ArrayList<Object>();
         for (Long khz : all) {
+            if(khz<87900 || khz>107900 || (khz-87900)%200!=0)continue;
             String label = String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0);
             java.util.Map<String,Object> item = new java.util.LinkedHashMap<String,Object>();
             item.put("identifier", Long.toString(khz));
@@ -236,11 +238,13 @@ final class K5Radio {
         values.put(4359L, 0L);
         values.put(4117L, ClimateMap.BLANK);
         if (!enabled() || !CpClimate.sessionActive) {
+            seekLog(seekTrace.cancel());
             fmActive = false; sxmActive = false; sxmAvailable = false;
             stationName = null; stationArtwork = null; clearTags(); lastFmFrequency = -1;
             sxmArt = null; currentSxmChannel = -1; fullSxm = null; sxmLive.clear();
             sxmKnownGeneration = -1; sxmKnownIds = java.util.Collections.emptySet();
             lastListPoll = 0; fmScan = java.util.Collections.emptySet();
+            observedFm.clear(); observedGeneration=-1; lastScanSummary=""; lastPublishedFmSummary="";
             fmTuner=null; fmAudio=null; sxmTuner=null; lastServiceHealth="";
             return values;
         }
@@ -260,6 +264,7 @@ final class K5Radio {
             serviceHealth("FM="+(fmTuner!=null&&khz>0)+" audio="+(fmAudio!=null)+" mode="+mode+" stream="+stream);
             // RC4 observed FM mode 2 / stream 38, AM mode 1 / stream 39.
             activationLog(activationTrace.sample(CpClimate.sessionGeneration,tuneRequest.get(),mode,stream,android.os.SystemClock.elapsedRealtime()));
+            seekLog(seekTrace.observe(CpClimate.sessionGeneration,tuneRequest.get(),mode,stream,khz,android.os.SystemClock.elapsedRealtime()));
             fmActive = khz > 0 && mode == 2 && stream == 38;
             sxmActive = mode == 4 && stream == 41;
             refreshSxm(values);
@@ -267,6 +272,7 @@ final class K5Radio {
             if (observedGeneration != CpClimate.sessionGeneration) {
                 observedFm.clear(); fmScan = java.util.Collections.emptySet(); lastListPoll = 0;
                 observedGeneration = CpClimate.sessionGeneration;
+                lastScanSummary=""; lastPublishedFmSummary="";
             }
             if (fmActive) {
                 if (lastFmFrequency != khz) {
@@ -313,12 +319,19 @@ final class K5Radio {
                         log.log("[radio] station list unavailable: " + t.getClass().getSimpleName()+"; retained="+fmScan.size());
                     }
                 }
-                values.put(4118L, fmItemsFor(fmScan,observedFm));
+                java.util.List<Object> items=fmItemsFor(fmScan,observedFm);
+                values.put(4118L,items);
+                String summary="OEM="+fmScan.size()+" observed="+observedFm.size()+" merged="+items.size();
+                if(!summary.equals(lastPublishedFmSummary)){
+                    lastPublishedFmSummary=summary;
+                    log.log("[radio] FM published catalog "+summary);
+                }
             }
         } catch (Throwable t) {
             fmActive=false; sxmActive=false; sxmAvailable=false; fmAudio=null;
             stationName=null; stationArtwork=null; clearTags(); lastFmFrequency=-1;
             currentSxmChannel=-1; sxmArt=null; sxmLive.clear();
+            seekLog(seekTrace.observe(CpClimate.sessionGeneration,tuneRequest.get(),-1,-1,-1,android.os.SystemClock.elapsedRealtime()));
             activationLog(activationTrace.sample(CpClimate.sessionGeneration,tuneRequest.get(),-1,-1,android.os.SystemClock.elapsedRealtime()));
             serviceHealth("audio sample unavailable: "+t.getClass().getSimpleName());
         }
@@ -725,10 +738,16 @@ final class K5Radio {
                 try {
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
-                            || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
-                    if (!probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
+                            || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) {
+                        log.log("[radio] FM seek withheld: source ownership lost request="+request); return;
+                    }
+                    if (!probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) {
+                        log.log("[radio] FM seek superseded before tuner lookup request="+request); return;
+                    }
                     Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
-                    if (tuner == null || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
+                    if (tuner == null || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) {
+                        log.log("[radio] FM seek withheld: tuner available="+(tuner!=null)+" request="+request); return;
+                    }
                     java.lang.reflect.Method seek = Class.forName(RADIO_IFACE).getMethod(up ? "seekUp" : "seekDown");
                     if (seek.getReturnType() != void.class) {
                         log.log("[radio] FM seek withheld: unexpected return type="+seek.getReturnType().getName());
@@ -737,9 +756,14 @@ final class K5Radio {
                     // Recheck ownership after resolving the tuner, just as for direct tuning.
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38
-                            || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
+                            || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) {
+                        log.log("[radio] FM seek withheld: final ownership or generation check request="+request); return;
+                    }
+                    long before=lastFmFrequency;
+                    long dispatchedAt=android.os.SystemClock.elapsedRealtime();
                     seek.invoke(tuner);
-                    log.log("[radio] native FM " + (up ? "seekUp" : "seekDown") + " dispatched; awaiting frequency feedback");
+                    seekLog(seekTrace.begin(generation,request,before,dispatchedAt));
+                    log.log("[radio] native FM " + (up ? "seekUp" : "seekDown") + " dispatched; awaiting frequency feedback request="+request+" previousKhz="+lastFmFrequency);
                 } catch (Throwable t) { log.log("[radio] FM seek failed: " + t.getClass().getSimpleName()); }
             }
         });
@@ -788,6 +812,8 @@ final class K5Radio {
      * ModeConstants.ModeType FM1=2. Foreground behavior requires parked validation. */
     // A tune with explicit FM source may activate FM first. Only the latest
     // pending request is retained; it expires and cannot cross sessions.
+    private final FmSeekTrace seekTrace=new FmSeekTrace();
+    private void seekLog(String event){if(event!=null)log.log("[radio-seek] "+event);}
     private final RadioActivationTrace activationTrace=new RadioActivationTrace();
     private void activationLog(String event){if(event!=null)log.log("[radio-source] "+event);}
     private final java.util.concurrent.atomic.AtomicLong tuneRequest = new java.util.concurrent.atomic.AtomicLong();

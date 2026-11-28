@@ -49,6 +49,10 @@ public final class RadioPolicyTest {
         check(replacement.size()==1&&replacement.contains(102300L),"nonempty OEM scan replaces prior scan");
         check(K5Radio.fmItemsFor(replacement,observed).size()==3,"observations remain separate after replacement");
         check(K5Radio.fmItemsFor(java.util.Collections.<Long>emptySet(),observed).size()==2,"observed-only fallback");
+        java.util.Set<Long> badScan=new java.util.TreeSet<Long>(java.util.Arrays.asList(87500L,87900L,88000L,107900L,108000L));
+        java.util.Map<Long,String> badObserved=new java.util.TreeMap<Long,String>();
+        badObserved.put(100000L,"off grid");badObserved.put(101100L,"valid");
+        check(K5Radio.fmItemsFor(badScan,badObserved).size()==3,"publication excludes off-grid and out-of-band frequencies from both inputs");
         java.util.Set<Integer> sxmKnown=java.util.Collections.singleton(10);
         java.util.Set<Integer> sxmExcluded=java.util.Collections.singleton(20);
         check(!K5Radio.sxmCatalogCandidate(20,sxmKnown,sxmExcluded),"full catalog cannot restore excluded channel");
