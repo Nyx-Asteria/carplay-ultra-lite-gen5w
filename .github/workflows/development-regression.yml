@@ -1,7 +1,7 @@
 name: Development regression
 on:
   push:
-    branches: [k5-compatibility, rc11, rc11-consolidated-v2]
+    branches: [k5-compatibility, rc11, rc11-consolidated-v2, rc11-final]
     paths:
       - 'source/mod/src/**'
       - 'source/mod/recipes/**'
@@ -26,6 +26,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Release workflow safety and shell syntax
+        run: python3 source/tests/release_workflow_test.py
       - name: Native hook regression (host CFLite mock)
         run: bash source/tests/run-native-regressions.sh
       - name: Compile ARM payload and regenerate recipe

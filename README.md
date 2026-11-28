@@ -19,7 +19,7 @@ An integrated CarPlay Ultra-style experience for the Kia K5 Gen5W_M, powered by 
 
 An independent K5 port of [SafariForest's CarPlay Ultra-Lite](https://github.com/SafariForest/carplay-ultra-lite-gen5w). Native vehicle controls, Ultra-style appearance and parked video are integrated into CarPlay without adding EV routing or changing the physical instrument cluster.
 
-> **RC11 is in development; RC10 is the current vehicle-testing baseline.** See the [RC11 development plan](docs/rc11-plan.md), [RC10 testing guide](docs/rc10-testing.md), [changelog](CHANGELOG.md) and [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases). Retain a known-working rollback package.
+> **RC11 is in development; RC10 is the current vehicle-testing baseline.** See the [RC11 development plan](docs/rc11-plan.md), [RC11 testing guide](docs/rc11-testing.md), [RC10 testing guide](docs/rc10-testing.md), [changelog](CHANGELOG.md) and [Releases](https://github.com/Nyx-Asteria/carplay-ultra-lite-gen5w/releases). Retain a known-working rollback package.
 
 ## Features
 
@@ -42,8 +42,8 @@ Heating and wheel heating were reported working in earlier testing. RC7 changes 
 
 - Consolidated CarPlay Ultra and theme/UI synchronization options.
 - Theme identity and session-start contribution through the companion wireless provider.
-- Metadata-derived layout and palette validation, persisted selection and phone-managed center layout.
-- Midnight virtual-cluster default, connection-local UI Sync handshakes and an opt-in center Wallpaper/blue layout request. Black wallpaper and the blank theme selector remain unresolved.
+- RC11 metadata-derived layout and palette validation, connection-local UI Sync handshakes, and phone-managed center and virtual cluster layouts. No forced wallpaper or production layout persistence. Black wallpaper and the blank theme selector remain unresolved.
+- Optional passive RemoteControl discovery for unclaimed type-130 requests. Diagnostic only; no FileTransfer capabilities or unknown stream acceptance.
 - Optional [Phone Projection Scaling](https://github.com/Nyx-Asteria/Phone-Projection-Scaling) integration: CPUL hosts CarPlay scaling, PPS independently handles Android Auto scaling. No competing CarPlay native patches.
 - Firmware-gated stock volume popup suppression and optional stock media popup suppression.
 
@@ -106,18 +106,23 @@ Restart after changing settings. Explicit saved selections are retained.
 | --- | --- |
 | K5 Vehicle Integration | On |
 | Seat Heating Immediate Feedback | On |
+| Legacy Heated Seat Compatibility (Experimental) | Off |
 | Seat Ventilation Immediate Feedback (Experimental) | Off |
 | CarPlay Ultra | On |
 | Enable Ultra Sidebars | On |
 | UI Synchronization | Off |
 | Independent UI Sync Negotiation (Experimental) | Off |
-| Phone-Managed Cluster Layout (Experimental) | Off |
-| Force Theme Wallpaper (Experimental) | Off |
+| Widescreen View Areas (Experimental) | Disabled |
 | SiriusXM Discovery | Off |
 | Parked AirPlay Video & Audio | Off |
 | AirPlay Picture Only (Diagnostic) | Off |
+| Automatic Session Logging | On |
+| Automatic USB Session Export | On |
+| Detailed Session Diagnostics | On |
+| Protocol Packet Diagnostics | Off |
+| RemoteControl SETUP Discovery (Diagnostic) | Off |
 
-UI Synchronization requires Ultra Sidebars and CarPlay Ultra. The wallpaper experiment requires UI Synchronization and only requests a center layout if the phone negotiates that panel. Picture-only mode requires parked video. PPS owns scaling preferences; CPUL consumes them when active. Disable CPUL itself to use PPS's standalone CarPlay native patch.
+UI Synchronization requires Ultra Sidebars and CarPlay Ultra. Both layouts and wallpapers are phone-managed in RC11; the retired forced-layout options are ignored. Passive RemoteControl discovery is independent of UI Sync and packet diagnostics; enable only for targeted capture, then restart and export logs. Picture-only mode requires parked video. PPS owns scaling preferences; CPUL consumes them when active. Disable CPUL itself to use PPS's standalone CarPlay native patch.
 
 ## Development
 
@@ -131,7 +136,7 @@ RC11 development begins with a content-identical rebase of RC10. See the [RC11 p
 | RC8 | Testing: radio, climate feedback, theme diagnostics, companion TBT and incremental collector |
 | Future | HD multicast control, confirmed SXM/Bose support, theme selector, standalone AirPlay and YouTube discovery |
 
-[Development regression](.github/workflows/development-regression.yml) compiles the main module and video engine and runs climate, Park, volume policy and UI synchronization checks without publishing. [Release bundle](.github/workflows/release-bundle.yml) builds seven packages and verifies author signatures. Publication requires separate explicit approval. The release is a testing build despite its publication status.
+[Development regression](.github/workflows/development-regression.yml) compiles the main module and video engine and runs climate, Park, volume policy and UI synchronization checks without publishing. [Release bundle](.github/workflows/release-bundle.yml) manually builds seven packages and verifies author signatures. Pushes cannot sign or publish; manual publication requires explicit approval. See the [release consolidation and synchronized version policy](docs/release-consolidation.md). The release is a testing build despite its publication status.
 
 Read [development notes](docs/next-development.md), [radio diagnostics](docs/k5-radio.md) and [integration details](docs/integration.md) for technical background. Host tests do not establish vehicle functionality.
 

@@ -8,10 +8,13 @@
 - Phone-managed center and virtual cluster layouts; no forced wallpaper, no shared layout persistence in production; listener-gated display profiles, coherent rollback, guarded native stream routing and UI Sync state/key handling. Theme selector and wallpaper not yet proven fixed.
 - Independent widescreen experiment, PPS setting delegation, STBT exclusive guidance with WCP integrated TBT off. Pinned companion source/recipe checks and RC10 loader audit.
 - Existing-versus-fresh pairing comparison, explicit Classic/Ultra preferences, staged/current asset and acquisition/transfer distinctions from WCP research. No preference bypass or automatic re-pairing.
+- Add opt-in passive RemoteControl SETUP discovery: canonical unknown client-type UUID, fixed field metadata, bounded values, per-process deduplication and USB session logs; no FileTransfer advertisement or unknown stream admission.
+- Record intermittent heating arbitration inputs and the selected OEM command separately per front seat. Compare legacy compatibility off/on; no new vehicle-confirmed seat fix.
+- Correct release workflow structure and require manual signing dispatch with publication disabled by default. Retain meaningful consolidated history and the original development snapshot. Final companion pins and CI results remain outstanding.
 - Regenerate native ARM recipe during CI and packaging from pinned stock metadata; exact-tree host tests and signed package verification required before owner-approved release. No vehicle validation claimed.
 
 
-## K5 1.0.0-rc.10 (unreleased development candidate)
+## K5 1.0.0-rc.10 (vehicle-testing release)
 
 ### Climate
 - Preserve explicit seat-level requests across companion power writes; arbitrate heating/ventilation transitions without inactive-mode zero writes cancelling the selected mode.
