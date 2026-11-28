@@ -8,7 +8,7 @@
 #include <string.h>
 #include "cpc.h"
 
-enum { T_STR = 0x10756, T_DICT = 0xd1c7, T_ARR = 0xa77a, T_NUM = 0x4e55, T_BLOB = 0xb10b };
+enum { T_STR = 0x10756, T_DICT = 0xd1c7, T_ARR = 0xa77a, T_NUM = 0x4e55, T_BLOB = 0xb10b, T_BOOL = 0xb001 };
 typedef struct Obj { unsigned type, refs; } Obj;
 typedef struct { Obj h; char s[1]; } Str;
 typedef struct { Obj h; int n; const void *k[64]; const void *v[64]; } Dict;
@@ -31,6 +31,7 @@ static void m_release(const void *o) {
 static int m_equal(const void *a, const void *b) {
     if (tid(a) != tid(b)) return 0;
     if (tid(a) == T_STR) return !strcmp(((Str *)a)->s, ((Str *)b)->s);
+    if (tid(a) == T_BOOL) return ((Num *)a)->v == ((Num *)b)->v;
     return a == b;
 }
 static const void *m_get(const void *d, const void *k) {
@@ -80,7 +81,7 @@ static const void *mock_livi_hid(void) {
 static const void *m_plist(const void *p, unsigned long len, int *err) {
     if (len == sizeof livi_hid && !memcmp(p, livi_hid, len)) { *err = 0; return mock_livi_hid(); }
     if (len >= 8 && !memcmp(p, "MOCKENC", 8)) { const void *o; memcpy(&o, (const char *)p + 8, sizeof o); retain(o); *err = 0; return o; }
-    if (len == 42 && !memcmp(p, "bplist00", 8) && (((const char *)p)[8] == 0x08 || ((const char *)p)[8] == 0x09)) { Blob *f = mk(T_BLOB, sizeof(Blob)); f->len = 42; *err = 0; return f; }   /* hooks.c's false */
+    if (len == 42 && !memcmp(p, "bplist00", 8) && (((const char *)p)[8] == 0x08 || ((const char *)p)[8] == 0x09)) { Num *f = mk(T_BOOL, sizeof(Num)); f->v = ((const char *)p)[8] == 0x09; *err = 0; return f; }   /* hooks.c's booleans */
     if (plist_fail) { *err = -6705; return 0; }
     if (len != vspi_len || memcmp(p, vspi_file, len) || memcmp(p, "bplist00", 8)) abort();
     if (vspi_as_dict) {   /* the file case: the hook checks for a dictionary with pluginConfigs */
@@ -281,10 +282,10 @@ int main(void) {
               && n_of(g(va->v[0], "viewAreaStatusBarEdge")) == 1);
         const void *sa = va && va->n == 1 ? g(va->v[0], "safeArea") : 0;
         CHECK("viewArea: a safe area over the whole screen, drawing outside it allowed", sa && n_of(g(sa, "widthPixels")) == 1920
-              && n_of(g(sa, "heightPixels")) == 720 && n_of(g(sa, "originXPixels")) == 0 && tid(g(sa, "drawUIOutsideSafeArea")) == T_BLOB);
-        CHECK("display: cornerMasks false", tid(g(d, "cornerMasks")) == T_BLOB);
+              && n_of(g(sa, "heightPixels")) == 720 && n_of(g(sa, "originXPixels")) == 0 && tid(g(sa, "drawUIOutsideSafeArea")) == T_BOOL);
+        CHECK("display: cornerMasks false", tid(g(d, "cornerMasks")) == T_BOOL);
         CHECK("viewArea: transition control and focus transfer false", va && va->n == 1
-              && tid(g(va->v[0], "viewAreaTransitionControl")) == T_BLOB && tid(g(va->v[0], "viewAreaSupportsFocusTransfer")) == T_BLOB);
+              && tid(g(va->v[0], "viewAreaTransitionControl")) == T_BOOL && tid(g(va->v[0], "viewAreaSupportsFocusTransfer")) == T_BOOL);
     }
     int before = live;
     cpc_info_hook(info);
@@ -436,7 +437,7 @@ int main(void) {
               vw && vw->n == 2 && n_of(g(vw->v[0], "widthPixels")) == 1920 && n_of(g(vw->v[0], "originXPixels")) == 0
               && n_of(g(vw->v[1], "widthPixels")) == 1280 && n_of(g(vw->v[1], "originXPixels")) == 640
               && n_of(g(vw->v[1], "heightPixels")) == 720 && n_of(g(g(vw->v[1], "safeArea"), "originXPixels")) == 640
-              && tid(g(vw->v[0], "viewAreaTransitionControl")) == T_BLOB && n_of(g(ds2->v[0], "initialViewArea")) == 0);
+              && tid(g(vw->v[0], "viewAreaTransitionControl")) == T_BOOL && n_of(g(ds2->v[0], "initialViewArea")) == 0);
         m_release(si);
         f = fopen(DIR "cpc-wide", "w");
         if (f) { fputs("2\n", f); fclose(f); }
@@ -994,13 +995,19 @@ int main(void) {
         CHECK("themed UI Sync does not claim unknown remote-control client",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==4);
         CHECK("discovery default off",discovery_logs==0);
         f=fopen(DIR "cpc-rcs-discovery","wb");
-        unsigned pid=(unsigned)getpid();
+        unsigned pid=(unsigned)getpid(),wrong=pid^1u;
+        if(f){for(int shift=24;shift>=0;shift-=8)fputc((wrong>>shift)&255,f);fclose(f);}
+        CHECK("stale PID cannot enable discovery",cpc_stream_hook(&session,st,reply,130)==0&&discovery_logs==0);
+        f=fopen(DIR "cpc-rcs-discovery","wb");
         if(f){for(int shift=24;shift>=0;shift-=8)fputc((pid>>shift)&255,f);fclose(f);}
         Str *ck=str("clientUUID"), *cv=str("PRIVATE-CLIENT-ID");m_set(st,ck,cv);m_release(ck);m_release(cv);
         ck=str("channelID");cv=str("PRIVATE-CHANNEL-ID");m_set(st,ck,cv);m_release(ck);m_release(cv);
         ck=str("controlType");m_set_int(st,ck,2);m_release(ck);
+        ck=str("wantsDedicatedSocket");Num *bv=mk(T_BOOL,sizeof(Num));bv->v=1;m_set(st,ck,bv);m_release(ck);m_release(bv);
+        ck=str("sendMessageAsIs");bv=mk(T_BOOL,sizeof(Num));bv->v=0;m_set(st,ck,bv);m_release(ck);m_release(bv);
+        ck=str("sendMessageWithoutReply");m_set_int(st,ck,1);m_release(ck);
         CHECK("opt-in candidate stays unclaimed",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==4 && discovery_logs==1);
-        CHECK("validated type UUID and metadata only",strstr(discovery_log,"clientTypeUUID=00000000-0000-0000-0000-000000000000")&&strstr(discovery_log,"clientUUID=string channelID=string seed=number")&&strstr(discovery_log,"controlType=number-2")&&!strstr(discovery_log,"PRIVATE"));
+        CHECK("validated type UUID and metadata only",strstr(discovery_log,"clientTypeUUID=00000000-0000-0000-0000-000000000000")&&strstr(discovery_log,"clientUUID=string channelID=string seed=number")&&strstr(discovery_log,"wantsDedicatedSocket=bool-true sendMessageAsIs=bool-false sendMessageWithoutReply=number-1 controlType=number-2")&&!strstr(discovery_log,"PRIVATE"));
         CHECK("duplicate discovery suppressed",cpc_stream_hook(&session,st,reply,130)==0&&discovery_logs==1);
         Str *badRcs=str("PRIVATE-invalid-uuid");m_set(st,kt,badRcs);m_release(badRcs);
         CHECK("invalid UUID never echoed",cpc_stream_hook(&session,st,reply,130)==0&&discovery_logs==2&&strstr(discovery_log,"clientTypeUUID=invalid")&&!strstr(discovery_log,"PRIVATE"));

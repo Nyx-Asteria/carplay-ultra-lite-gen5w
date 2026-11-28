@@ -677,7 +677,7 @@ static void sys_close(long fd) { cpc_sys3(6, fd, 0, 0); }
 static long sys_rename(const char *from, const char *to) { return cpc_sys3(38,(long)from,(long)to,0); }
 static void sys_unlink(const char *p) { cpc_sys3(10,(long)p,0,0); }
 static long sys_open_read(const char *p) { return cpc_sys3(5, (long)p, 0, 0); }
-static long discovery_open(const char *p) { return cpc_sys3(5,(long)p,2 | 0400000,0); } /* O_RDWR|O_NOFOLLOW (ARM Linux) */
+static long discovery_open(const char *p) { return cpc_sys3(5,(long)p,2 | 0100000,0); } /* O_RDWR|O_NOFOLLOW (ARM Linux UAPI, not asm-generic) */
 static int discovery_lock(long fd) { return (int)cpc_sys3(143,fd,6,0); } /* flock LOCK_EX|LOCK_NB */
 static unsigned discovery_pid(void) { return (unsigned)cpc_sys3(20,0,0,0); }   /* O_RDONLY */
 static long sys_read(long fd, void *b, unsigned long n) { return cpc_sys3(3, fd, (long)b, (long)n); }
@@ -1178,7 +1178,11 @@ static int discovery_uuid(CF o, char out[37]) {
     }
     if(p[36])return 0;
     out[36]=0;
-    return 1;
+    /* A C string alone could hide a CFString suffix after an embedded NUL. */
+    CF exact=FN(T_CFStringCreateWithCString, CF (*)(CF,const char *,unsigned))(0,p,UTF8);
+    int same=exact&&equal(o,exact);
+    if(exact)release(exact);
+    return same;
 }
 static int discovery_same(const char *a,const char *b) {
     while(*a&&*a==*b){a++;b++;}
@@ -1226,9 +1230,6 @@ static void discovery_field(char *out,unsigned *n,CF stream,CF key,const char *n
     else {discovery_append(out,n,"cf-");discovery_uint(out,n,(unsigned)t);}
 }
 static void discover_unclaimed_rcs(CF stream,CF kind) {
-    if(!is(stream,T_CFDictionaryGetTypeID))return;
-    char uuid[37];int valid=discovery_uuid(kind,uuid);
-    if(valid&&discovery_known(uuid))return;
     long fd=discovery_open(DIR "cpc-rcs-discovery");
     if(fd<0)return;
     if(discovery_lock(fd)){sys_close(fd);return;}
@@ -1236,7 +1237,9 @@ static void discover_unclaimed_rcs(CF stream,CF kind) {
     if(bytes<4||bytes>=(long)sizeof records||(bytes&3)){sys_close(fd);return;}
     const unsigned char *header=(const unsigned char *)records;
     unsigned pid=((unsigned)header[0]<<24)|((unsigned)header[1]<<16)|((unsigned)header[2]<<8)|header[3];
-    if(pid!=discovery_pid()){sys_close(fd);return;}
+    if(pid!=discovery_pid()||!is(stream,T_CFDictionaryGetTypeID)){sys_close(fd);return;}
+    char uuid[37];int valid=discovery_uuid(kind,uuid);
+    if(valid&&discovery_known(uuid)){sys_close(fd);return;}
     CF yes=boolean(bplist_true),no=boolean(bplist_false),sample=new_dict();
     unsigned long number_type=0;
     if(sample){set_int(sample,&K_type,0);CF n=get(sample,&K_type);if(n)number_type=type_of(n);}
