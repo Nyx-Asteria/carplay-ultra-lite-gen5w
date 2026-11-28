@@ -3,6 +3,7 @@
  * end up holding. cc -I native tests/host_test.c native/hooks.c -DVSPI=\"data/vspi.bplist\" */
 #include <stdarg.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
 #include "cpc.h"
@@ -113,6 +114,7 @@ static long long m_get_int(const void *d, const void *k, int *err) {
     if (!v) { *err = -6727; return 0; }
     *err = 0; return *(const long long *)((const char *)v + 8);
 }
+static int add_stream_fail;
 static int m_add_stream(const void *reply, const void *stream);
 static char lastlog[512];
 static int vspi_file_logs, vspi_fallback_logs;
@@ -190,7 +192,9 @@ static Dict *display(const char *uuid, int w, int h, int wp, int hp) {
 
 int main(void) {
     FILE *f = fopen(VSPI, "rb");
+    if (!f) { perror("VSPI fixture"); return 1; }
     vspi_len = fread(vspi_file, 1, sizeof vspi_file, f); fclose(f);
+    if (!vspi_len) { fprintf(stderr,"Empty VSPI fixture\n"); return 1; }
     memcpy(cpc_vspi, vspi_file, vspi_len);
     cpc_vspi_len = vspi_len;
     PUT(T_LOGCAT, &logcat);
@@ -516,6 +520,63 @@ int main(void) {
         CHECK("theme ids: logged", strstr(lastlog, "theme display ids") != 0);
         m_release(si);
         CHECK("every object released after the theme case", live == 0);
+        /* A preexisting alternate screen must not orphan the stock touch device. */
+        si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        sd = (Arr *)m_new_arr(0, 0, &cb_arr);
+        sm = display("stock-center", 1920, 720, 292, 110);
+        m_append(sd, sm); m_release(sm);
+        sm = display("stock-cluster", 800, 480, 102, 61);
+        k = str("type"); m_set_int(sm, k, 111); m_release(k);
+        m_append(sd, sm); m_release(sm);
+        k = str("displays"); m_set(si, k, sd); m_release(k); m_release(sd);
+        {
+            Arr *hids = (Arr *)m_new_arr(0, 0, &cb_arr);
+            Dict *hd = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+            Str *hk = str("displayUUID"), *hv = str("stock-center");
+            m_set(hd, hk, hv); m_release(hk); m_release(hv);
+            m_append(hids, hd); m_release(hd);
+            k = str("hidDevices"); m_set(si, k, hids); m_release(k); m_release(hids);
+        }
+        cpc_info_hook(si);
+        ds2 = g(si, "displays");
+        th = g(si, "hidDevices");
+        CHECK("existing alternate screen retains center and HID identity",
+              ds2 && ds2->n == 2 && !strcmp(s_of(g(ds2->v[0], "uuid")), "stock-center")
+              && th && th->n == 1 && !strcmp(s_of(g(th->v[0], "displayUUID")), "stock-center"));
+        m_release(si);
+        CHECK("existing alternate screen case releases all objects", live == 0);
+        /* A malformed HID collection must not permit a center rename. */
+        si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        sd = (Arr *)m_new_arr(0, 0, &cb_arr);
+        sm = display("stock-center", 1920, 720, 292, 110);
+        m_append(sd, sm); m_release(sm);
+        k = str("displays"); m_set(si, k, sd); m_release(k); m_release(sd);
+        Str *bad_hid = str("malformed");
+        k = str("hidDevices"); m_set(si, k, bad_hid); m_release(k); m_release(bad_hid);
+        cpc_info_hook(si);
+        ds2 = g(si, "displays");
+        CHECK("malformed HID collection prevents themed display registration",
+              ds2 && ds2->n == 1 && !strcmp(s_of(g(ds2->v[0], "uuid")), "stock-center")
+              && !strcmp(s_of(g(si, "hidDevices")), "malformed"));
+        m_release(si);
+        CHECK("malformed HID case releases all objects", live == 0);
+        /* A reserved ID on a different display must not be duplicated. */
+        for (int collision = 0; collision < 2; collision++) {
+            si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+            sd = (Arr *)m_new_arr(0, 0, &cb_arr);
+            sm = display("stock-center", 1920, 720, 292, 110);
+            m_append(sd, sm); m_release(sm);
+            sm = display(collision ? "Cluster_Display" : "Center_Display", 800, 480, 102, 61);
+            m_append(sd, sm); m_release(sm);
+            k = str("displays"); m_set(si, k, sd); m_release(k); m_release(sd);
+            cpc_info_hook(si);
+            ds2 = g(si, "displays");
+            CHECK("reserved theme identity collision leaves existing display UUIDs intact",
+                  ds2 && ds2->n == 2 && !strcmp(s_of(g(ds2->v[0], "uuid")), "stock-center")
+                  && !strcmp(s_of(g(ds2->v[1], "uuid")), collision ? "Cluster_Display" : "Center_Display"));
+            m_release(si);
+        }
+        CHECK("reserved identity collision cases release all objects", live == 0);
         f = fopen(DIR "cpc-hid", "w");
         if (f) { fputs("1\n", f); fclose(f); }
         si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
@@ -590,12 +651,21 @@ int main(void) {
         }
         si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
         cpc_info_hook(si);
+        CHECK("stale UI Sync flag without themed mode does not advertise", !g(si,"uiSyncInfo"));
+        m_release(si);
+        {
+            FILE *us = fopen(DIR "cpc-ultra","w");
+            if (us) { fputs("2\n",us); fclose(us); }
+        }
+        si = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        cpc_info_hook(si);
         {
             const Dict *usi = g(si, "uiSyncInfo");
             CHECK("uiSync experiment on: /info has an empty uiSyncInfo", usi && usi->n == 0);
         }
         m_release(si);
         remove(DIR "cpc-uisync");
+        remove(DIR "cpc-ultra");
         {
             FILE *xf = fopen(DIR "cpc-xenable", "w");
             if (xf) { fputs("1\n", xf); fclose(xf); }
@@ -635,6 +705,23 @@ int main(void) {
     cpc_info_hook(info);
     CHECK("parse failure: /info untouched and logged", info->n == 0 && strstr(lastlog, "didn't parse"));
     m_release(info);
+    /* Failed VSP decoding must leave an otherwise valid themed display stock. */
+    FILE *bad_vsp_flag = fopen(DIR "cpc-ultra", "w");
+    if (!bad_vsp_flag) { perror("cpc-ultra"); return 1; }
+    fputs("2\n", bad_vsp_flag); fclose(bad_vsp_flag);
+    info = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+    Arr *stock_displays = (Arr *)m_new_arr(0, 0, &cb_arr);
+    Dict *stock_main = display("stock-center", 1920, 720, 292, 110);
+    m_append(stock_displays, stock_main); m_release(stock_main);
+    Str *stock_key = str("displays");
+    m_set(info, stock_key, stock_displays); m_release(stock_key); m_release(stock_displays);
+    cpc_info_hook(info);
+    const Arr *after_bad_vsp = g(info, "displays");
+    CHECK("VSP parse failure preserves stock display identity and geometry",
+          info->n == 1 && after_bad_vsp == stock_displays && after_bad_vsp->n == 1
+          && !strcmp(s_of(g(after_bad_vsp->v[0], "uuid")), "stock-center")
+          && !g(after_bad_vsp->v[0], "viewAreas"));
+    m_release(info); remove(DIR "cpc-ultra");
     plist_fail = 0;
     CHECK("still no leaks", live == 0);
 
@@ -656,7 +743,7 @@ int main(void) {
         echo = g(rep, "enabledFeatures");
         CHECK("Ultra: enabledFeatures [vehicleStateProtocol, viewAreas, altScreen]", echo && echo->n == 3
               && !strcmp(s_of(echo->v[1]), "viewAreas") && !strcmp(s_of(echo->v[2]), "altScreen"));
-        CHECK("Ultra: the offer logged", strstr(lastlog, "viewAreas, altScreen") != 0);
+        CHECK("Ultra: the offer logged", strstr(lastlog, "altScreen=1 viewAreas=1") != 0);
         m_release(rep);
         /* Themed sidebars restore ViewAreas even when only VSP is offered. */
         Dict *limited=(Dict *)m_new_dict(0,0,&cb_dkey,&cb_dval);
@@ -718,7 +805,7 @@ int main(void) {
         rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
         cpc_setup_hook(req, rep);
         echo = g(rep, "enabledFeatures");
-        CHECK("uiSync experiment on, uiSync not offered: enabledFeatures stay [vehicleStateProtocol]", echo && echo->n == 1);
+        CHECK("stale sync flag without themed mode leaves only VSP", echo && echo->n == 1);
         m_release(rep);
         Dict *rq = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
         Arr *fs = (Arr *)m_new_arr(0, 0, &cb_arr);
@@ -726,19 +813,47 @@ int main(void) {
         for (int i = 0; i < 2; i++) { Str *s = str(offer[i]); m_append(fs, s); m_release(s); }
         Str *kq = str("features"); m_set(rq, kq, fs); m_release(fs); m_release(kq);
         rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        cpc_setup_hook(rq,rep);
+        echo=g(rep,"enabledFeatures");
+        CHECK("offered sync plus stale flag without themed mode leaves only VSP",echo && echo->n==1);
+        m_release(rep);
+        uf=fopen(DIR "cpc-ultra","w");
+        if(uf){fputs("2\n",uf);fclose(uf);}
+        rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
         cpc_setup_hook(rq, rep);
         echo = g(rep, "enabledFeatures");
-        CHECK("uiSync experiment on, offered: enabledFeatures [vehicleStateProtocol, uiSync]", echo && echo->n == 2
-              && !strcmp(s_of(echo->v[1]), "uiSync"));
-        CHECK("uiSync: the reply logged", strstr(lastlog, ", uiSync]") != 0);
+        CHECK("themed UI Sync offered: VSP, ViewAreas and UI Sync", echo && echo->n == 3
+              && !strcmp(s_of(echo->v[1]), "viewAreas") && !strcmp(s_of(echo->v[2]), "uiSync"));
+        CHECK("uiSync: the reply logged", strstr(lastlog, "uiSync=1") != 0);
         m_release(rep);
         remove(DIR "cpc-uisync");
+        remove(DIR "cpc-ultra");
         rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
         cpc_setup_hook(rq, rep);
         echo = g(rep, "enabledFeatures");
         CHECK("uiSync offered, experiment off: enabledFeatures [vehicleStateProtocol]", echo && echo->n == 1);
         m_release(rep);
         m_release(rq);
+    }
+    {
+        /* VSP negotiation must augment rather than replace OEM capabilities. */
+        rep=(Dict *)m_new_dict(0,0,&cb_dkey,&cb_dval);
+        Arr *prior=(Arr *)m_new_arr(0,0,&cb_arr);
+        Str *enabled=str("enabledFeatures"), *stock=str("uiContext"), *vsp=str("vehicleStateProtocol");
+        m_append(prior,stock);m_append(prior,vsp);
+        m_set(rep,enabled,prior);m_release(prior);
+        cpc_setup_hook(req,rep);
+        echo=g(rep,"enabledFeatures");
+        CHECK("VSP merge retains OEM feature order and avoids duplicate VSP",echo && echo->n==2
+              && !strcmp(s_of(echo->v[0]),"uiContext") && !strcmp(s_of(echo->v[1]),"vehicleStateProtocol"));
+        cpc_setup_hook(req,rep);
+        echo=g(rep,"enabledFeatures");
+        CHECK("VSP merge is idempotent",echo && echo->n==2);
+        CHECK("actual merged diagnostics include OEM count and VSP",strstr(lastlog,"vehicleStateProtocol=1") && strstr(lastlog,"other=1"));
+        m_set(rep,enabled,stock);
+        cpc_setup_hook(req,rep);
+        CHECK("VSP merge leaves malformed OEM reply untouched",g(rep,"enabledFeatures")==stock);
+        m_release(rep);m_release(enabled);m_release(stock);m_release(vsp);
     }
     Dict *req2 = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
     Arr *feat2 = (Arr *)m_new_arr(0, 0, &cb_arr);
@@ -748,6 +863,47 @@ int main(void) {
     cpc_setup_hook(req2, rep);
     CHECK("phone without vehicleStateProtocol: reply unchanged", rep->n == 0);
     m_release(rep);
+    {
+        /* Independent UI Sync without VSP: retain stock and never duplicate. */
+        Dict *rq = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        Arr *offer = (Arr *)m_new_arr(0, 0, &cb_arr);
+        Str *sync = str("uiSync"), *stock = str("hevc"), *enabled = str("enabledFeatures");
+        m_append(offer, sync); m_set(rq, kf, offer); m_release(offer);
+        FILE *uf = fopen(DIR "cpc-uisync", "w");
+        if (!uf) { perror("cpc-uisync"); return 1; }
+        fputs("1\n", uf); fclose(uf);
+        uf=fopen(DIR "cpc-ultra","w");
+        if(uf){fputs("2\n",uf);fclose(uf);}
+        rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        Arr *prior = (Arr *)m_new_arr(0, 0, &cb_arr);
+        m_append(prior, stock); m_set(rep, enabled, prior); m_release(prior);
+        cpc_setup_hook(rq, rep);
+        echo = g(rep, "enabledFeatures");
+        CHECK("no VSP: UI Sync alone leaves stock", echo && echo->n == 1 && !strcmp(s_of(echo->v[0]), "hevc"));
+        uf = fopen(DIR "cpc-sync-independent", "w");
+        if (!uf) { perror("cpc-sync-independent"); return 1; }
+        fputs("1\n", uf); fclose(uf);
+        cpc_setup_hook(req2, rep);
+        echo = g(rep, "enabledFeatures");
+        CHECK("independent UI Sync requires offer", echo && echo->n == 1 && !strcmp(s_of(echo->v[0]), "hevc"));
+        cpc_setup_hook(rq, rep);
+        echo = g(rep, "enabledFeatures");
+        CHECK("independent UI Sync preserves stock", echo && echo->n == 2 && !strcmp(s_of(echo->v[0]), "hevc") && !strcmp(s_of(echo->v[1]), "uiSync"));
+        CHECK("independent actual diagnostics include OEM hevc",strstr(lastlog,"vehicleStateProtocol=0") && strstr(lastlog,"uiSync=1") && strstr(lastlog,"hevc=1 other=0"));
+        cpc_setup_hook(rq, rep);
+        echo = g(rep, "enabledFeatures");
+        CHECK("independent UI Sync idempotent", echo && echo->n == 2 && !strcmp(s_of(echo->v[0]), "hevc") && !strcmp(s_of(echo->v[1]), "uiSync"));
+        m_set(rep, enabled, stock);
+        cpc_setup_hook(rq, rep);
+        CHECK("malformed stock features untouched", g(rep, "enabledFeatures") == stock);
+        m_release(rep);
+        remove(DIR "cpc-uisync");
+        rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
+        cpc_setup_hook(rq, rep);
+        CHECK("independent flag alone cannot enable UI Sync", rep->n == 0);
+        m_release(rep); remove(DIR "cpc-sync-independent"); remove(DIR "cpc-ultra");
+        m_release(rq); m_release(sync); m_release(stock); m_release(enabled);
+    }
     Dict *req3 = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
     rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
     cpc_setup_hook(req3, rep);
@@ -799,18 +955,48 @@ int main(void) {
         f = fopen(DIR "cpc-uisync", "w");
         if (f) { fputs("1\n", f); fclose(f); }
         remove(DIR "cpc-vs-3.key");
+        CHECK("stale sync flag cannot claim a stream without themed mode",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==3);
+        f=fopen(DIR "cpc-ultra","w");
+        if(f){fputs("1\n",f);fclose(f);}
+        CHECK("generic cluster cannot claim UI Sync stream",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==3);
+        f=fopen(DIR "cpc-ultra","w");
+        if(f){fputs("2\n",f);fclose(f);}
         CHECK("uiSync stream, experiment on: {type 130, streamID 133, dataPort 7135}", cpc_stream_hook(&session, st, reply, 130) == 1
               && streams->n == 4 && n_of(g(streams->v[3], "dataPort")) == 7135 && n_of(g(streams->v[3], "streamID")) == 133);
         f = fopen(DIR "cpc-vs-3.key", "rb"); kn = f ? fread(kf, 1, sizeof kf, f) : 0; if (f) fclose(f);
         CHECK("uiSync stream keys in cpc-vs-3.key (72 bytes)", kn == 72);
         CHECK("uiSync stream: logged as uiSync on port 7135", strstr(lastlog, "uiSync stream 3 set up on port 7135") != 0);
+        unsigned char published[72]; memcpy(published,kf,72);
+        CHECK("UI Sync staging file absent after publication",access(DIR "cpc-vs-3.key.tmp",F_OK)!=0);
+        CHECK("create deterministic staging obstruction",mkdir(DIR "cpc-vs-3.key.tmp",0700)==0);
+        CHECK("failed key staging leaves stream unclaimed",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==4);
+        f=fopen(DIR "cpc-vs-3.key","rb"); kn=f?fread(kf,1,sizeof kf,f):0; if(f)fclose(f);
+        CHECK("failed staging preserves previously published key record",kn==72 && memcmp(published,kf,72)==0);
+        rmdir(DIR "cpc-vs-3.key.tmp");
+        add_stream_fail=1;
+        CHECK("failed UI Sync stream reply stays unclaimed",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==4);
+        CHECK("failed UI Sync reply invalidates newly published keys",access(DIR "cpc-vs-3.key",F_OK)!=0);
+        add_stream_fail=0;
         remove(DIR "cpc-uisync");
+        remove(DIR "cpc-ultra");
         ((Arr *)streams)->n--;   /* the later checks count the streams added before this one */
         m_release(streams->v[3]);
         Str *u5 = str("3E2F3C61-AAD0-42CB-A8AA-BF22186DA62E"); m_set(st, kt, u5); m_release(u5);
         CHECK("cluster screen stream, Ultra off: left to DiPO", cpc_stream_hook(&session, st, reply, 111) == 0 && streams->n == 3);
         f = fopen(DIR "cpc-ultra", "w");
         if (f) { fputs("1\n", f); fclose(f); }
+        /* Explicit center identity must never reach the virtual discard sink. */
+        Str *screenKey = str("displayUUID"), *centerId = str("Center_Display"), *clusterId = str("Cluster_Display");
+        m_set(st,screenKey,centerId);
+        CHECK("center-addressed alternate screen remains native",cpc_stream_hook(&session,st,reply,111)==0 && streams->n==3);
+        Str *uuidKey = str("uuid");
+        m_set(st,screenKey,clusterId);m_set(st,uuidKey,centerId);
+        CHECK("conflicting explicit center and cluster identities remain native",cpc_stream_hook(&session,st,reply,111)==0 && streams->n==3);
+        m_set(st,uuidKey,clusterId);
+        m_set(st,uuidKey,centerId);
+        CHECK("explicit center main stream remains native",cpc_stream_hook(&session,st,reply,110)==0 && streams->n==3);
+        m_set(st,uuidKey,clusterId);
+        m_release(screenKey);m_release(uuidKey);m_release(centerId);m_release(clusterId);
         CHECK("cluster screen stream, Ultra on: {type 111, dataPort 7132}", cpc_stream_hook(&session, st, reply, 111) == 1
               && streams->n == 4 && n_of(g(streams->v[3], "type")) == 111 && n_of(g(streams->v[3], "dataPort")) == 7132);
         remove(DIR "cpc-ultra");
@@ -968,6 +1154,7 @@ int main(void) {
 }
 
 static int m_add_stream(const void *reply, const void *stream) {
+    if (add_stream_fail) return -1;
     Str *k = str("streams");
     const void *a = m_get(reply, k);
     if (!a) { a = m_new_arr(0, 0, &cb_arr); m_set(reply, k, a); m_release(a); }

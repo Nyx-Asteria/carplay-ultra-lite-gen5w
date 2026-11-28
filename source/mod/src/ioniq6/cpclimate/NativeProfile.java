@@ -112,6 +112,24 @@ final class NativeProfile {
         }
     }
 
+    /** Publish coherent display settings; clear the entire group on failure.
+     * The native recipe is applied only after this returns true. */
+    static boolean writeDisplayProfile(ModContext mod, File dir, String wide, int mode,
+                                       boolean sync, boolean independent) {
+        boolean themedSync = mode == 2 && sync;
+        boolean ready = writeWide(mod,dir,wide);
+        ready &= writeUltra(mod,dir,mode);
+        ready &= writeFlag(mod,dir,"cpc-uisync",themedSync,"uiSync (CarPlay theme layouts and palettes)");
+        ready &= writeFlag(mod,dir,"cpc-sync-independent",themedSync && independent,"independent uiSync negotiation (experimental)");
+        if (!ready) {
+            writeFlag(mod,dir,"cpc-sync-independent",false,"independent uiSync");
+            writeFlag(mod,dir,"cpc-uisync",false,"uiSync");
+            writeUltra(mod,dir,0);
+            writeWide(mod,dir,"0");
+        }
+        return ready;
+    }
+
     /** the Ultra experiment for the native hooks (files/cpc-ultra: 1 virtual cluster, 2 with the theme's display ids) */
     static boolean writeUltra(ModContext mod, File dir, int mode) {
         File f = new File(dir, "cpc-ultra");

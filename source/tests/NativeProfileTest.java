@@ -24,11 +24,20 @@ public final class NativeProfileTest {
             check("2\n".equals(new String(Files.readAllBytes(wide.toPath()),StandardCharsets.UTF_8)),"right area bytes");
             check(NativeProfile.writeWide(null,dir,"invalid")&&!wide.exists(),"invalid mode clears");
             check("0".equals(NativeProfile.wideMode(null)),"null mode disabled");
+            File independent=new File(dir,"cpc-sync-independent");
+            check(NativeProfile.writeDisplayProfile(null,dir,"2",2,true,true),"themed profile");
+            check(ultra.exists()&&wide.exists()&&sync.exists()&&independent.exists(),"themed profile all requested flags");
+            check(NativeProfile.writeDisplayProfile(null,dir,"1",1,true,true),"generic cluster profile");
+            check(ultra.exists()&&wide.exists()&&!sync.exists()&&!independent.exists(),"generic cluster cannot retain themed sync flags");
+            check(NativeProfile.writeDisplayProfile(null,dir,"0",0,true,true),"standard profile");
+            check(!ultra.exists()&&!wide.exists()&&!sync.exists()&&!independent.exists(),"standard profile clears all display flags");
             check(sync.mkdir()&&child.createNewFile(),"create deterministic obstruction");
             check(!NativeProfile.writeFlag(null,dir,"cpc-uisync",true,"test"),"failed write");
             check(!NativeProfile.writeFlag(null,dir,"cpc-uisync",false,"test"),"failed removal");
             check(child.exists(),"do not recursively remove unrelated contents");
-        } finally {child.delete();sync.delete();ultra.delete();wide.delete();dir.delete();}
+            check(!NativeProfile.writeDisplayProfile(null,dir,"2",2,true,true),"blocked group publication fails");
+            check(!ultra.exists()&&!wide.exists()&&!independent.exists()&&child.exists(),"rollback clears writable flags and preserves obstruction");
+        } finally {child.delete();sync.delete();ultra.delete();wide.delete();new File(dir,"cpc-sync-independent").delete();dir.delete();}
         System.out.println("NativeProfileTest passed");
     }
 }

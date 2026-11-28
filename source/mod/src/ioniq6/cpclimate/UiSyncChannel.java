@@ -31,10 +31,16 @@ final class UiSyncChannel extends Thread {
         super("cp-climate-uisync");
         this.dir = dir;
         this.out = out;
-        sync = new UiSync(new File(dir, "cpc-theme-preferences.properties"), true);
+        sync = new UiSync(preferenceFile(dir,layout,legacyCenterLayout), true);
         sync.wanted = layout;
         sync.legacyCenterLayout = legacyCenterLayout;
         setDaemon(true);
+    }
+
+    /** Production phone-managed mode has no disk preference owner.
+     * Preserve the historical file only for explicit legacy test requests. */
+    static File preferenceFile(File dir, UiSync.Layout layout, boolean legacyCenterLayout) {
+        return layout != null || legacyCenterLayout ? new File(dir,"cpc-theme-preferences.properties") : null;
     }
 
     private final java.util.concurrent.CountDownLatch bindFinished=new java.util.concurrent.CountDownLatch(1);
@@ -62,12 +68,22 @@ final class UiSyncChannel extends Thread {
                     + (sync.wanted == null ? "not requested" : sync.wanted.name + " " + sync.wanted.palette) + ", force center Wallpaper=" + sync.legacyCenterLayout + ")");
             while (true) {
                 final Socket sock = s.accept();
-                new Thread("cp-climate-uisync-conn") {
+                // Capture keys at admission, not when the worker eventually runs.
+                // A subsequent SETUP must not replace this socket's cipher.
+                final ChaChaPoly cipher = snapshotCipher(dir);
+                if (cipher == null) {
+                    out.log("SYNC no complete keys at socket admission: closed");
+                    VsChannel.close(sock);
+                    continue;
+                }
+                Thread worker = new Thread("cp-climate-uisync-conn") {
                     @Override
                     public void run() {
-                        serve(sock);
+                        serve(sock, cipher);
                     }
-                }.start();
+                };
+                worker.setDaemon(true);
+                worker.start();
             }
         } catch (Throwable t) {
             out.log("[listener] uiSync listener stopped: " + t.getClass().getSimpleName());
@@ -95,8 +111,20 @@ final class UiSyncChannel extends Thread {
             this.preferences=preferences;this.configuration=configuration;
         }
         UiSync select(byte[] body) {
-            String id=panelId(body);
-            if(id==null)id="legacy";
+            // Missing displayUUID is the historical legacy lane; an explicit
+            // unknown or malformed display must not share its handshake state.
+            String id;
+            try {
+                Object decoded=OpackCodec.decode(body);
+                if (!(decoded instanceof java.util.Map)) return null;
+                java.util.Map<?,?> frame=(java.util.Map<?,?>)decoded;
+                if (!frame.containsKey("displayUUID")) id="legacy";
+                else {
+                    Object display=frame.get("displayUUID");
+                    if (!"Center_Display".equals(display) && !"Cluster_Display".equals(display)) return null;
+                    id=(String)display;
+                }
+            } catch (RuntimeException e) { return null; }
             UiSync state=panels.get(id);
             if(state==null){
                 state=new UiSync(preferences,true);
@@ -109,23 +137,29 @@ final class UiSyncChannel extends Thread {
         }
     }
 
-    void serve(Socket sock) {
-        // Sequence numbers and reset state belong to this authenticated connection.
-        // A reconnect must not reset an older connection's handshake.
-        final PanelRouter router=new PanelRouter(new File(dir,"cpc-theme-preferences.properties"),sync);
-        out.log("SYNC connection opened");
-        int logged = 0, packages = 0;
-        java.util.Set<String> seenPanels = new java.util.HashSet<String>();
+    static ChaChaPoly snapshotCipher(File dir) {
+        byte[] keys = IapChannel.readKeys(dir, KEYS);
+        if (keys == null) return null;
+        byte[] rd = new byte[32], wr = new byte[32];
         try {
-            byte[] keys = IapChannel.readKeys(dir, KEYS);
-            if (keys == null) {
-                out.log("SYNC no keys from the SETUP: closed");
-                return;
-            }
-            byte[] rd = new byte[32], wr = new byte[32];
             System.arraycopy(keys, 8, rd, 0, 32);
             System.arraycopy(keys, 40, wr, 0, 32);
-            ChaChaPoly cipher = new ChaChaPoly(rd, wr);
+            return new ChaChaPoly(rd, wr);
+        } finally {
+            java.util.Arrays.fill(keys, (byte)0);
+            java.util.Arrays.fill(rd, (byte)0);
+            java.util.Arrays.fill(wr, (byte)0);
+        }
+    }
+
+    void serve(Socket sock, ChaChaPoly cipher) {
+        // Sequence numbers and reset state belong to this authenticated connection.
+        // A reconnect must not reset an older connection's handshake.
+        final PanelRouter router=new PanelRouter(preferenceFile(dir,sync.wanted,sync.legacyCenterLayout),sync);
+        out.log("SYNC connection opened");
+        int logged = 0, packages = 0, choiceLogs = 0;
+        java.util.Set<String> seenPanels = new java.util.HashSet<String>();
+        try {
             InputStream in = sock.getInputStream();
             VsChannel.Writer w = new VsChannel.Writer(sock, sock.getOutputStream(), cipher);
             byte[] sealed = new byte[64 * 1024];
@@ -162,13 +196,24 @@ final class UiSyncChannel extends Thread {
                         List<byte[]> answers;
                         List<String> picked;
                         UiSync sync=router.select(body);
+                        if (sync == null) {
+                            if (logged++ < MAX_LOGGED) out.log("[theme-sync] unsupported or malformed panel frame ignored");
+                            at += size;
+                            continue;
+                        }
+                        boolean becameReady;
+                        boolean resetStarted;
                         synchronized (sync) {
+                            boolean wasReady = sync.ready;
+                            long previousSession = sync.session;
                             try {
                                 answers = sync.handle(body);
                             } catch (IllegalArgumentException e) {
                                 answers = java.util.Collections.emptyList();
                                 if (logged++ < MAX_LOGGED) out.log("SYNC unreadable message bytes=" + body.length);
                             }
+                            becameReady = !wasReady && sync.ready;
+                            resetStarted = previousSession != sync.session && sync.awaitingResetComplete;
                             picked = new java.util.ArrayList<String>(sync.choices);
                             sync.choices.clear();
                         }
@@ -188,7 +233,20 @@ final class UiSyncChannel extends Thread {
                             w.send(VsChannel.pack(VsChannel.ASYNC, VsChannel.COMMAND, 0, a));
                             if (logged++ < MAX_LOGGED) out.log("SYNC car: bytes=" + a.length);
                         }
-                        for (String c : picked) out.log("SYNC the phone picked " + c);
+                        String display = panelId(body);
+                        String lane = display == null ? "legacy" : display;
+                        if (resetStarted) out.log("[theme-sync] panel=" + lane + " reset session=" + sync.session);
+                        if (becameReady) out.log("[theme-sync] panel=" + lane + " initialization replies written session="
+                                + sync.session + " version=" + sync.version + " replies=" + answers.size());
+                        for (String c : picked) {
+                            if (choiceLogs < MAX_LOGGED) {
+                                out.log("[theme-sync] panel=" + lane + " phone choice " + c);
+                                choiceLogs++;
+                            } else if (choiceLogs == MAX_LOGGED) {
+                                out.log("[theme-sync] additional phone choice logs suppressed");
+                                choiceLogs++;
+                            }
+                        }
                     }
                     at += size;
                 }
@@ -197,7 +255,7 @@ final class UiSyncChannel extends Thread {
             }
             out.log("SYNC connection closed by the phone after " + packages + " package(s)");
         } catch (Throwable t) {
-            out.log("SYNC connection ended after " + packages + " package(s): " + t);
+            out.log("SYNC connection ended after " + packages + " package(s): " + t.getClass().getSimpleName());
         } finally {
             out.log("[theme-sync] negotiated traffic panels=" + seenPanels);
             VsChannel.close(sock);

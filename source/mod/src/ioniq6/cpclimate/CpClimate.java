@@ -100,9 +100,19 @@ public final class CpClimate extends ModEntry {
             themePreflight=targetVerified && m.settingBoolean("ultra_theme",true)
                     && m.settingBoolean("ultra_sidebars",true) && theme.available(m);
             m.log("[theme] iAP2 process preflight="+themePreflight);
-            if (themePreflight && m.enabled() && m.settingBoolean("ultra_theme", true) && m.settingBoolean("ultra_sidebars", true)) {
-                theme.register(m);
-            } else m.log("[theme] iAP2 contribution withheld by boot preflight/settings");
+            if (targetVerified && m.enabled() && m.settingBoolean("ultra_theme", true) && m.settingBoolean("ultra_sidebars", true)) {
+                // Publication/configuration may lag appLoaded. Keep observing and
+                // retry registration even if the initial attempt is unsuccessful.
+                android.util.Log.i("CPULCrossProcess", "[theme] initial contribution attempt");
+                boolean registered=theme.register(m);
+                android.util.Log.i("CPULCrossProcess", "[theme] initial contribution " + (registered?"confirmed":"unconfirmed"));
+                theme.observe(m);
+            } else {
+                theme.stopObservation();
+                theme.unregister(m);
+                m.log("[theme] iAP2 contribution withheld by boot preflight/settings");
+                android.util.Log.i("CPULCrossProcess", "[theme] initial contribution withheld");
+            }
             return;
         }
         if (K5Radio.PACKAGE.equals(app.packageName)) {
@@ -114,16 +124,16 @@ public final class CpClimate extends ModEntry {
         if (!DIPO.equals(app.packageName)) return;
         m.log("[climate] startup target=" + targetVerified + " enabled=" + m.settingBoolean("k5_integration", true));
         if (!targetVerified) return;
-        themePreflight=m.settingBoolean("ultra_theme",true)
+        themePreflight=m.enabled() && m.settingBoolean("ultra_theme",true)
                 && m.settingBoolean("ultra_sidebars",true) && theme.available(m);
-        m.log("[theme] DiPO process preflight="+themePreflight+" (registry availability only)");
+        m.log("[theme] DiPO process preflight="+themePreflight+" (API v3 contract shape only)");
         boolean climate = m.settingBoolean("k5_integration", true);
         boolean any = climate || m.settingBoolean("parked_video", false) || m.settingBoolean("ultra_theme", true);
         if (!any) { m.log("[runtime] all CPUL features off; disable CPUL itself to use standalone PPS CarPlay scaling"); return; }
         mod = m;
         File dir = app.context != null ? app.context.getFilesDir() : new File("/data/data/" + DIPO + "/files");
         if (sessionLogging == null) {
-            sessionLogging = new SessionLogging(m, dir, property("ro.build.display.id"), RuntimeEnvironment.describe(property("ro.product.device"), app.context));
+            sessionLogging = new SessionLogging(m, dir, property("ro.build.display.id"), RuntimeEnvironment.describe(property("ro.product.device"), app.context) + "; " + RuntimeEnvironment.readCompanionState());
             new ProjectionLogCapture(sessionLogging).start();
         }
         ClimateMap.loadSetpoints(new File(dir, "cpc-setpoints"));
@@ -239,16 +249,9 @@ public final class CpClimate extends ModEntry {
                     uiSync=false;
                 }
             }
-            // Evaluate every flag even after a failure so stale settings are cleared where possible.
-            boolean profileReady=NativeProfile.writeWide(m,dir,wide);
-            profileReady &= NativeProfile.writeUltra(m,dir,themedIds?2:cluster?1:0);
-            profileReady &= NativeProfile.writeFlag(m,dir,"cpc-uisync",uiSync,"uiSync (CarPlay theme layouts and palettes)");
-            profileReady &= NativeProfile.writeFlag(m,dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
+            boolean profileReady=NativeProfile.writeDisplayProfile(m,dir,wide,themedIds?2:cluster?1:0,
+                    uiSync,m.settingBoolean("ultra_independent_sync",false));
             if(!profileReady) {
-                NativeProfile.writeWide(m,dir,"0");
-                NativeProfile.writeUltra(m,dir,0);
-                NativeProfile.writeFlag(m,dir,"cpc-uisync",false,"uiSync");
-                NativeProfile.writeFlag(m,dir,"cpc-sync-independent",false,"independent uiSync");
                 runtimeLog("[native] display profile persistence failed; patch withheld");
                 return;
             }
@@ -404,7 +407,7 @@ public final class CpClimate extends ModEntry {
     }
 
     @Override public void onEnabled(ModContext m, boolean enabled) {
-        if (!enabled) { theme.unregister(m); sessionActive = false; sessionGeneration++; VideoMessages.stopEngine("mod disabled"); if(sessionLogging!=null) sessionLogging.finish("mod disabled"); }
+        if (!enabled) { theme.stopObservation(); theme.unregister(m); sessionActive = false; sessionGeneration++; VideoMessages.stopEngine("mod disabled"); if(sessionLogging!=null) sessionLogging.finish("mod disabled"); }
         m.log("[runtime] enabled=" + enabled + "; restart required to change advertised capabilities");
     }
 

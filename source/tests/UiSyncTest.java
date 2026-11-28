@@ -74,6 +74,18 @@ public class UiSyncTest {
                 out.size() == 1 && is(h, 0, 1, 0) && Long.valueOf(1).equals(n(h, "ssn")) && Long.valueOf(2).equals(n(h, "version"))
                         && "89858A51".equals(h.get("id")));
 
+        List<byte[]> retry = sync.handle(reset);
+        check("duplicate pending reset replays identical response without advancing sequence",
+                retry.size()==1 && Arrays.equals(out.get(0),retry.get(0)) && sync.session==1 && sync.nextTx==2);
+        UiSync replaced = new UiSync();
+        replaced.handle(reset);
+        byte[] newReset = framed(map("type",0L,"ssn",1L,"psn",1L,"id","different","version",3L));
+        List<byte[]> replacement = replaced.handle(newReset);
+        check("different reset identity starts fresh pending handshake",
+                replacement.size()==1 && replaced.session==2 && "different".equals(headerOf(replacement.get(0)).get("id")));
+        check("old reset completion cannot initialize replacement",
+                replaced.handle(framed(map("type",1L,"ssn",1L,"psn",1L))).isEmpty() && !replaced.ready);
+
         byte[] complete = framed(map("type", 1L, "ssn", 1L, "psn", 1L, "version", 3L));
         out = sync.handle(complete);
         check("reset complete: 3 answers (complete, allow layout change, give focus)", out.size() == 3);
@@ -98,7 +110,15 @@ public class UiSyncTest {
         sync.handle(fromPhone(5, UiSync.APPEARANCE_PREFERENCE_CHANGE, map("preference", 2L)));
         sync.handle(fromPhone(6, UiSync.APPEARANCE_PREFERENCE_CHANGE, map("preference", 7L)));
         check("the phone's choices are recorded: " + sync.choices, sync.choices.equals(Arrays.asList(
-                "layout 0D38B526 palette starlight", "palette racingGreen of layout 0D38B526", "appearance dark")));
+                "layout unknown palette unknown", "palette unknown of layout unknown", "appearance dark")));
+
+        UiSync redacted=new UiSync();
+        redacted.followPhone(map("data",Bplist.encode(UiSync.command(UiSync.START_LAYOUT_TRANSITION,"layoutID","private-id"))));
+        check("unknown layout and missing palette use fixed labels",redacted.choices.equals(Arrays.asList("layout unknown palette absent")));
+        redacted.followPhone(map("data",Bplist.encode(map("type",UiSync.PALETTE_CHANGE,"data",map("layoutIdentifier",UiSync.layout("Modular").id,"paletteIdentifier","private-token")))));
+        check("unknown palette cannot leak peer string",redacted.choices.get(1).equals("palette unknown of layout Modular"));
+        redacted.followPhone(map("data",Bplist.encode(map("type",UiSync.START_LAYOUT_TRANSITION,"data",map("layoutID",UiSync.layout("DigiRing").id,"paletteID","green")))));
+        check("catalog layout and palette remain identifiable",redacted.choices.get(2).equals("layout DigiRing palette green"));
 
         out = sync.handle(fromPhone(7, UiSync.REQUEST_FOCUS, map("tokenID", 4711L)));
         check("a focus request: acked, then the focus goes back",
@@ -108,6 +128,25 @@ public class UiSyncTest {
         out = sync.handle(framed(map("type", 2L, "ssn", 1L, "psn", 8L, "noAck", Boolean.TRUE)));
         check("noAck commands get no ack", out.isEmpty());
         check("another session is not ours", sync.handle(framed(map("type", 2L, "ssn", 9L, "psn", 3L))).isEmpty());
+        Map<Object,Object> acceptedPanel = new LinkedHashMap<Object,Object>(sync.panel);
+        Map<Object,Object> stale = new LinkedHashMap<Object,Object>();
+        stale.put("displayUUID","Cluster_Display");
+        stale.put("data",Bplist.encode(map("type",2L,"ssn",9L,"psn",99L)));
+        check("stale session leaves reply envelope and receive sequence intact",
+                sync.handle(OpackCodec.encode(stale)).isEmpty()
+                && acceptedPanel.equals(sync.panel) && sync.lastRx==8);
+        stale.put("data",Bplist.encode(map("type",99L,"ssn",1L,"psn",99L)));
+        check("unknown message type leaves accepted envelope intact",
+                sync.handle(OpackCodec.encode(stale)).isEmpty() && acceptedPanel.equals(sync.panel));
+        UiSync pending = new UiSync();
+        pending.handle(reset);
+        Map<Object,Object> resetPanel = new LinkedHashMap<Object,Object>(pending.panel);
+        stale.put("data",Bplist.encode(map("type",3L,"ssn",1L,"psn",99L)));
+        check("premature command acknowledgement leaves reset state intact",
+                pending.handle(OpackCodec.encode(stale)).isEmpty()
+                && pending.lastRx==0 && resetPanel.equals(pending.panel));
+        check("valid reset completion still initializes phone-managed session",
+                pending.handle(complete).size()==3 && pending.ready);
         boolean refused = false;
         try {
             sync.handle(new byte[] {(byte) 0xff});
@@ -380,12 +419,34 @@ public class UiSyncTest {
             blocked.join(3000);
             check("failed uiSync listener exits",!blocked.isAlive());
         }
-        ClusterSink sink=new ClusterSink(quiet,ClusterSink.PORT,"test-cluster");
+        final java.util.concurrent.CountDownLatch firstClosed=new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch secondClosed=new java.util.concurrent.CountDownLatch(1);
+        final List<String> clusterLogs=java.util.Collections.synchronizedList(new ArrayList<String>());
+        ClusterSink sink=new ClusterSink(new VsChannel.Log(){
+            public void log(String msg){
+                clusterLogs.add(msg);
+                if(msg.contains("stream closed bytes=")&&msg.contains(" connection=1 "))firstClosed.countDown();
+                if(msg.contains("stream closed bytes=")&&msg.contains(" connection=2 "))secondClosed.countDown();
+            }
+        },ClusterSink.PORT,"test-cluster");
         sink.start();
         check("cluster listener reports ready",sink.awaitReady(3000));
         try(Socket socket=new Socket("127.0.0.1",ClusterSink.PORT)){
             socket.getOutputStream().write(new byte[]{1,2,3});
         }
+        check("first cluster stream closes",firstClosed.await(3,java.util.concurrent.TimeUnit.SECONDS));
+        try(Socket socket=new Socket("127.0.0.1",ClusterSink.PORT)){
+            socket.getOutputStream().write(new byte[]{4,5});
+        }
+        check("cluster listener accepts reconnect",secondClosed.await(3,java.util.concurrent.TimeUnit.SECONDS));
+        boolean first=false,second=false;
+        synchronized(clusterLogs){
+            for(String line:clusterLogs){
+                first|=line.contains("stream closed bytes=3 ")&&line.endsWith("connection=1 eof=true");
+                second|=line.contains("stream closed bytes=2 ")&&line.endsWith("connection=2 eof=true");
+            }
+        }
+        check("cluster connections have independent byte counts and EOF evidence",first&&second);
     }
 
     static void independentConnections() {
@@ -434,8 +495,46 @@ public class UiSyncTest {
         check("interleaved center completes without forcing layout",router.select(panelFrame("Center_Display",1)).handle(panelFrame("Center_Display",1)).size()==3);
         check("interleaved cluster completes with configured layout",router.select(panelFrame("Cluster_Display",1)).handle(panelFrame("Cluster_Display",1)).size()==4);
         check("all routed sessions ready",cluster.ready&&center.ready&&legacy.ready);
+        check("unknown explicit display cannot enter legacy lane",router.select(panelFrame("Unknown_Display",0))==null);
+        check("malformed OPACK cannot enter legacy lane",router.select(new byte[0])==null);
+        Map<Object,Object> invalid=new LinkedHashMap<Object,Object>();
+        invalid.put("displayUUID",42L);
+        invalid.put("data",Bplist.encode(map("type",0L)));
+        check("non-string display cannot enter legacy lane",router.select(OpackCodec.encode(invalid))==null);
+        check("rejected frames preserve all panel states",cluster.ready&&center.ready&&legacy.ready);
         UiSyncChannel.PanelRouter reconnect=new UiSyncChannel.PanelRouter(null,config);
         check("reconnect creates fresh state without mutating old connection",reconnect.select(centerReset)!=center&&center.ready);
+    }
+
+    static void phoneManagedStorage(File dir) throws Exception {
+        File isolated=new File(dir,"phone-managed-storage");
+        if(!isolated.mkdir())throw new AssertionError("isolated preference fixture");
+        File legacy=new File(isolated,"cpc-theme-preferences.properties");
+        try {
+            try(FileOutputStream out=new FileOutputStream(legacy)){
+                out.write("Cluster_Display.layout=legacy-marker\n".getBytes("UTF-8"));
+            }
+            byte[] before=read(legacy);
+            check("production mode does not open persisted layout preferences",
+                    UiSyncChannel.preferenceFile(isolated,null,false)==null);
+            check("legacy fixtures retain explicit preference path",
+                    legacy.equals(UiSyncChannel.preferenceFile(isolated,UiSync.layout("Modular"),false))
+                    &&legacy.equals(UiSyncChannel.preferenceFile(isolated,null,true)));
+            UiSync config=new UiSync();
+            UiSyncChannel.PanelRouter router=new UiSyncChannel.PanelRouter(
+                    UiSyncChannel.preferenceFile(isolated,null,false),config);
+            UiSync cluster=router.select(panelFrame("Cluster_Display",0));
+            cluster.handle(panelFrame("Cluster_Display",0));
+            check("production cluster starts phone-managed",cluster.handle(panelFrame("Cluster_Display",1)).size()==3);
+            cluster.remember("Cluster_Display",UiSync.layout("DigiRing").id,"green",true);
+            check("phone choice does not modify old shared preference file",Arrays.equals(before,read(legacy)));
+            UiSyncChannel.PanelRouter fresh=new UiSyncChannel.PanelRouter(
+                    UiSyncChannel.preferenceFile(isolated,null,false),config);
+            UiSync next=fresh.select(panelFrame("Cluster_Display",0));
+            next.handle(panelFrame("Cluster_Display",0));
+            check("fresh connection never restores old layout",next.handle(panelFrame("Cluster_Display",1)).size()==3);
+            check("no staged preference file in production",!new File(legacy.getPath()+".tmp").exists());
+        } finally {new File(legacy.getPath()+".tmp").delete();legacy.delete();isolated.delete();}
     }
 
     static void sharedPreferences(File dir) throws Exception {
@@ -466,7 +565,46 @@ public class UiSyncTest {
         }finally{file.delete();new File(file.getPath()+".tmp").delete();}
     }
 
+    static void keyRecordLength(File dir) throws Exception {
+        File file=File.createTempFile("sync-keys-", ".key",dir);
+        try {
+            for(int size:new int[]{71,72,73}) {
+                FileOutputStream out=new FileOutputStream(file);
+                try {out.write(new byte[size]);}finally{out.close();}
+                check("exact key record length "+size,(IapChannel.readKeys(dir,file.getName())!=null)==(size==72));
+            }
+        }finally{file.delete();}
+    }
+
+    static void admissionCipherSnapshot(File parent) throws Exception {
+        File dir = new File(parent, "sync-admission-"+System.nanoTime());
+        check("create isolated admission test directory",dir.mkdir());
+        File file = new File(dir,UiSyncChannel.KEYS);
+        try {
+            check("missing key record cannot admit socket",UiSyncChannel.snapshotCipher(dir)==null);
+            byte[] first=new byte[72], second=new byte[72];
+            Arrays.fill(first,(byte)17);Arrays.fill(second,(byte)42);
+            FileOutputStream out=new FileOutputStream(file);
+            try{out.write(first);}finally{out.close();}
+            ChaChaPoly admitted=UiSyncChannel.snapshotCipher(dir);
+            out=new FileOutputStream(file);
+            try{out.write(second);}finally{out.close();}
+            ChaChaPoly next=UiSyncChannel.snapshotCipher(dir);
+            byte[] payload=new byte[]{1,2,3};
+            byte[] oldKey=Arrays.copyOfRange(first,8,40),newKey=Arrays.copyOfRange(second,8,40);
+            byte[] oldFrame=new ChaChaPoly(oldKey,oldKey).seal(payload);
+            byte[] newFrame=new ChaChaPoly(newKey,newKey).seal(payload);
+            ByteArrayOutputStream plain=new ByteArrayOutputStream();
+            check("admitted cipher survives subsequent publication",admitted!=null && admitted.open(oldFrame,oldFrame.length,plain)==oldFrame.length && Arrays.equals(payload,plain.toByteArray()));
+            plain.reset();
+            check("next admission uses replacement keys",next!=null && next.open(newFrame,newFrame.length,plain)==newFrame.length && Arrays.equals(payload,plain.toByteArray()));
+            check("new admission rejects old key frame",UiSyncChannel.snapshotCipher(dir).open(oldFrame,oldFrame.length,new ByteArrayOutputStream())<0);
+        } finally {file.delete();dir.delete();}
+    }
+
     public static void main(String[] args) throws Exception {
+        admissionCipherSnapshot(new File(args[0]));
+        keyRecordLength(new File(args[0]));
         for(int i=0;i<VsData.NAME_IIDS.length;i++) {
             check("navigation logging classification iid="+VsData.NAME_IIDS[i],VehicleState.navigationCharacteristic(VsData.NAME_IIDS[i])==(i<16));
         }
@@ -474,6 +612,7 @@ public class UiSyncTest {
         layoutRequest();
         independentConnections();
         panelRouting();
+        phoneManagedStorage(new File(args[0]));
         sharedPreferences(new File(args[0]));
         variant();
         plists(new File(args[1]), new File(args[2]));

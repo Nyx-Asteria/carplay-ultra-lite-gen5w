@@ -462,8 +462,6 @@ static int add_view_area(CF info, int pct, int edge, int extras, int wide) {
         release(copy);
     }
     put(info, &K_displays, out);
-    LOG("cp-climate: Ultra display registration: main=%s, alternate=%s, original count=%d\n",
-        themed ? "Center_Display" : "stock UUID", themed ? "Cluster_Display" : "virtual UUID", (int)n);
     return 1;
 }
 
@@ -512,17 +510,19 @@ static void add_livi_hid(CF info) {
     LOG("cp-climate: /info hidDevices: %d stock + %d LIVI input devices (knob, media, telephony, cluster knob) (experiment)\n", (int)n, (int)m);
 }
 
-static void move_hid(CF info, CF old, CF now) {
+static int move_hid(CF info, CF old, CF now) {
     CF hid = get(info, &K_hidDevices);
-    if (!old || !is(hid, T_CFArrayGetTypeID)) return;
+    if (!hid || equal(old, now)) return 1;
+    if (!is(hid, T_CFArrayGetTypeID)) return 0;
     CF out = new_array();
-    if (!out) return;
+    if (!out) return 0;
     CFIndex n = count(hid), moved = 0;
     for (CFIndex i = 0; i < n; i++) {
         CF h = at(hid, i);
         CF on = is(h, T_CFDictionaryGetTypeID) ? get(h, &K_displayUUID) : 0;
-        CF copy = on && equal(on, old) ? new_dict() : 0;
-        if (copy) {
+        if (on && equal(on, old)) {
+            CF copy = new_dict();
+            if (!copy) { release(out); return 0; }
             FN(T_CFDictionaryApplyFunction, void (*)(CF, void (*)(CF, CF, void *), void *))(h, copy_entry, (void *)copy);
             set(copy, &K_displayUUID, now);
             append(out, copy);
@@ -534,29 +534,49 @@ static void move_hid(CF info, CF old, CF now) {
     }
     put(info, &K_hidDevices, out);
     LOG("cp-climate: Ultra theme: %d hidDevices moved to Center_Display\n", (int)moved);
+    return 1;
 }
 
 static int add_alt_display(CF info, int themed) {
     CF displays = get(info, &K_displays);
     if (!is(displays, T_CFArrayGetTypeID) || count(displays) < 1) return 0;
-    CF out = new_array();
-    if (!out) return 0;
     CFIndex n = count(displays);
+    /* Validate the complete list before changing any HID association. */
     for (CFIndex i = 0; i < n; i++) {
         CF d = at(displays, i);
         if (is(d, T_CFDictionaryGetTypeID) && dict_int(d, &K_dispType) == STREAM_ALT_SCREEN) {
             LOG("cp-climate: Ultra display registration skipped: existing type 111 display (themed=%d)\n", themed);
-            release(out);
             return 0;
         }
+    }
+    /* Do not create duplicate theme identities when another display already
+     * owns either reserved ID. The first display may already be Center_Display. */
+    if (themed) for (CFIndex i = 0; i < n; i++) {
+        CF d = at(displays, i);
+        CF u = is(d, T_CFDictionaryGetTypeID) ? get(d, &K_uuid) : 0;
+        if (is(u, T_CFStringGetTypeID) &&
+            (equal(u, &K_clusterId) || (i != 0 && equal(u, &K_centerId)))) {
+            LOG("cp-climate: Ultra theme registration skipped: reserved display identity collision\n");
+            return 0;
+        }
+    }
+    CF first = at(displays, 0);
+    if (themed && (!is(first, T_CFDictionaryGetTypeID) || !is(get(first, &K_uuid), T_CFStringGetTypeID))) {
+        LOG("cp-climate: Ultra theme registration skipped: missing valid center identity\n");
+        return 0;
+    }
+    CF out = new_array();
+    if (!out) return 0;
+    for (CFIndex i = 0; i < n; i++) {
+        CF d = at(displays, i);
         /* the main display gets LIVI's type 110 (TCC's has none), so the two can be told apart;
          * themed, also the theme's id for it, and the touch screen and buttons follow it */
         CF main = i == 0 && is(d, T_CFDictionaryGetTypeID) && (themed || !get(d, &K_dispType)) ? new_dict() : 0;
+        if (themed && i == 0 && !main) { release(out); return 0; }
         if (main) {
             FN(T_CFDictionaryApplyFunction, void (*)(CF, void (*)(CF, CF, void *), void *))(d, copy_entry, (void *)main);
             set_int(main, &K_dispType, STREAM_MAIN_SCREEN);
             if (themed) {
-                move_hid(info, get(d, &K_uuid), &K_centerId);
                 set(main, &K_uuid, &K_centerId);
                 if (livi_hid_mode()) set_int(main, &K_primaryInput, PRIMARY_INPUT_KNOBS);
             }
@@ -590,7 +610,14 @@ static int add_alt_display(CF info, int themed) {
     set_int(alt, &K_mapAppSetting, APPEARANCE_AUTOMATIC);
     append(out, alt);
     release(alt);
+    if (themed && !move_hid(info, get(first, &K_uuid), &K_centerId)) {
+        release(out);
+        LOG("cp-climate: Ultra theme registration skipped: HID reassignment failed\n");
+        return 0;
+    }
     put(info, &K_displays, out);
+    LOG("cp-climate: Ultra display registration: main=%s, alternate=%s, original count=%d\n",
+        themed ? "Center_Display" : "stock UUID", themed ? "Cluster_Display" : "virtual UUID", (int)n);
     return 1;
 }
 
@@ -598,7 +625,7 @@ static int add_alt_display(CF info, int themed) {
  * (-1: none), or -2 if vehicleStateProtocolInfo didn't parse */
 static CF vspi_from_file(void);   /* below, with the file helpers */
 
-static CFIndex add_additions(CF info, CF into, int cluster) {
+static CF load_vspi(void) {
     int err = 0;
     /* the Java side's description (cp-climate's accessories, as the vehicle state channel has them), or LIVI's */
     CF vspi = vspi_from_file();
@@ -606,8 +633,14 @@ static CFIndex add_additions(CF info, CF into, int cluster) {
         cpc_vspi, VSPI_LEN, &err);
     if (!vspi) {
         LOG("### cp-climate: vehicleStateProtocolInfo didn't parse: %d\n", err);
-        return -2;
+        return 0;
     }
+    return vspi;
+}
+
+static CFIndex add_additions(CF info, CF into, int cluster) {
+    CF vspi = load_vspi();
+    if (!vspi) return -2;
     put(into, &K_vspi, vspi);
     if (!CPC_PANELS) return -1;
     return add_display_panels(info, into, cluster);
@@ -620,16 +653,21 @@ static CFIndex add_additions(CF info, CF into, int cluster) {
 #ifdef CPC_HOST_TEST
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdio.h>
 static long sys_open(const char *p, int mode) { return open(p, O_WRONLY | O_CREAT | O_TRUNC, mode); }
 static long sys_open_read(const char *p) { return open(p, O_RDONLY); }
 static long sys_read(long fd, void *b, unsigned long n) { return read((int)fd, b, n); }
 static long sys_write(long fd, const void *b, unsigned long n) { return write((int)fd, b, n); }
 static void sys_close(long fd) { close((int)fd); }
+static long sys_rename(const char *from, const char *to) { return rename(from,to); }
+static void sys_unlink(const char *p) { unlink(p); }
 #else
 long cpc_sys3(long nr, long a, long b, long c) __attribute__((visibility("hidden")));   /* seg.S */
 static long sys_open(const char *p, int mode) { return cpc_sys3(5, (long)p, 01 | 0100 | 01000, mode); }   /* O_WRONLY|O_CREAT|O_TRUNC */
 static long sys_write(long fd, const void *b, unsigned long n) { return cpc_sys3(4, fd, (long)b, (long)n); }
 static void sys_close(long fd) { cpc_sys3(6, fd, 0, 0); }
+static long sys_rename(const char *from, const char *to) { return cpc_sys3(38,(long)from,(long)to,0); }
+static void sys_unlink(const char *p) { cpc_sys3(10,(long)p,0,0); }
 static long sys_open_read(const char *p) { return cpc_sys3(5, (long)p, 0, 0); }   /* O_RDONLY */
 static long sys_read(long fd, void *b, unsigned long n) { return cpc_sys3(3, fd, (long)b, (long)n); }
 #endif
@@ -763,7 +801,8 @@ static int iap_mode(void) {
 
 /* the uiSync experiment (files/cpc-uisync): 1 negotiates the theme's layout/palette channel (LIVI ui_sync.rs) */
 static int ui_sync_mode(void) {
-    return read_number(DIR "cpc-uisync") == 1;
+    /* Match Java display profile eligibility even if a stale sync flag survives. */
+    return ultra_mode() == 2 && read_number(DIR "cpc-uisync") == 1;
 }
 
 /* the extra features experiment (files/cpc-xenable): bit 1 videoPlayback, bit 2 hevc, when the phone offers them */
@@ -918,6 +957,9 @@ __attribute__((visibility("hidden"))) void cpc_info_hook(CF info) {
         return;
     }
     if (get(info, &K_vspi)) return;
+    /* Validate the VSP payload before changing display or input identities. */
+    CF vspi = load_vspi();
+    if (!vspi) return;
     int pct = size_percent(), edge = dock_edge(), newer = newer_version(), extras = display_extras();
     int cluster = cluster_mode(), wide = widescreen_areas();
     if (newer) set(info, &K_sourceVersion, &K_liviVersion);
@@ -926,13 +968,39 @@ __attribute__((visibility("hidden"))) void cpc_info_hook(CF info) {
     int mode = ultra_mode();
     int ultra = mode && add_alt_display(info, mode == 2) ? mode : 0;
     if (ultra == 2 && livi_hid_mode()) add_livi_hid(info);
-    CFIndex panels = add_additions(info, info, cluster);
-    if (panels == -2) return;
+    put(info, &K_vspi, vspi);
+    CFIndex panels = CPC_PANELS ? add_display_panels(info, info, cluster) : -1;
     add_features(info);
     add_video_playback(info);
     save_airplay(info);
     LOG("cp-climate: /info has vehicleStateProtocolInfo (%d bytes), %d displayPanels, %s, dock edge %d, CarPlay size %d%%, sourceVersion %s, LIVI display extras %s, instrument panel mode %d (0 off, 1 full, 2 no showsInstruments, 3 no plugin, 4 plugin on main, 5 plugin with stream), view areas %d (start %s), Ultra virtual cluster %s\n",
         (int)VSPI_LEN, (int)panels, area ? "a viewArea" : "no viewArea added", edge, pct, newer ? "950.7.1" : "stock", extras ? "on" : "off", cluster, wide ? 2 : 1, wide == 2 ? "right" : "whole", ultra == 2 ? "1920x720 (type 111, theme display ids)" : ultra ? "800x480 (type 111)" : "off");
+}
+
+/* Preserve OEM-negotiated capabilities; add only missing CPUL contributions. */
+static void append_feature(CF array, CF feature) {
+    for (CFIndex i=0,n=count(array);i<n;i++) if (equal(at(array,i),feature)) return;
+    append(array,feature);
+}
+
+/* Report the actual published list, without logging arbitrary OEM strings. */
+static void log_enabled_features(CF reply) {
+    CF list = get(reply, &K_enabledFeatures);
+    if (!is(list, T_CFArrayGetTypeID)) return;
+    int vsp=0, alt=0, areas=0, sync=0, iap=0, video=0, hevc=0, other=0;
+    for (CFIndex i=0,n=count(list);i<n;i++) {
+        CF f=at(list,i);
+        if (equal(f,&K_vsp)) vsp=1;
+        else if (equal(f,&K_altScreen)) alt=1;
+        else if (equal(f,&K_viewAreas)) areas=1;
+        else if (equal(f,&K_uiSync)) sync=1;
+        else if (equal(f,&K_iapChannel)) iap=1;
+        else if (equal(f,&K_videoPlayback)) video=1;
+        else if (equal(f,&K_hevc)) hevc=1;
+        else other++;
+    }
+    LOG("cp-climate: SETUP actual enabledFeatures vehicleStateProtocol=%d altScreen=%d viewAreas=%d uiSync=%d iAPChannel=%d videoPlayback=%d hevc=%d other=%d\n",
+        vsp,alt,areas,sync,iap,video,hevc,other);
 }
 
 __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) {
@@ -973,6 +1041,7 @@ __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) 
             if (!have) append(merged,&K_uiSync);
             put(reply,&K_enabledFeatures,merged);
             LOG("cp-climate: SETUP independent uiSync enabled; stock features preserved, VSP not offered\n");
+            log_enabled_features(reply);
             return;
         }
         LOG("cp-climate: SETUP without vehicleStateProtocol from the phone: reply unchanged\n");
@@ -982,27 +1051,31 @@ __attribute__((visibility("hidden"))) void cpc_setup_hook(CF request, CF reply) 
         LOG("cp-climate: SETUP reply left stock (test variant)\n");
         return;
     }
+    CF prior = get(reply, &K_enabledFeatures);
+    if (prior && !is(prior, T_CFArrayGetTypeID)) {
+        LOG("cp-climate: SETUP malformed OEM enabledFeatures; reply unchanged\n");
+        return;
+    }
     CF features = new_array();
     if (!features) return;
-    append(features, &K_vsp);
+    if (prior) for (CFIndex i=0,n=count(prior);i<n;i++) append(features,at(prior,i));
+    append_feature(features, &K_vsp);
     /* Restore upstream-style ViewAreas for themed sidebars, without changing
      * generic virtual-cluster negotiation or the no-VSP stock fallback.
      * Independent widescreen mode also accepts an explicit phone offer. */
     int enable_areas = ultra == 2 || ((ultra || widescreen_areas()) && areas);
-    if (enable_areas) append(features, &K_viewAreas);
-    if (ultra && alt) append(features, &K_altScreen);
-    if (iapx && iap) append(features, &K_iapChannel);
-    if (syncx && sync) append(features, &K_uiSync);
+    if (enable_areas) append_feature(features, &K_viewAreas);
+    if (ultra && alt) append_feature(features, &K_altScreen);
+    if (iapx && iap) append_feature(features, &K_iapChannel);
+    if (syncx && sync) append_feature(features, &K_uiSync);
     int extra = extra_features();
-    if ((extra & 1) && video) append(features, &K_videoPlayback);
-    if ((extra & 2) && hevc) append(features, &K_hevc);
+    if ((extra & 1) && video) append_feature(features, &K_videoPlayback);
+    if ((extra & 2) && hevc) append_feature(features, &K_hevc);
     if (extra)
         LOG("cp-climate: SETUP extra features experiment: videoPlayback %s, hevc %s\n",
             (extra & 1) ? (video ? "enabled" : "not offered") : "off", (extra & 2) ? (hevc ? "enabled" : "not offered") : "off");
     put(reply, &K_enabledFeatures, features);
-    LOG("cp-climate: SETUP reply has enabledFeatures [vehicleStateProtocol%s%s%s%s%s%s]\n",
-        enable_areas ? ", viewAreas" : "", ultra && alt ? ", altScreen" : "", iapx && iap ? ", iAPChannel" : "",
-        syncx && sync ? ", uiSync" : "", (extra & 1) && video ? ", videoPlayback" : "", (extra & 2) && hevc ? ", hevc" : "");
+    log_enabled_features(reply);
 }
 
 /* ---- M2: the vehicle state data streams (SETUP type 130) ---- */
@@ -1034,11 +1107,20 @@ static int save_keys(int lane, unsigned long long seed, const unsigned char *rd,
     unsigned lo = (unsigned)seed, hi = (unsigned)(seed >> 32);   /* 32-bit shifts: no libgcc helpers here */
     for (int i = 0; i < 4; i++) { buf[i] = (unsigned char)(lo >> (8 * i)); buf[4 + i] = (unsigned char)(hi >> (8 * i)); }
     for (int i = 0; i < 32; i++) { buf[8 + i] = rd[i]; buf[40 + i] = wr[i]; }
-    long fd = sys_open(lane == 3 ? DIR "cpc-vs-3.key" : lane == 2 ? DIR "cpc-vs-2.key" : lane ? DIR "cpc-vs-1.key" : DIR "cpc-vs-0.key", 0600);
-    if (fd < 0) return (int)fd;
-    long n = sys_write(fd, buf, sizeof buf);
-    sys_close(fd);
+    /* Keep the established lane files for compatibility. UI Sync uses a
+     * staged file so its reader never observes a partially written key record.
+     * Do not delete the previous published key on a failed staging attempt. */
+    const char *path = lane == 3 ? DIR "cpc-vs-3.key" : lane == 2 ? DIR "cpc-vs-2.key" : lane ? DIR "cpc-vs-1.key" : DIR "cpc-vs-0.key";
+    const char *staged = lane == 3 ? DIR "cpc-vs-3.key.tmp" : path;
+    long fd = sys_open(staged, 0600);
+    long n = fd < 0 ? fd : sys_write(fd, buf, sizeof buf);
+    if (fd >= 0) sys_close(fd);
     for (unsigned i = 0; i < sizeof buf; i++) ((volatile unsigned char *)buf)[i] = 0;
+    if (lane == 3) {
+        if (n == (long)sizeof buf && sys_rename(staged,path) == 0) return 0;
+        sys_unlink(staged);
+        return -1;
+    }
     return n == (long)sizeof buf ? 0 : -1;
 }
 
@@ -1072,16 +1154,29 @@ __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stre
             !u ? "absent" : equal(u,&K_centerId) ? "Center_Display" : equal(u,&K_clusterId) ? "Cluster_Display" : "other",
             !d ? "absent" : equal(d,&K_centerId) ? "Center_Display" : equal(d,&K_clusterId) ? "Cluster_Display" : "other");
     }
-    if (type == STREAM_ALT_SCREEN) return ultra_mode() ? alt_stream(reply) : 0;
+    if (type == STREAM_ALT_SCREEN) {
+        if (!ultra_mode()) return 0;
+        CF u = get(stream, &K_uuid), d = get(stream, &K_displayUUID);
+        /* Never send an explicitly center-addressed screen to the discard sink.
+         * Missing or unfamiliar IDs retain the existing type-based routing:
+         * their semantics are not established by the available captures. */
+        if ((u && equal(u,&K_centerId)) || (d && equal(d,&K_centerId))) {
+            LOG("cp-climate: alternate screen explicitly addressed to center; native path retained\n");
+            return 0;
+        }
+        return alt_stream(reply);
+    }
     if (type != STREAM_DATA) {
         if (ui_sync_mode()) LOG("cp-climate: theme stream audit: native path type %d\n", (int)type);
         return 0;
     }
     CF kind = get(stream, &K_clientTypeUUID);
     if (ui_sync_mode()) {
-        const char *uuid = is(kind, T_CFStringGetTypeID)
-            ? FN(T_CFStringGetCStringPtr, const char *(*)(CF, unsigned))(kind, UTF8) : 0;
-        LOG("cp-climate: theme stream audit: type 130 clientTypeUUID %s\n", uuid ? uuid : "(unavailable)");
+        const char *category = !kind ? "absent" : equal(kind,&K_vsNormal) ? "vehicle-normal"
+            : equal(kind,&K_vsHigh) ? "vehicle-high" : equal(kind,&K_iapStream) ? "iap"
+            : equal(kind,&K_syncStream) ? "uiSync" : equal(kind,&K_vpData) ? "video-data"
+            : equal(kind,&K_vpSettings) ? "video-settings" : equal(kind,&K_vpOverlay) ? "video-overlay" : "other";
+        LOG("cp-climate: theme stream audit: type 130 client category %s\n", category);
     }
     if (kind && (extra_features() & 1) && (equal(kind, &K_vpData) || equal(kind, &K_vpSettings) || equal(kind, &K_vpOverlay))) {
         int which = equal(kind, &K_vpData) ? 0 : equal(kind, &K_vpSettings) ? 1 : 2;
@@ -1103,6 +1198,8 @@ __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stre
         if (ui_sync_mode()) LOG("cp-climate: theme stream audit: type 130 not claimed; native path\n");
         return 0;
     }
+    CF d = new_dict();
+    if (!d) return 0;
     int err = 0;
     unsigned long long seed = (unsigned long long)FN(T_CFDictionaryGetInt64, long long (*)(CF, CF, int *))(stream, &K_seed, &err);
     unsigned char rd[32], wr[32];
@@ -1111,17 +1208,24 @@ __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stre
     if (!st) st = save_keys(lane, seed, rd, wr);
     for (int i = 0; i < 32; i++) { ((volatile unsigned char *)rd)[i] = 0; ((volatile unsigned char *)wr)[i] = 0; }
     if (st) {
+        release(d);
         LOG("### cp-climate: data stream %d not set up: %d\n", lane, st);
         return 0;
     }
-    CF d = new_dict();
-    if (!d) return 0;
+
     set_int(d, &K_type, STREAM_DATA);
     set_int(d, &K_streamID, STREAM_DATA + lane);
     int port = lane == 3 ? CPC_SYNC_PORT : lane == 2 ? CPC_IAP_PORT : CPC_PORT + lane;
     set_int(d, &K_dataPort, port);
     st = FN(T_ADD_STREAM_REPLY, int (*)(CF, CF))(reply, d);
     release(d);
+    if (st && lane == 3) {
+        /* A newly published key without a successful response is not usable.
+         * Fail closed rather than letting a later socket consume it. Existing
+         * authenticated sockets retain their own in-memory cipher. */
+        sys_unlink(DIR "cpc-vs-3.key");
+        LOG("cp-climate: uiSync key invalidated after failed stream reply\n");
+    }
     LOG("cp-climate: %s stream %d set up on port %d (reply %d)\n", lane == 3 ? "uiSync" : lane == 2 ? "iAP" : "vehicle state", lane, port, st);
     return st == 0;
 }

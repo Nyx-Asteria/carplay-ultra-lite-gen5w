@@ -142,7 +142,7 @@ final class IapChannel extends Thread {
                     if (n < 0) return null;
                     got += n;
                 }
-                return b;
+                return in.read() == -1 ? b : null;
             } finally {
                 in.close();
             }
