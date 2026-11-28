@@ -4,6 +4,10 @@ public final class ProjectionLogCaptureTest {
     public static void main(String[] args){
         check("[projection] unsupported stream type=130".equals(ProjectionLogCapture.classify("Unsupported stream type: 130 token=PRIVATE")));
         check("[radio-sxm] forwarded decoded eligible catalog count=132".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [radio-sxm] forwarded decoded eligible catalog count=132")));
+        check("[radio-sxm] forwarded decoded eligible catalog count=132 excluded=7".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [radio-sxm] forwarded decoded eligible catalog count=132 excluded=7")));
+        check("[radio-sxm] current-channel observer installed".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [radio-sxm] current-channel observer installed")));
+        check("[radio-sxm] live metadata bridge failed: IllegalStateException".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [radio-sxm] live metadata bridge failed: IllegalStateException")));
+        check(ProjectionLogCapture.classify("I CPULCrossProcess: [radio-sxm] live metadata bridge failed: private text")==null);
         check(ProjectionLogCapture.classify("I CPULCrossProcess: [radio-sxm] artwork unavailable: secret=abc")==null);
         check(ProjectionLogCapture.classify("SETUP token=private")==null);
         String offered=ProjectionLogCapture.classify("cp-climate: SETUP: the phone offers vehicleStateProtocol 1, altScreen 1, viewAreas 0, uiSync 1, iAPChannel 0, videoPlayback 1, hevc 0 (Ultra experiment on, iAPChannel experiment off, uiSync experiment on)");

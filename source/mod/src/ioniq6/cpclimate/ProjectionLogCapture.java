@@ -48,10 +48,11 @@ final class ProjectionLogCapture extends Thread {
             int colon=body.indexOf(':',marker);
             if(colon<0)return null;
             String event=body.substring(colon+1).trim();
-            if(event.matches("\\[radio-sxm\\] forwarded decoded eligible catalog count=\\d{1,3}"))return event;
+            if(event.matches("\\[radio-sxm\\] forwarded decoded eligible catalog count=\\d{1,3}(?: excluded=\\d{1,3})?"))return event;
             if(event.equals("[radio-sxm] catalog bridge withheld: sender permission unavailable")||
-               event.equals("[radio-sxm] decoded catalog observer installed"))return event;
-            if(event.matches("\\[radio-sxm\\] (catalog bridge failed|artwork unavailable|catalog observer unavailable): [A-Za-z0-9_]{1,80}"))return event;
+               event.equals("[radio-sxm] decoded catalog observer installed")||
+               event.equals("[radio-sxm] current-channel observer installed"))return event;
+            if(event.matches("\\[radio-sxm\\] (catalog bridge failed|artwork unavailable|catalog observer unavailable|live metadata bridge failed|current-channel observer unavailable): [A-Za-z0-9_]{1,80}"))return event;
             return null;
         }
         Matcher m=STREAM.matcher(body);
