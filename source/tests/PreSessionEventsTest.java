@@ -19,6 +19,11 @@ public final class PreSessionEventsTest {
         check(q.drain(40000,0).get(0).message.equals("[sensitive message withheld]"));
         q.add("early negotiation",50000,50000,0);
         check(q.drain(110000,0).size()==1);
+        q.add("startup",120000,120000,0);
+        check(q.snapshot(120001,0).size()==1);
+        check(q.snapshot(120001,0).size()==1);
+        check(q.drain(120001,0).size()==1);
+        check(q.snapshot(120001,0).isEmpty());
         System.out.println("PreSessionEventsTest passed");
     }
 }

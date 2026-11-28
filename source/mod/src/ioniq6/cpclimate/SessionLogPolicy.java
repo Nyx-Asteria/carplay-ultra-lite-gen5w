@@ -1,6 +1,7 @@
 package ioniq6.cpclimate;
 
 import java.util.EnumSet;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -19,6 +20,21 @@ final class SessionLogPolicy {
             return size() > MAX_KEYS;
         }
     };
+    private static final int MAX_REPEATED_WARNING = 8;
+    private static final int MAX_RAW_PER_WINDOW = 120;
+    private static final class Budget {
+        long started; int count;
+        Budget(long started){this.started=started;}
+        boolean take(long now,int limit){
+            if(now<started||now-started>=WINDOW_MS){started=now;count=0;}
+            if(count>=limit)return false;
+            count++;return true;
+        }
+    }
+    private final LinkedHashMap<String,Budget> warningBudgets=new LinkedHashMap<String,Budget>(32,0.75f,true){
+        @Override protected boolean removeEldestEntry(Map.Entry<String,Budget> entry){return size()>MAX_KEYS;}
+    };
+    private final EnumMap<Category,Budget> rawBudgets=new EnumMap<Category,Budget>(Category.class);
     private long suppressed;
 
     SessionLogPolicy(EnumSet<Category> diagnostics) {
@@ -58,8 +74,18 @@ final class SessionLogPolicy {
     synchronized String accept(Level level, Category category, String message, long elapsedMs) {
         if (!enabled(level, category)) { suppressed++; return null; }
         String safe = sanitize(message);
-        // Errors and warnings always survive repetition filtering.
-        if (level != Level.ERROR && level != Level.WARN) {
+        boolean important=level==Level.ERROR||level==Level.WARN;
+        if(important){
+            String key=level.name()+'/'+category.name()+'/'+safe;
+            Budget budget=warningBudgets.get(key);
+            if(budget==null){budget=new Budget(elapsedMs);warningBudgets.put(key,budget);}
+            if(!budget.take(elapsedMs,MAX_REPEATED_WARNING)){suppressed++;return null;}
+        } else {
+            if(category==Category.VS_RAW||category==Category.PROJECTION_RAW){
+                Budget budget=rawBudgets.get(category);
+                if(budget==null){budget=new Budget(elapsedMs);rawBudgets.put(category,budget);}
+                if(!budget.take(elapsedMs,MAX_RAW_PER_WINDOW)){suppressed++;return null;}
+            }
             String key = level.name() + '/' + category.name() + '/' + safe;
             Long last = seen.get(key);
             if (last != null && elapsedMs >= last && elapsedMs - last < WINDOW_MS) {
@@ -72,5 +98,5 @@ final class SessionLogPolicy {
     }
 
     synchronized long suppressed() { return suppressed; }
-    synchronized void reset() { seen.clear(); suppressed = 0; }
+    synchronized void reset() { seen.clear(); warningBudgets.clear(); rawBudgets.clear(); suppressed = 0; }
 }

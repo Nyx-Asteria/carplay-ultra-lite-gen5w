@@ -953,6 +953,7 @@ final class VehicleState {
                 // the wheel heater's indicator follows a press only after ~5.5 s: its stale reading is held longer
                 long hold = e.getKey() == ClimateMap.WHEEL_LEVEL ? WHEEL_HOLD_MS : HOLD_MS;
                 if (now - since < hold && !same(frontSeatValue(e.getKey()) ? requestedSeat(e.getKey()) : values.get(e.getKey()), e.getValue())) continue;
+                if(frontSeatValue(e.getKey()))out.log("[seat-feedback] reconciled iid=" + e.getKey() + " requested=" + seatDiagnosticValue(requestedSeat(e.getKey())) + " actual=" + seatDiagnosticValue(e.getValue()) + " subscribed=" + followed.contains(e.getKey()));
                 heldSince.remove(e.getKey());
                 requestedSeats.remove(e.getKey());
             }
@@ -991,7 +992,7 @@ final class VehicleState {
             Long iid = OpackCodec.asLong(o);
             if (iid == null) continue;
             followed.add(iid);
-            if (seatFanValue(iid)) out.log("[seat-fan] subscribed iid=" + iid + " cached=" + values.get(iid) + " BCM=" + actualSeats.get(iid));
+            if (frontSeatValue(iid)) out.log("[seat-feedback] subscribed iid=" + iid + " cached=" + seatDiagnosticValue(values.get(iid)) + " BCM=" + seatDiagnosticValue(actualSeats.get(iid)));
             if (car != null && frontSeatValue(iid) && !immediateSeatFeedback(iid) && actualSeats.containsKey(iid)) held.put(iid, actualSeats.get(iid));
             else if (values.containsKey(iid)) held.put(iid, values.get(iid));
             else missing.put(iid, NO_VALUE);
@@ -1033,6 +1034,12 @@ final class VehicleState {
         {ClimateMap.DRIVER_VENT_LEVEL, ClimateMap.DRIVER_VENT_ON},
         {ClimateMap.PASSENGER_VENT_LEVEL, ClimateMap.PASSENGER_VENT_ON}
     };
+    /** Only bounded scalar seat values are diagnostic metadata; never stringify arbitrary phone objects. */
+    static String seatDiagnosticValue(Object value) {
+        if(value instanceof Boolean)return value.toString();
+        if(value instanceof Long && (Long)value>=-4 && (Long)value<=8)return value.toString();
+        return value==null?"null":"invalid("+value.getClass().getSimpleName()+")";
+    }
     private static boolean frontSeatValue(long iid) {
         return iid == ClimateMap.DRIVER_SEAT_LEVEL || iid == ClimateMap.DRIVER_SEAT_ON
                 || iid == ClimateMap.PASSENGER_SEAT_LEVEL || iid == ClimateMap.PASSENGER_SEAT_ON || seatFanValue(iid);
@@ -1073,12 +1080,13 @@ final class VehicleState {
             if (iid == null) continue;
             Object v = e.getValue();
             if (!writable.contains(iid)) {
+                if(frontSeatValue(iid))out.log("[seat-feedback] write refused iid=" + iid + " reason=not_writable");
                 out.log("VS phone may not write value " + iid);
                 results.put(iid, NO_VALUE);
                 continue;
             }
             if (navigationCharacteristic(iid)) out.log("[vs-navigation] phone characteristic " + names.get(iid));
-            else if (shared.contains(iid)) out.log("VS phone set " + names.get(iid) + " to " + shown(v));
+            else if (shared.contains(iid) && !frontSeatValue(iid)) out.log("VS phone set " + names.get(iid) + " to " + shown(v));
             else out.log("VS phone wrote " + names.get(iid));
             results.put(iid, WRITTEN);
             // LIVI hides a notification history entry here; M3 keeps no history, so nothing to hide
@@ -1087,7 +1095,7 @@ final class VehicleState {
             if (car != null && frontSeatValue(iid)) requestedSeats.put(iid, v);
             if (immediate) values.put(iid, v);
             if (immediate && !same(before, v) && followed.contains(iid)) changed.put(iid, v);
-            if (frontSeatValue(iid)) out.log("[seat-feedback] write iid=" + iid + " valueType=" + (v == null ? "null" : v.getClass().getSimpleName()) + " immediate=" + immediate + " subscribed=" + followed.contains(iid) + " queued=" + changed.containsKey(iid));
+            if (frontSeatValue(iid)) out.log("[seat-feedback] write iid=" + iid + " requested=" + seatDiagnosticValue(v) + " immediate=" + immediate + " subscribed=" + followed.contains(iid) + " queued=" + changed.containsKey(iid));
         }
         // An optimistic SeatFan notification must not expose a contradictory
         // level/power pair. Keep the request for OEM arbitration, but publish
@@ -1099,6 +1107,7 @@ final class VehicleState {
                 if (!Long.valueOf(WRITTEN).equals(results.get(pair[0])) && !Long.valueOf(WRITTEN).equals(results.get(pair[1]))) continue;
                 Object level=values.get(pair[0]), power=values.get(pair[1]);
                 if (!validFanFeedback(level,power)) {
+                    out.log("[seat-feedback] optimistic pair withheld iid=" + pair[0] + " reason=inconsistent_level_power");
                     for (long iid : pair) {
                         changed.remove(iid);
                         if (actualSeats.containsKey(iid)) values.put(iid,actualSeats.get(iid));
