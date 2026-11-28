@@ -292,9 +292,15 @@ public final class Video {
             @Override
             public void run() {
                 if(generation<0||generation!=sessionGeneration())return;
-                if (!parkAllowed()) { stop("Park or session unavailable"); return; }
+                if (!parkAllowed()) { stop("Park or session unavailable"); closeScreen(generation); return; }
                 claimPlayback(generation);
-                show();
+                try {
+                    show();
+                } catch (Throwable failure) {
+                    log("[video] window show failed: "+failure.getClass().getSimpleName());
+                    try { stop("window show failure"); }
+                    finally { closeScreen(generation); }
+                }
             }
         });
     }
@@ -831,6 +837,7 @@ public final class Video {
             playPause.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
+                    if (!parkAllowed() || playbackGeneration!=sessionGeneration()) { stop("Park or session unavailable"); return; }
                     if (player != null) player.setPlayWhenReady(!player.getPlayWhenReady());
                 }
             });
@@ -891,10 +898,13 @@ public final class Video {
         if (W <= 0 || H <= 0) {
             final int fw = w, fh = h;
             final float fp = par;
+            final FrameLayout owner=window;
+            final long generation=playbackGeneration;
             window.post(new Runnable() {
                 @Override
                 public void run() {
-                    if (window.getWidth() > 0) layoutSurface(fw, fh, fp);
+                    if (window==owner && generation==playbackGeneration && generation==sessionGeneration()
+                            && parkAllowed() && owner.getWidth() > 0) layoutSurface(fw, fh, fp);
                 }
             });
             return;
@@ -933,14 +943,25 @@ public final class Video {
         audioAttempt++;
         lastInsert = null;
         fallbackPending = false;
-        release();
-        if (shown) hide(why);
-        itemUuid = null;
-        streamId = -1;
-        currentUrl = null;
-        rateReceived = false;
-        requestedPlaying = false;
-        playbackGeneration = -1;
+        long owner=playbackGeneration;
+        // Hide the overlay even if codec release fails. A partially created
+        // window must not depend on the successful-show flag.
+        try {
+            if(window!=null)window.setVisibility(View.GONE);
+        } catch(Throwable t){log("[video] window hide failed: "+t.getClass().getSimpleName());}
+        shown=false;
+        try {
+            release();
+        } catch(Throwable t){log("[video] player release failed: "+t.getClass().getSimpleName());}
+        finally {
+            itemUuid = null;
+            streamId = -1;
+            currentUrl = null;
+            rateReceived = false;
+            requestedPlaying = false;
+            playbackGeneration = -1;
+            closeScreen(owner);
+        }
     }
 
     static void release() {
@@ -951,11 +972,14 @@ public final class Video {
             // The shared listener must not receive teardown events for an old item.
             ExoPlayer old=player;
             player=null;
-            if(listener!=null)old.removeListener(listener);
-            if(steps!=null)old.removeAnalyticsListener(steps);
-            listener=null;
-            steps=null;
-            old.release();
+            try {
+                if(listener!=null)old.removeListener(listener);
+                if(steps!=null)old.removeAnalyticsListener(steps);
+            } finally {
+                listener=null;
+                steps=null;
+                old.release();
+            }
         }
     }
 
