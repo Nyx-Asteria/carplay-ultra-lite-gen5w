@@ -60,6 +60,7 @@ public final class CpClimate extends ModEntry {
         if(logger!=null) logger.log(msg); else if(mod!=null) mod.log(msg);
     }
     static volatile long sessionGeneration;
+    static volatile long sessionStartedElapsed=-1;
     static volatile boolean sessionActive;
     static CarPlayMedia media;
     public static long videoSessionGeneration() { return sessionGeneration; }
@@ -134,24 +135,21 @@ public final class CpClimate extends ModEntry {
             boolean variant = ultra;
             boolean features = ultra;
             boolean enhanced = ultra;
-            m.log("[theme] identity=" + themePreflight + " cluster=" + cluster + " themedIds=" + themedIds + " variant=" + variant + " features=" + features + " enhanced=" + enhanced);
-            m.log("[theme] DiPO display profile enabled=" + ultra + " (shared provider native result not exposed)");
+            runtimeLog("[theme] identity=" + themePreflight + " cluster=" + cluster + " themedIds=" + themedIds + " variant=" + variant + " features=" + features + " enhanced=" + enhanced);
+            runtimeLog("[theme] DiPO display profile enabled=" + ultra + " (shared provider native result not exposed)");
             writeDelegatedScale(dir, m); // Optional Phone Projection Scaling integration.
             NativeProfile.writeDock(m, dir, "1");                                  // the bottom dock with the climate bar
             NativeProfile.writeVersion(m, dir, ultra ? "950" : "off");                             // receiver version 950.7.1 in /info
             NativeProfile.writeFlag(m, dir, "cpc-extras", ultra, "LIVI display extras");
             NativeProfile.writeCluster(m, dir, "full");                            // the instrument panel with its plugin (climate overlay)
-            NativeProfile.writeWide(m, dir, "0");
-            NativeProfile.writeUltra(m, dir, themedIds ? 2 : cluster ? 1 : 0);                       // virtual cluster + the theme's display names
+            String wide=SessionSettings.widescreen(m);
             boolean iapBridge = false, iap = false;               // iAP over CarPlay: an experiment, off
             NativeProfile.writeFlag(m, dir, "cpc-iap", false, "iAPChannel");
             // the theme's vehicle: the Aston Martin DBX unless the vehicle_variant test setting picks another
             // (the Climate app shows a placeholder instead of its car picture with DBX; which model it needs is a test)
             VehicleState.variant = variant ? "DBX" : "";
-            m.log("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
+            runtimeLog("vehicle variant " + (VehicleState.variant.isEmpty() ? "none" : VehicleState.variant));
             boolean uiSync = themedIds && m.settingBoolean("ultra_ui_sync", false);                               // the theme's layouts, palettes and wallpapers
-            NativeProfile.writeFlag(m, dir, "cpc-uisync", uiSync, "uiSync (CarPlay theme layouts and palettes)");
-            NativeProfile.writeFlag(m, dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
             NativeProfile.writeFeatures(m, dir, features ? "livi_all" : "off");
             NativeProfile.writeFlag(m, dir, "cpc-xfeat", enhanced, "/info enhancedRequestCarUI");
             // bit 1 = videoPlayback (the phone's AirPlay video while parked), bit 2 = hevc; both only when the phone offers them
@@ -159,22 +157,22 @@ public final class CpClimate extends ModEntry {
             int extraBits = m.settingBoolean("parked_video", false) && app.context != null ? 1 : 0;
             if (extraBits != 0) {
                 ParkedVideo park = new ParkedVideo(m);
-                if (!park.available()) { m.log("[video] Park getter missing; video withheld"); extraBits = 0; }
+                if (!park.available()) { runtimeLog("[video] Park getter missing; video withheld"); extraBits = 0; }
                 else {
                     boolean sound = !m.settingBoolean("parked_video_picture_only", false); // opt-in isolation; default retains audio fallback
                     NativeProfile.writeNumber(m, dir, "cpc-video-nosound", sound ? 0 : 1, "video: picture only");
-                    m.log("[video-audio] local player audio requested=" + sound + "; stock projection route untouched");
+                    runtimeLog("[video-audio] local player audio requested=" + sound + "; stock projection route untouched");
                     NativeProfile.writeNumber(m, dir, "cpc-video-nopicture", 0, "video: picture enabled");
                     new VideoMessages(new VsChannel.Log() { public void log(String s) { runtimeLog("[video] " + s); } });
                     if (!VideoMessages.startEngine(app.context)) {
-                        m.log("[video] engine unavailable; feature withheld");
+                        runtimeLog("[video] engine unavailable; feature withheld");
                         extraBits = 0;
-                    } else { park.start(); m.log("[video] engine initialized; Park confirmation required"); }
+                    } else { park.start(); runtimeLog("[video] engine initialized; Park confirmation required"); }
                 }
             }
             NativeProfile.writeNumber(m, dir, "cpc-xenable", extraBits, extraBits != 0 ? "SETUP extra features: videoPlayback" : "SETUP extra features off");
             NativeProfile.writeNumber(m, dir, "cpc-hid", 0, "LIVI input devices in /info");   // on, iOS drew a knob-focus box
-            m.log("[native] requesting CarPlayCore recipe; application result is reported by HMG-API");
+            runtimeLog("[native] requesting CarPlayCore recipe; application result is reported by HMG-API");
 
             // M2: the vehicle state data streams the native SETUP handler sends the phone to;
             // M3: answered from one VehicleState the two lanes share
@@ -200,11 +198,13 @@ public final class CpClimate extends ModEntry {
             VehicleState.extras = ClimateMap.extras = climate;
             VehicleState.seatFanImmediateFeedback = climate && m.settingBoolean("seat_fan_immediate_feedback", false);
             VehicleState.seatHeatImmediateFeedback = m.settingBoolean("seat_heat_immediate_feedback", true);
-            m.log("[seat-fan] immediate feedback experiment=" + VehicleState.seatFanImmediateFeedback + "; heating immediate=" + VehicleState.seatHeatImmediateFeedback);
+            ClimateMap.legacySeatHeatArbitration = climate && m.settingBoolean("legacy_seat_heat_arbitration", false);
+            runtimeLog("[seat-command] legacy heat arbitration=" + ClimateMap.legacySeatHeatArbitration);
+            runtimeLog("[seat-fan] immediate feedback experiment=" + VehicleState.seatFanImmediateFeedback + "; heating immediate=" + VehicleState.seatHeatImmediateFeedback);
             VehicleState.climateEnabled = climate;
             // Keep the front-seat layout and expose wheel heating only when OEM methods are available.
             VehicleState.wheelHeater = climate && CarClimate.wheelAvailable();
-            m.log("[wheel] OEM methods available=" + VehicleState.wheelHeater);
+            runtimeLog("[wheel] OEM methods available=" + VehicleState.wheelHeater);
             VehicleState.zonePower = false;
             VehicleState.rearZone = false;
             ClimateMap.blankWhenOff = true;
@@ -219,10 +219,42 @@ public final class CpClimate extends ModEntry {
             if (app.context != null && (m.settingBoolean("k5_integration", true))) {
                 vehicle = new K5Vehicle(app.context, m, state, lanes, log);
                 VehicleState.vehiclePage = vehicle.page;
-            } else { VehicleState.vehiclePage = null; m.log("[vehicle] page disabled or context unavailable"); }
-            if (!writeVspi(dir, log)) { m.log("[native] dynamic schema unavailable; patch withheld"); return; }
+            } else { VehicleState.vehiclePage = null; runtimeLog("[vehicle] page disabled or context unavailable"); }
+            if (!writeVspi(dir, log)) { runtimeLog("[native] dynamic schema unavailable; patch withheld"); return; }
+            // Do not advertise a display or UI Sync until its local listener is bound.
+            if(cluster) {
+                ClusterSink sink=new ClusterSink(log);
+                sink.start();
+                if(!sink.awaitReady(1000)) {
+                    runtimeLog("[theme] cluster listener not ready; virtual display withheld");
+                    cluster=false; themedIds=false; uiSync=false;
+                }
+            }
+            if(uiSync) {
+                runtimeLog("[theme] center and virtual cluster layout policy=phone-managed");
+                UiSyncChannel sync=new UiSyncChannel(dir,log,null,false);
+                sync.start();
+                if(!sync.awaitReady(1000)) {
+                    runtimeLog("[theme] uiSync listener not ready; UI Sync withheld");
+                    uiSync=false;
+                }
+            }
+            // Evaluate every flag even after a failure so stale settings are cleared where possible.
+            boolean profileReady=NativeProfile.writeWide(m,dir,wide);
+            profileReady &= NativeProfile.writeUltra(m,dir,themedIds?2:cluster?1:0);
+            profileReady &= NativeProfile.writeFlag(m,dir,"cpc-uisync",uiSync,"uiSync (CarPlay theme layouts and palettes)");
+            profileReady &= NativeProfile.writeFlag(m,dir,"cpc-sync-independent",uiSync && m.settingBoolean("ultra_independent_sync",false),"independent uiSync negotiation (experimental)");
+            if(!profileReady) {
+                NativeProfile.writeWide(m,dir,"0");
+                NativeProfile.writeUltra(m,dir,0);
+                NativeProfile.writeFlag(m,dir,"cpc-uisync",false,"uiSync");
+                NativeProfile.writeFlag(m,dir,"cpc-sync-independent",false,"independent uiSync");
+                runtimeLog("[native] display profile persistence failed; patch withheld");
+                return;
+            }
+            runtimeLog("[theme] listener-gated profile cluster="+cluster+" themedIds="+themedIds+" uiSync="+uiSync+" widescreen="+wide);
             m.nativePatch(app, "libCarPlayCore.so");
-            m.log("[climate] profile=K5 front heat/vent -3..3, rear seats=false, ambient=false");
+            runtimeLog("[climate] profile=K5 front heat/vent -3..3, rear seats=false, ambient=false");
             CarClimate car = climate ? new CarClimate(state, lanes, log) : null;
             VsChannel.car = car;
             for (VsChannel ch : lanes) ch.start();
@@ -233,7 +265,7 @@ public final class CpClimate extends ModEntry {
                 CarAudio.instance = audio;
                 audio.listen(app.context);
                 audio.start();
-            } else m.log("[audio] volume link disabled");
+            } else runtimeLog("[audio] volume link disabled");
             if (m.settingBoolean("k5_integration", true)) {
                 final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
                 media = new CarPlayMedia(new CarPlayMedia.Later() {
@@ -301,11 +333,10 @@ public final class CpClimate extends ModEntry {
                         media.pressed(name, value);
                     }
                 };
-                m.log("[media] manual controls ready; no autoplay");
+                runtimeLog("[media] manual controls ready; no autoplay");
             }
-            m.log("[climate] reader and both vehicle-state lanes started");
+            runtimeLog("[climate] reader and both vehicle-state lanes started");
             // the Ultra experiment: the virtual cluster's video goes here and is thrown away
-            if (cluster) new ClusterSink(log).start();
             if ((extraBits & 1) != 0) new ClusterSink(log, 7134, "videoPlayback").start();
             if ((extraBits & 1) != 0) VideoMessages.instance.start();
             // video stage 1: requestUI("videoplayback:") kept from DiPO (no jump to the launcher), screen borrowed as LIVI does
@@ -317,15 +348,7 @@ public final class CpClimate extends ModEntry {
                 IapBridge.loader = app.classLoader;
                 new IapChannel(dir, log, iapBridge).start();
             }
-            // the uiSync experiment: the theme's layout/palette channel, answered by UiSync
-            // Bootstrap the known Modular layout; palette selection is still subject to asset verification.
-            if (uiSync) {
-                boolean forceWallpaper = m.settingBoolean("ultra_force_wallpaper", false);
-                m.log("[theme] center Wallpaper layout request=" + forceWallpaper);
-                boolean phoneManagedCluster=m.settingBoolean("ultra_phone_managed_cluster",false);
-                m.log("[theme] cluster layout policy="+(phoneManagedCluster?"phone-managed":"legacy Modular/saved"));
-                new UiSyncChannel(dir, log, phoneManagedCluster?null:UiSync.layout("Modular"), forceWallpaper).start();
-            }
+
         }
         MethodHook copy = new MethodHook() {
             @Override
@@ -341,6 +364,8 @@ public final class CpClimate extends ModEntry {
         m.hook(app.classLoader, "dipo.carplay.session_started", new MethodHook() {
             @Override
             protected void afterHookedMethod(Param p) {
+                sessionActive = false;
+                sessionStartedElapsed = android.os.SystemClock.elapsedRealtime();
                 sessionGeneration++;
                 sessionActive = true;
                 if(sessionLogging!=null) sessionLogging.start(sessionGeneration);

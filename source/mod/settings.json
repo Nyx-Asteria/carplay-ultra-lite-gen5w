@@ -18,6 +18,14 @@
       "apply": "restart"
     },
     {
+      "key": "legacy_seat_heat_arbitration",
+      "type": "toggle",
+      "default": false,
+      "title": "Legacy Heated Seat Compatibility (Experimental)",
+      "description": "Restore RC5/RC6 heated-seat level precedence and cached-level selection. Retains current ventilation feedback and session safety checks. Requires K5 Vehicle Integration.",
+      "apply": "restart"
+    },
+    {
       "key": "seat_fan_immediate_feedback",
       "type": "toggle",
       "default": false,
@@ -46,7 +54,7 @@
       "type": "toggle",
       "default": false,
       "title": "UI Synchronization",
-      "description": "Enables Ultra layout and palette synchronization. Requires Ultra Sidebars. Theme selector remains experimental.",
+      "description": "Enables Ultra layout and palette synchronization. Both displays use phone-managed choices. Requires Ultra Sidebars. Theme selector remains experimental.",
       "apply": "restart"
     },
     {
@@ -58,20 +66,26 @@
       "apply": "restart"
     },
     {
-      "key": "ultra_phone_managed_cluster",
-      "type": "toggle",
-      "default": false,
-      "title": "Phone-Managed Cluster Layout (Experimental)",
-      "description": "Lets the iPhone choose the initial cluster layout and palette instead of requesting Modular or a saved selection. Does not remove the virtual cluster. Requires UI Synchronization and Ultra Sidebars. Off restores existing layout requests.",
-      "apply": "restart"
-    },
-    {
-      "key": "ultra_force_wallpaper",
-      "type": "toggle",
-      "default": false,
-      "title": "Force Theme Wallpaper (Experimental)",
-      "description": "Requests the theme's center Wallpaper layout with its supported blue palette once at UI Sync initialization. Requires UI Synchronization and Ultra Sidebars. Off restores phone-managed layouts.",
-      "apply": "restart"
+      "key": "ultra_widescreen_areas",
+      "type": "choice",
+      "default": "0",
+      "title": "Widescreen View Areas (Experimental)",
+      "description": "Independent of Ultra Sidebars. Adds whole and right-hand view areas where supported; existing OEM/PPS view areas are preserved. Restart required.",
+      "apply": "restart",
+      "options": [
+        {
+          "value": "0",
+          "title": "Disabled"
+        },
+        {
+          "value": "1",
+          "title": "Start whole display"
+        },
+        {
+          "value": "2",
+          "title": "Start right-hand area"
+        }
+      ]
     },
     {
       "key": "sxm_schema_test",

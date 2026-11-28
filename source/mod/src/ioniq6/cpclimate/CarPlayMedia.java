@@ -20,11 +20,13 @@ final class CarPlayMedia implements VehicleState.Controls {
 
     private static final class Session {
         final Object service;
+        final long generation;
         final Method onConsumer;
         final Class<?> consumer;
 
-        Session(Object service) throws Exception {
+        Session(Object service,long generation) throws Exception {
             this.service = service;
+            this.generation=generation;
             Method found = null;
             for (Method m : service.getClass().getMethods()) {
                 Class<?>[] p = m.getParameterTypes();
@@ -51,11 +53,12 @@ final class CarPlayMedia implements VehicleState.Controls {
     }
 
     synchronized void started(Object service) {
-        if (current != null && current.service == service) return;
+        long generation=CpClimate.sessionGeneration;
+        if (current != null && current.service == service && current.generation==generation) return;
         current = null;
         final Session session;
         try {
-            session = new Session(service);
+            session = new Session(service,generation);
         } catch (Throwable t) {
             out.log("[media] controls unavailable: " + t);
             return;
@@ -70,10 +73,16 @@ final class CarPlayMedia implements VehicleState.Controls {
         out.log("[media] CarPlay ended; manual media controls detached");
     }
 
+    static boolean sessionCurrent(boolean sameSession,long ownerGeneration,long activeGeneration,boolean active){
+        return sameSession && active && ownerGeneration==activeGeneration;
+    }
+    private synchronized boolean owns(Session session){
+        return sessionCurrent(current==session,session.generation,CpClimate.sessionGeneration,CpClimate.sessionActive);
+    }
     private void press(final Session session, final String name) {
         final Object button;
         synchronized (this) {
-            if (current != session || !mod.enabled() || !mod.settingBoolean("k5_integration", true) || !CpClimate.sessionActive) return;
+            if (!owns(session) || !mod.enabled() || !mod.settingBoolean("k5_integration", true) || !CpClimate.sessionActive) return;
         }
         try {
             button = session.button(name);
@@ -81,7 +90,8 @@ final class CarPlayMedia implements VehicleState.Controls {
             out.log("[media] " + name + " unavailable: " + t);
             return;
         }
-        // Always pair a press with a release, even when invocation reports an error.
+        if(!owns(session))return;
+        // Always pair a press with a release within the same connection, even when invocation reports an error.
         try {
             out.log("[media] " + name + " down: " + session.onConsumer.invoke(session.service, button, true));
         } catch (Throwable t) {
@@ -90,7 +100,7 @@ final class CarPlayMedia implements VehicleState.Controls {
             later.post(new Runnable() {
                 @Override public void run() {
                     synchronized (CarPlayMedia.this) {
-                        if (current != session) return; // never release into a new connection
+                        if (!owns(session)) return; // never release into a new connection
                     }
                     try {
                         out.log("[media] " + name + " up: " + session.onConsumer.invoke(session.service, button, false));
@@ -111,7 +121,7 @@ final class CarPlayMedia implements VehicleState.Controls {
         synchronized (this) {
             session = current;
         }
-        if (session == null) return;
+        if (session == null || !owns(session)) return;
         later.post(new Runnable() {
             @Override public void run() { press(session, button); }
         }, 0);

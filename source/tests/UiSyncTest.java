@@ -300,13 +300,14 @@ public class UiSyncTest {
         f.write(keys);
         f.close();
         final List<String> logs = new ArrayList<String>();
-        new UiSyncChannel(dir, new VsChannel.Log() {
+        UiSyncChannel channel=new UiSyncChannel(dir, new VsChannel.Log() {
             @Override
             public synchronized void log(String msg) {
                 logs.add(msg);
             }
-        }, UiSync.layout("Modular")).start();
-        Thread.sleep(300);
+        }, UiSync.layout("Modular"));
+        channel.start();
+        check("uiSync listener reports bound before connection",channel.awaitReady(3000));
         Socket s = new Socket("127.0.0.1", UiSyncChannel.PORT);
         // the phone writes with the car's read key and reads with its write key
         ChaChaPoly phoneCipher = new ChaChaPoly(wr, rd);
@@ -355,6 +356,36 @@ public class UiSyncTest {
             }
         }
         check("the channel logs both sides: " + logs, phoneLogged && carLogged);
+    }
+
+    static void listenerReadiness(File dir) throws Exception {
+        VsChannel.Log quiet=new VsChannel.Log(){public void log(String msg){}};
+        // Reserve a real port to prove both listeners signal bind failure.
+        try(java.net.ServerSocket occupied=new java.net.ServerSocket(0)){
+            ClusterSink blocked=new ClusterSink(quiet,occupied.getLocalPort(),"test-blocked");
+            check("unstarted cluster listener times out",!blocked.awaitReady(10));
+            Thread.currentThread().interrupt();
+            check("interrupted readiness wait fails",!blocked.awaitReady(1000));
+            check("interrupt status preserved",Thread.interrupted());
+            blocked.start();
+            check("cluster bind collision never reports ready",!blocked.awaitReady(3000));
+            blocked.join(3000);
+            check("failed cluster listener exits",!blocked.isAlive());
+        }
+        try(java.net.ServerSocket occupied=new java.net.ServerSocket(UiSyncChannel.PORT)){
+            UiSyncChannel blocked=new UiSyncChannel(dir,quiet,null,false);
+            check("unstarted uiSync listener times out",!blocked.awaitReady(10));
+            blocked.start();
+            check("uiSync bind collision never reports ready",!blocked.awaitReady(3000));
+            blocked.join(3000);
+            check("failed uiSync listener exits",!blocked.isAlive());
+        }
+        ClusterSink sink=new ClusterSink(quiet,ClusterSink.PORT,"test-cluster");
+        sink.start();
+        check("cluster listener reports ready",sink.awaitReady(3000));
+        try(Socket socket=new Socket("127.0.0.1",ClusterSink.PORT)){
+            socket.getOutputStream().write(new byte[]{1,2,3});
+        }
     }
 
     static void independentConnections() {
@@ -446,6 +477,7 @@ public class UiSyncTest {
         sharedPreferences(new File(args[0]));
         variant();
         plists(new File(args[1]), new File(args[2]));
+        listenerReadiness(new File(args[0]));
         channel(new File(args[0]));
         System.out.println(fails == 0 ? "ALL OK" : fails + " FAILED");
         System.exit(fails == 0 ? 0 : 1);

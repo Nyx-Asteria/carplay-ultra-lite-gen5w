@@ -15,3 +15,26 @@ RC5/RC6 snapshots retained in rebased history (9f121c86, fa0f940a); original tag
 ## Agreed RC11 display behavior
 
 Keep Ultra Sidebars and identity dependency gates. Prepare display configuration and listeners before relevant negotiation. Keep virtual cluster and native TBT independent; receive and discard virtual video. Center and cluster layouts, wallpaper and palettes are phone-managed; remove forced-layout experiments only after auditing persisted settings. Restore upstream-style viewAreas negotiation with sidebars after validating the native gate. Add independent experimental widescreen view areas selector (cpc-wide: 0 disabled/default, 1 whole display, 2 right-hand area). Coordinate scaling with PPS. Do not implement WCP or STBT changes here. WCP owns group 20/21, stock/explicit Kia K5 gasoline identity, startup StartSession and optional FTv2 experiments; integrate the new provider only when available.
+
+
+## Detailed RC11 tracking (expanded from the same agreed scope)
+
+1. Repository cleanup and history consolidation (initial pass complete; final release consolidation pending).
+2. Session logging, startup/teardown, privacy, USB export and diagnostics (implemented; vehicle validation pending).
+3. Legacy heated-seat compatibility (implemented; physical results pending).
+4. Seat ventilation schema and feedback; passenger temperature and SYNC (evidence-limited; preserve existing mappings unless supported).
+5. FM station catalog, seek and HD multicast (in progress; no speculative Apple protocol keys).
+6. SiriusXM channel identity, displayed number, catalog, actual favorites, live metadata and artwork (in progress; preserve eligibility and locks).
+7. Vehicle information (odometer/range/units), audio/volume and media routing, native shortcuts (review and regressions; no speculative writes).
+8. Parked AirPlay lifecycle and rendering (retain Park interlock; only evidence-backed corrections).
+9. Theme catalog/eligibility, phone-managed center and virtual cluster layouts/palettes/wallpaper, sidebar behavior.
+10. Native display negotiation (viewAreas with sidebars), virtual cluster and UI Sync readiness before advertisement.
+11. Independent widescreen view areas selector (disabled/whole/right; preserve PPS ownership).
+12. Companion integration: consume WCP readiness, align CPUL advertisement/startup with WCP identity and StartSession, keep STBT sole navigation publisher and PPS sole scaling owner; update verified pins and validate combined installation. No implementation of companion-owned features here.
+13. Final regression, consolidation, signed candidate, changelog and owner-authorized release; targeted parked vehicle acceptance.
+
+These are tracking subdivisions, not additional promises of fixes or a change to the agreed scope. Evidence-limited functionality can remain deferred with explicit acceptance tests. Waze investigation belongs to WCP/STBT; CPUL must preserve working TBT. Host regression success is not vehicle validation.
+
+## RC11 phone-managed layout policy
+
+Production UI Sync now always passes null cluster layout and false forced center wallpaper. Retired settings ultra_phone_managed_cluster and ultra_force_wallpaper are removed from the manifest and session header; previously persisted values are ignored rather than migrated into forced requests. The existing protocol fixtures for legacy requests remain as historical regression coverage. UI Sync master and sidebar gates are unchanged. This is not a verified theme selector or wallpaper fix.

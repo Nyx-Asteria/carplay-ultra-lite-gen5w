@@ -32,13 +32,27 @@ final class ClusterSink extends Thread {
         setDaemon(true);
     }
 
+    private final java.util.concurrent.CountDownLatch bindFinished=new java.util.concurrent.CountDownLatch(1);
+    private volatile boolean bound;
+    boolean awaitReady(long timeoutMs) {
+        try {
+            return bindFinished.await(timeoutMs,java.util.concurrent.TimeUnit.MILLISECONDS) && bound;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
     @Override
     public void run() {
-        try {
-            ServerSocket s = new ServerSocket();
+        long started = System.nanoTime();
+        out.log("[listener] " + what + " bind requested port=" + port);
+        try (ServerSocket s = new ServerSocket()) {
             s.setReuseAddress(true);
             s.bind(new InetSocketAddress(port));
-            out.log(what + " listening on port " + port + " (experiment)");
+            bound=true;
+            bindFinished.countDown();
+            out.log("[listener] " + what + " ready port=" + port + " elapsed_ms=" + (System.nanoTime()-started)/1000000L);
             while (true) {
                 final Socket sock = s.accept();
                 new Thread("cp-climate-cluster-conn") {
@@ -49,13 +63,15 @@ final class ClusterSink extends Thread {
                 }.start();
             }
         } catch (Throwable t) {
-            out.log(what + " listener stopped: " + t);
+            out.log("[listener] " + what + " listener stopped: " + t.getClass().getSimpleName());
+        } finally {
+            bound=false;
+            bindFinished.countDown();
         }
     }
 
     void drain(Socket sock) {
-        String who = String.valueOf(sock.getRemoteSocketAddress());
-        out.log(what + " stream from " + who);
+        out.log("[listener] " + what + " stream opened");
         long total = 0, next = REPORT_BYTES;
         long start = System.currentTimeMillis();
         try {
@@ -63,6 +79,7 @@ final class ClusterSink extends Thread {
             byte[] buf = new byte[64 * 1024];
             int n;
             while ((n = in.read(buf)) > 0) {
+                if(total==0)out.log("[listener] " + what + " first bytes=" + n);
                 total += n;
                 if (total >= next) {
                     out.log(what + " stream: " + total / 1024 + " KB in " + (System.currentTimeMillis() - start) / 1000 + " s");
@@ -70,13 +87,13 @@ final class ClusterSink extends Thread {
                 }
             }
         } catch (Throwable t) {
-            out.log(what + " stream error: " + t);
+            out.log("[listener] " + what + " stream failed: " + t.getClass().getSimpleName());
         } finally {
             try {
                 sock.close();
             } catch (Throwable ignored) {
             }
-            out.log(what + " stream closed after " + total / 1024 + " KB, " + (System.currentTimeMillis() - start) / 1000 + " s");
+            out.log("[listener] " + what + " stream closed bytes=" + total + " elapsed_ms=" + Math.max(0,System.currentTimeMillis()-start));
         }
     }
 }

@@ -188,7 +188,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
                     || iid == ClimateMap.PASSENGER_SEAT_LEVEL || iid == ClimateMap.PASSENGER_SEAT_ON
                     || iid == ClimateMap.DRIVER_VENT_LEVEL || iid == ClimateMap.DRIVER_VENT_ON
                     || iid == ClimateMap.PASSENGER_VENT_LEVEL || iid == ClimateMap.PASSENGER_VENT_ON)
-                out.log("[seat] write iid=" + iid + " value=" + e.getValue() + " commands=" + list);
+                out.log("[seat] write iid=" + iid + " value=" + VehicleState.seatDiagnosticValue(e.getValue()) + " commands=" + list + " generation=" + generation);
         }
         if (!rearDefrost) {
             for (java.util.Iterator<ClimateMap.Command> i = list.iterator(); i.hasNext(); )
@@ -204,8 +204,10 @@ final class CarClimate extends Thread implements VehicleState.Car {
         }
         if (list.isEmpty() && ambient == null) out.log("CAR nothing to send for " + written.keySet());
         for (ClimateMap.Command command : list) {
-            if (allowed(command)) commands.add(new QueuedCommand(command, generation));
-            else out.log("CAR test switch withheld " + command);
+            if (allowed(command)) {
+                commands.add(new QueuedCommand(command, generation));
+                if(command.kind==ClimateMap.SEAT)out.log("[seat-command] queued " + command + " generation=" + generation);
+            } else out.log((command.kind==ClimateMap.SEAT?"[seat-command]":"CAR") + " test switch withheld " + command);
         }
     }
 
@@ -229,7 +231,7 @@ final class CarClimate extends Thread implements VehicleState.Car {
                         }
                         if (send(c, queued.generation)) out.log("CAR sent " + c);
                     } catch (Throwable t) {
-                        out.log("CAR " + c + " failed: " + t);
+                        out.log((c.kind==ClimateMap.SEAT?"[seat-command]":"CAR") + " " + c + " failed: " + t.getClass().getSimpleName());
                     }
                 }
             }
@@ -265,8 +267,11 @@ final class CarClimate extends Thread implements VehicleState.Car {
 
     /** sends a command; false if nothing needed sending */
     boolean send(ClimateMap.Command c, long generation) throws Exception {
-        if (!allowed(c)) { out.log("CAR test switch withheld " + c); return false; }
-        if (sessionScoped(c) && !SeatCommandTrace.sessionMatches(generation, CpClimate.sessionGeneration, CpClimate.sessionActive)) return false;
+        if (!allowed(c)) { out.log((c.kind==ClimateMap.SEAT?"[seat-command]":"CAR") + " test switch withheld " + c); return false; }
+        if (sessionScoped(c) && !SeatCommandTrace.sessionMatches(generation, CpClimate.sessionGeneration, CpClimate.sessionActive)) {
+            out.log("[climate-command] dispatch withheld: stale generation=" + generation);
+            return false;
+        }
         boolean passenger = c.kind == ClimateMap.FRONT && (c.a == ClimateMap.FRONT_PASSENGER_C || c.a == ClimateMap.FRONT_PASSENGER_F);
         long dispatchedAt = android.os.SystemClock.elapsedRealtime();
         int seatBefore = -1;
@@ -302,7 +307,10 @@ final class CarClimate extends Thread implements VehicleState.Car {
                 data.writeInt(c.b);
                 if (c.kind == ClimateMap.VR) data.writeInt(c.c);
             }
-            if (sessionScoped(c) && (!CpClimate.sessionActive || generation != CpClimate.sessionGeneration)) return false;
+            if (sessionScoped(c) && (!CpClimate.sessionActive || generation != CpClimate.sessionGeneration)) {
+                out.log("[climate-command] transaction withheld: stale generation=" + generation);
+                return false;
+            }
             if (!b.transact(code, data, reply, 0)) throw new IllegalStateException("vehicle transaction rejected");
             reply.readException();
         } finally {

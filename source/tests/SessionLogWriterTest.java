@@ -21,6 +21,9 @@ public final class SessionLogWriterTest {
             w.record(6,INFO,CORE,"wrong generation");
             w.record(7,ERROR,RADIO,"failed");
             w.record(7,INFO,THEMES,"[theme-sync] negotiated traffic panels=[Cluster_Display]");
+            w.record(7,INFO,THEMES,"[projection-theme] offered altScreen=1");
+            w.record(7,INFO,THEMES,"[listener] cluster ready port=7132 elapsed_ms=1");
+            w.record(7,INFO,CLIMATE,"[seat-command] #1 driver BCM matched requested=8 actual=8");
             long observedEnd=System.currentTimeMillis();
             w.record(7,INFO,CORE,"late teardown closed");
             w.finishAt(7,"unknown",3,observedEnd);
@@ -38,6 +41,13 @@ public final class SessionLogWriterTest {
             check(read(new File(session,"summary.txt")).contains("policy_suppressed=3"));
             check(read(new File(session,"summary.txt")).contains("end_ms="+observedEnd));
             check(read(new File(session,"session.log")).contains("late teardown closed"));
+            String summary=read(new File(session,"summary.txt"));
+            check(summary.contains("setup_offered="));
+            check(summary.contains("cluster_listener_ready="));
+            check(summary.contains("last_seat_bcm_result="));
+            check(summary.contains("events_themes=3"));
+            check(summary.contains("error_count=1"));
+            check(summary.contains("first_event_ms="+nativeAt));
             System.out.println("SessionLogWriterTest passed");
         }finally{SessionLogWriter.delete(root);}
     }

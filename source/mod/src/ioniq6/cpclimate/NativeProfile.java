@@ -16,6 +16,18 @@ final class NativeProfile {
         } finally {
             writer.close();
         }
+        CpClimate.runtimeLog("[native-profile] " + file.getName() + " written value=" + value.trim());
+    }
+
+    private static boolean clearValue(File file) {
+        boolean removed = !file.exists() || file.delete();
+        CpClimate.runtimeLog("[native-profile] " + file.getName() + " disabled; clear=" + (removed ? "ok" : "failed"));
+        return removed;
+    }
+
+    private static void writeFailed(File file, Exception error) {
+        CpClimate.runtimeLog("[native-profile] " + file.getName() + " write failed: " + error.getClass().getSimpleName());
+        clearValue(file);
     }
 
     /** the dock position setting, for the native /info hook (files/cpc-dock: 0 auto, 1 bottom, 2 side) */
@@ -25,10 +37,10 @@ final class NativeProfile {
             int edge = Integer.parseInt(dock.trim());
             if (edge < 0 || edge > 4) edge = 1;
             writeValue(f, edge + "\n");
-            mod.log("CarPlay dock edge " + edge);
+            CpClimate.runtimeLog("CarPlay dock edge " + edge);
         } catch (Exception e) {
-            f.delete();
-            mod.log("CarPlay dock: bottom (" + e + ")");
+            writeFailed(f,e);
+            CpClimate.runtimeLog("CarPlay dock: bottom (" + e + ")");
         }
     }
 
@@ -36,20 +48,20 @@ final class NativeProfile {
     static void writeVersion(ModContext mod, File dir, String version) {
         File f = new File(dir, "cpc-version");
         if (!"950".equals(version.trim())) {
-            f.delete();
+            clearValue(f);
             return;
         }
         try {
             writeValue(f, "1\n");
-            mod.log("CarPlay receiver version 950.7.1 in /info (experiment)");
+            CpClimate.runtimeLog("CarPlay receiver version 950.7.1 in /info (experiment)");
         } catch (Exception e) {
-            f.delete();
+            writeFailed(f,e);
         }
     }
 
     /** an on/off experiment for the native /info hook: the file holds 1 while on */
-    static void writeFlag(ModContext mod, File dir, String name, boolean on, String what) {
-        writeNumber(mod, dir, name, on ? 1 : 0, what);
+    static boolean writeFlag(ModContext mod, File dir, String name, boolean on, String what) {
+        return writeNumber(mod, dir, name, on ? 1 : 0, what);
     }
 
     /** LIVI's /info feature bits that DiPO's lacks, without its audio ones (CARPLAY_AUDIO_FEATURES: bits 9, 11, 18, 20, 22, 26, 40) */
@@ -73,60 +85,66 @@ final class NativeProfile {
             }
         }
         if (bits == 0) {
-            f.delete();
+            clearValue(f);
             return;
         }
         try {
             writeValue(f, Long.toHexString(bits) + "\n");
-            mod.log("/info feature bits 0x" + Long.toHexString(bits) + " (" + v + ") on (experiment)");
+            CpClimate.runtimeLog("/info feature bits 0x" + Long.toHexString(bits) + " (" + v + ") on (experiment)");
         } catch (Exception e) {
-            f.delete();
+            writeFailed(f,e);
         }
     }
 
     /** a small number for the native hooks; 0 deletes the file */
-    static void writeNumber(ModContext mod, File dir, String name, int value, String what) {
+    static boolean writeNumber(ModContext mod, File dir, String name, int value, String what) {
         File f = new File(dir, name);
         if (value == 0) {
-            f.delete();
-            return;
+            return clearValue(f);
         }
         try {
             writeValue(f, value + "\n");
-            mod.log(what + " on (experiment)");
+            CpClimate.runtimeLog(what + " on (experiment)");
+            return true;
         } catch (Exception e) {
-            f.delete();
+            writeFailed(f,e);
+            return false;
         }
     }
 
     /** the Ultra experiment for the native hooks (files/cpc-ultra: 1 virtual cluster, 2 with the theme's display ids) */
-    static void writeUltra(ModContext mod, File dir, int mode) {
+    static boolean writeUltra(ModContext mod, File dir, int mode) {
         File f = new File(dir, "cpc-ultra");
         if (mode == 0) {
-            f.delete();
-            return;
+            return clearValue(f);
         }
         try {
             writeValue(f, mode + "\n");
-            mod.log("CarPlay Ultra virtual cluster on" + (mode == 2 ? ", with the theme's display ids" : "") + " (experiment)");
+            CpClimate.runtimeLog("CarPlay Ultra virtual cluster on" + (mode == 2 ? ", with the theme's display ids" : "") + " (experiment)");
+            return true;
         } catch (Exception e) {
-            f.delete();
+            writeFailed(f,e);
+            return false;
         }
     }
 
     /** the Apple widescreen view areas experiment (files/cpc-wide: 1 start whole, 2 start right) */
-    static void writeWide(ModContext mod, File dir, String value) {
+    static String wideMode(String value) {
+        return "1".equals(value) || "2".equals(value) ? value : "0";
+    }
+    static boolean writeWide(ModContext mod, File dir, String value) {
         File f = new File(dir, "cpc-wide");
-        String v = value.trim();
+        String v = wideMode(value);
         if (!"1".equals(v) && !"2".equals(v)) {
-            f.delete();
-            return;
+            return clearValue(f);
         }
         try {
             writeValue(f, v + "\n");
-            mod.log("Apple widescreen view areas, start " + ("2".equals(v) ? "right" : "whole") + " (experiment)");
+            CpClimate.runtimeLog("Apple widescreen view areas, start " + ("2".equals(v) ? "right" : "whole") + " (experiment)");
+            return true;
         } catch (Exception e) {
-            f.delete();
+            writeFailed(f,e);
+            return false;
         }
     }
 
@@ -138,14 +156,14 @@ final class NativeProfile {
         int code = "off".equals(v) || "false".equals(v) ? 1 : "no_instruments".equals(v) ? 2 : "no_plugin".equals(v) ? 3
                 : "plugin_main".equals(v) ? 4 : "plugin_stream".equals(v) ? 5 : 0;
         if (code == 0) {
-            f.delete();
+            clearValue(f);
             return;
         }
         try {
             writeValue(f, code + "\n");
-            mod.log("instrument panel: " + v + " (experiment)");
+            CpClimate.runtimeLog("instrument panel: " + v + " (experiment)");
         } catch (Exception e) {
-            f.delete();
+            writeFailed(f,e);
         }
     }
 

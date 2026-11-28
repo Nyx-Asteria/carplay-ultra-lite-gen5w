@@ -368,6 +368,7 @@ final class ClimateMap {
 
     /** the extra seat and wheel controls (setting extra_seats): VehicleState.withExtras adds these values to the description */
     static volatile boolean extras;
+    static volatile boolean legacySeatHeatArbitration;
     static final long REAR_LEFT_LEVEL = 1034, REAR_LEFT_ON = 1035, REAR_RIGHT_LEVEL = 1038, REAR_RIGHT_ON = 1039;
     static final long DRIVER_VENT_LEVEL = 1042, DRIVER_VENT_ON = 1043, PASSENGER_VENT_LEVEL = 1046, PASSENGER_VENT_ON = 1047;
     static final long WHEEL_LEVEL = 572;
@@ -477,7 +478,7 @@ final class ClimateMap {
                 : ventSeat(code, true, written.get(ventOn), now.get(ventLevel), now.get(heatLevel));
         // A level may be retained by the phone while the corresponding power
         // is explicitly off. Do not treat that retained level as activation.
-        if (separate && Boolean.FALSE.equals(written.get(heatOn))) heat = seat(code, true, false, now.get(heatLevel));
+        if (separate && !legacySeatHeatArbitration && Boolean.FALSE.equals(written.get(heatOn))) heat = seat(code, true, false, now.get(heatLevel));
         if (separate && Boolean.FALSE.equals(written.get(ventOn))) vent = ventSeat(code, true, false, now.get(ventLevel), now.get(heatLevel));
         if (separate && heat != null && heat.b == 2 && number(now.get(ventLevel), 0) > 0) heat = null;
         // If both modes request activation, prefer an explicit nonzero level over

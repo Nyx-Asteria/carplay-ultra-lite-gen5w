@@ -41,6 +41,20 @@ public final class SessionLogPolicyTest {
         check(detail.enabled(DEBUG,THEMES) && detail.enabled(DEBUG,AIRPLAY));
         check(!detail.enabled(TRACE,VS_RAW) && !detail.enabled(TRACE,PROJECTION_RAW));
         check(detail.enabled(WARN,PROJECTION_RAW));
+        SessionLogPolicy burst=new SessionLogPolicy(EnumSet.of(VS_RAW,PROJECTION_RAW));
+        for(int i=0;i<8;i++)check(burst.accept(WARN,RADIO,"repeated failure",i)!=null);
+        check(burst.accept(WARN,RADIO,"repeated failure",8)==null);
+        check(burst.accept(WARN,RADIO,"different failure",8)!=null);
+        check(burst.accept(WARN,RADIO,"repeated failure",10000)!=null);
+        for(int i=0;i<120;i++)check(burst.accept(TRACE,VS_RAW,"packet "+i,10001)!=null);
+        check(burst.accept(TRACE,VS_RAW,"extra packet",10001)==null);
+        check(burst.accept(TRACE,PROJECTION_RAW,"other category",10001)!=null);
+        check(burst.accept(ERROR,VS_RAW,"critical failure",10001)!=null);
+        check(burst.accept(TRACE,VS_RAW,"new window",20001)!=null);
+        check(burst.suppressed()==2);
+        burst.reset();
+        check(burst.accept(TRACE,VS_RAW,"fresh",20002)!=null);
+        check(burst.suppressed()==0);
         System.out.println("SessionLogPolicyTest passed");
     }
 }

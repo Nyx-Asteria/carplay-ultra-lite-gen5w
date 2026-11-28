@@ -11,10 +11,19 @@ public final class PreSessionEventsTest {
         check(r.size()==1 && r.get(0).at==12500 && r.get(0).message.equals("recent"));
         check(q.drain(13000,0).isEmpty());
         q.add("expires",15000,15000,0);
-        check(q.drain(25001,0).isEmpty());
-        for(int i=0;i<40;i++)q.add("event"+i,30000+i,30100,0);
-        r=q.drain(30100,0);
-        check(r.size()==32 && r.get(0).message.equals("event8"));
+        check(q.drain(15000+PreSessionEvents.MAX_AGE_MS+1,0).isEmpty());
+        for(int i=0;i<PreSessionEvents.LIMIT+8;i++)q.add("event"+i,30000+i,31000,0);
+        r=q.drain(31000,0);
+        check(r.size()==PreSessionEvents.LIMIT && r.get(0).message.equals("event8"));
+        q.add("password=example",40000,40000,0);
+        check(q.drain(40000,0).get(0).message.equals("[sensitive message withheld]"));
+        q.add("early negotiation",50000,50000,0);
+        check(q.drain(110000,0).size()==1);
+        q.add("startup",120000,120000,0);
+        check(q.snapshot(120001,0).size()==1);
+        check(q.snapshot(120001,0).size()==1);
+        check(q.drain(120001,0).size()==1);
+        check(q.snapshot(120001,0).isEmpty());
         System.out.println("PreSessionEventsTest passed");
     }
 }

@@ -5,8 +5,8 @@ import java.util.List;
 
 /** Bounded, recent native events only; no protocol bodies. Caller serializes access. */
 final class PreSessionEvents {
-    static final long MAX_AGE_MS=10000;
-    static final int LIMIT=32;
+    static final long MAX_AGE_MS=120000;
+    static final int LIMIT=256;
     static final class Event {
         final String message; final long at;
         Event(String message,long at){this.message=message;this.at=at;}
@@ -18,7 +18,12 @@ final class PreSessionEvents {
     void add(String message,long at,long now,long previousEnd){
         if(!recent(at,now,previousEnd))return;
         if(events.size()>=LIMIT)events.removeFirst();
-        events.addLast(new Event(message,at));
+        events.addLast(new Event(SessionLogPolicy.sanitize(message),at));
+    }
+    List<Event> snapshot(long now,long previousEnd){
+        List<Event> result=new ArrayList<Event>();
+        for(Event e:events)if(recent(e.at,now,previousEnd))result.add(e);
+        return result;
     }
     List<Event> drain(long now,long previousEnd){
         List<Event> result=new ArrayList<Event>();

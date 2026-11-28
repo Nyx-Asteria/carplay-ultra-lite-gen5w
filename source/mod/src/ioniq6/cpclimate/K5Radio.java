@@ -97,6 +97,14 @@ final class K5Radio {
     static boolean metadataNewEnough(long khz,long generation,long received,long previousKhz,long previousGeneration,long previousReceived) {
         return khz!=previousKhz || generation!=previousGeneration || received>=previousReceived;
     }
+    static boolean callbackFresh(long received,long now,long sessionStart){
+        return sessionStart>=0 && received>=sessionStart && received<=now && now-received<=2000;
+    }
+    private static boolean callbackCurrent(long generation,long received,long now){
+        return CpClimate.sessionActive && generation==CpClimate.sessionGeneration
+                && callbackFresh(received,now,CpClimate.sessionStartedElapsed)
+                && generation==CpClimate.sessionGeneration && CpClimate.sessionActive;
+    }
     private void listenMetadata() {
         try {
             context.registerReceiver(new android.content.BroadcastReceiver() {
@@ -107,8 +115,7 @@ final class K5Radio {
                     long received = i.getLongExtra("received", -1);
                     long now = android.os.SystemClock.elapsedRealtime();
                     String name = i.getStringExtra("name");
-                    if (khz < 87500 || khz > 108000 || received < 0 || now < received
-                            || now - received > 2000) return;
+                    if (khz < 87500 || khz > 108000 || !callbackCurrent(generation,received,now)) return;
                     if (khz != lastFmFrequency || generation!=CpClimate.sessionGeneration) return;
                     StationName prior=stationName;
                     if (name != null && name.length() <= 256 && (prior==null || metadataNewEnough(khz,generation,received,prior.khz,prior.generation,prior.received))) {
@@ -157,6 +164,7 @@ final class K5Radio {
     // mIsBsmValidStaton (boolean). Keep the OEM spelling.
     private long lastListPoll;
     private String lastScanSummary = "";
+    private String lastPublishedFmSummary = "";
     private java.util.Set<Long> fmScan = java.util.Collections.emptySet();
     // Observed stations are a fallback, not a claimed complete RF scan.
     private final java.util.TreeMap<Long,String> observedFm = new java.util.TreeMap<Long,String>();
@@ -202,6 +210,7 @@ final class K5Radio {
         all.addAll(observedFm.keySet());
         java.util.List<Object> items = new java.util.ArrayList<Object>();
         for (Long khz : all) {
+            if(khz<87900 || khz>107900 || (khz-87900)%200!=0)continue;
             String label = String.format(java.util.Locale.US, "%.1f MHz", khz / 1000.0);
             java.util.Map<String,Object> item = new java.util.LinkedHashMap<String,Object>();
             item.put("identifier", Long.toString(khz));
@@ -236,11 +245,13 @@ final class K5Radio {
         values.put(4359L, 0L);
         values.put(4117L, ClimateMap.BLANK);
         if (!enabled() || !CpClimate.sessionActive) {
+            seekLog(seekTrace.cancel());
             fmActive = false; sxmActive = false; sxmAvailable = false;
             stationName = null; stationArtwork = null; clearTags(); lastFmFrequency = -1;
             sxmArt = null; currentSxmChannel = -1; fullSxm = null; sxmLive.clear();
             sxmKnownGeneration = -1; sxmKnownIds = java.util.Collections.emptySet();
             lastListPoll = 0; fmScan = java.util.Collections.emptySet();
+            observedFm.clear(); observedGeneration=-1; lastScanSummary=""; lastPublishedFmSummary="";
             fmTuner=null; fmAudio=null; sxmTuner=null; lastServiceHealth="";
             return values;
         }
@@ -260,6 +271,7 @@ final class K5Radio {
             serviceHealth("FM="+(fmTuner!=null&&khz>0)+" audio="+(fmAudio!=null)+" mode="+mode+" stream="+stream);
             // RC4 observed FM mode 2 / stream 38, AM mode 1 / stream 39.
             activationLog(activationTrace.sample(CpClimate.sessionGeneration,tuneRequest.get(),mode,stream,android.os.SystemClock.elapsedRealtime()));
+            seekLog(seekTrace.observe(CpClimate.sessionGeneration,tuneRequest.get(),mode,stream,khz,android.os.SystemClock.elapsedRealtime()));
             fmActive = khz > 0 && mode == 2 && stream == 38;
             sxmActive = mode == 4 && stream == 41;
             refreshSxm(values);
@@ -267,6 +279,7 @@ final class K5Radio {
             if (observedGeneration != CpClimate.sessionGeneration) {
                 observedFm.clear(); fmScan = java.util.Collections.emptySet(); lastListPoll = 0;
                 observedGeneration = CpClimate.sessionGeneration;
+                lastScanSummary=""; lastPublishedFmSummary="";
             }
             if (fmActive) {
                 if (lastFmFrequency != khz) {
@@ -313,12 +326,19 @@ final class K5Radio {
                         log.log("[radio] station list unavailable: " + t.getClass().getSimpleName()+"; retained="+fmScan.size());
                     }
                 }
-                values.put(4118L, fmItemsFor(fmScan,observedFm));
+                java.util.List<Object> items=fmItemsFor(fmScan,observedFm);
+                values.put(4118L,items);
+                String summary="OEM="+fmScan.size()+" observed="+observedFm.size()+" merged="+items.size();
+                if(!summary.equals(lastPublishedFmSummary)){
+                    lastPublishedFmSummary=summary;
+                    log.log("[radio] FM published catalog "+summary);
+                }
             }
         } catch (Throwable t) {
             fmActive=false; sxmActive=false; sxmAvailable=false; fmAudio=null;
             stationName=null; stationArtwork=null; clearTags(); lastFmFrequency=-1;
             currentSxmChannel=-1; sxmArt=null; sxmLive.clear();
+            seekLog(seekTrace.observe(CpClimate.sessionGeneration,tuneRequest.get(),-1,-1,-1,android.os.SystemClock.elapsedRealtime()));
             activationLog(activationTrace.sample(CpClimate.sessionGeneration,tuneRequest.get(),-1,-1,android.os.SystemClock.elapsedRealtime()));
             serviceHealth("audio sample unavailable: "+t.getClass().getSimpleName());
         }
@@ -393,18 +413,18 @@ final class K5Radio {
     private volatile int currentSxmChannel = -1;
     private static final class SxmArt {
         final int channel;
-        final long generation;
+        final long generation, received;
         final byte[] bytes;
-        SxmArt(int channel, long generation, byte[] bytes) {
-            this.channel = channel; this.generation = generation; this.bytes = bytes;
+        SxmArt(int channel, long generation, long received, byte[] bytes) {
+            this.channel = channel; this.generation = generation; this.received=received; this.bytes = bytes;
         }
     }
     private static final class SxmSnapshot {
-        final long generation;
+        final long generation, received;
         final int[] ids, excluded;
         final String[] names, titles, artists;
-        SxmSnapshot(long generation, int[] ids, int[] excluded, String[] names, String[] titles, String[] artists) {
-            this.generation = generation; this.ids = ids; this.excluded=excluded; this.names = names; this.titles = titles; this.artists = artists;
+        SxmSnapshot(long generation, long received, int[] ids, int[] excluded, String[] names, String[] titles, String[] artists) {
+            this.generation = generation; this.received=received; this.ids = ids; this.excluded=excluded; this.names = names; this.titles = titles; this.artists = artists;
         }
     }
     private void listenSxmCatalog() {
@@ -413,12 +433,11 @@ final class K5Radio {
                 @Override public void onReceive(Context c, Intent i) {
                     if (!enabled() || !CpClimate.sessionActive || !VehicleState.sxmSchemaTest) return;
                     long received = i.getLongExtra("received", -1);
-                    long age = android.os.SystemClock.elapsedRealtime() - received;
-                    if (age < 0 || age > 2000) return;
+                    long generation=CpClimate.sessionGeneration;
+                    if (!callbackCurrent(generation,received,android.os.SystemClock.elapsedRealtime())) return;
                     if(i.hasExtra("liveChannel")){
                         int id=i.getIntExtra("liveChannel",-1);
-                        long generation=CpClimate.sessionGeneration;
-                        if(sxmActive&&id>=0){
+                        if(sxmActive&&id>=0&&callbackCurrent(generation,received,android.os.SystemClock.elapsedRealtime())){
                             boolean accepted=sxmLive.receive(new SxmLiveMetadata(generation,id,i.getStringExtra("liveName"),i.getStringExtra("liveTitle"),i.getStringExtra("liveArtist")),received,generation,currentSxmChannel);
                             if(!accepted)log.log("[radio-sxm] live callback withheld ID="+id+" observed="+currentSxmChannel);
                             else log.log("[radio-sxm] live callback accepted ID="+id);
@@ -428,8 +447,11 @@ final class K5Radio {
                     if (i.hasExtra("artChannel")) {
                         int id = i.getIntExtra("artChannel", -1);
                         byte[] bytes = i.getByteArrayExtra("artwork");
-                        if (sxmActive && id >= 0 && id == currentSxmChannel && supportedArtwork(bytes))
-                            sxmArt = new SxmArt(id, CpClimate.sessionGeneration, bytes);
+                        SxmArt previous=sxmArt;
+                        if (sxmActive && id >= 0 && id == currentSxmChannel && supportedArtwork(bytes)
+                                && callbackCurrent(generation,received,android.os.SystemClock.elapsedRealtime())
+                                && (previous==null || metadataNewEnough(id,generation,received,previous.channel,previous.generation,previous.received)))
+                            sxmArt = new SxmArt(id, generation, received, bytes);
                         return;
                     }
                     int[] ids = i.getIntArrayExtra("ids");
@@ -443,11 +465,15 @@ final class K5Radio {
                     // A transient empty response must not erase a previously usable catalog.
                     // Live lock/subscription/skip checks still govern every tuning command.
                     SxmSnapshot previous=fullSxm;
+                    if(!callbackCurrent(generation,received,android.os.SystemClock.elapsedRealtime()))return;
+                    if(previous!=null&&!sxmSnapshotNewEnough(generation,received,previous.generation,previous.received)){
+                        log.log("[radio-sxm] stale catalog response withheld"); return;
+                    }
                     if(retainSxmSnapshot(ids.length,excluded.length,previous!=null&&previous.generation==CpClimate.sessionGeneration&&(previous.ids.length>0||previous.excluded.length>0))){
                         log.log("[radio-sxm] empty catalog response; withholding replacement");
                         return;
                     }
-                    fullSxm = new SxmSnapshot(CpClimate.sessionGeneration, ids, excluded, names, titles, artists);
+                    fullSxm = new SxmSnapshot(generation, received, ids, excluded, names, titles, artists);
                     log.log("[radio-sxm] full OEM catalog received count=" + ids.length + " excluded=" + excluded.length);
                 }
             }, new android.content.IntentFilter(SxmCatalogBridge.ACTION), "android.permission.DEVICE_POWER", main);
@@ -584,6 +610,10 @@ final class K5Radio {
     }
     // OEM channel records have been observed with numeric 0/1 flags.
     // Accept boolean representations too; unknown values are not authorization.
+    static boolean sxmSnapshotNewEnough(long generation,long received,long previousGeneration,long previousReceived){
+        return generation!=previousGeneration || received>=previousReceived;
+    }
+
     static boolean retainSxmSnapshot(int eligible,int excluded,boolean previousUseful){
         return eligible==0&&excluded==0&&previousUseful;
     }
@@ -725,10 +755,16 @@ final class K5Radio {
                 try {
                     Object audio = service(CarAudio.SERVICE, CarAudio.IFACE);
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
-                            || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) return;
-                    if (!probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
+                            || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38) {
+                        log.log("[radio] FM seek withheld: source ownership lost request="+request); return;
+                    }
+                    if (!probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) {
+                        log.log("[radio] FM seek superseded before tuner lookup request="+request); return;
+                    }
                     Object tuner = service(serviceName("RADIO_SERVICE"), RADIO_IFACE);
-                    if (tuner == null || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
+                    if (tuner == null || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) {
+                        log.log("[radio] FM seek withheld: tuner available="+(tuner!=null)+" request="+request); return;
+                    }
                     java.lang.reflect.Method seek = Class.forName(RADIO_IFACE).getMethod(up ? "seekUp" : "seekDown");
                     if (seek.getReturnType() != void.class) {
                         log.log("[radio] FM seek withheld: unexpected return type="+seek.getReturnType().getName());
@@ -737,9 +773,14 @@ final class K5Radio {
                     // Recheck ownership after resolving the tuner, just as for direct tuning.
                     if (readInt(audio, CarAudio.IFACE, "getAudioMode") != 2
                             || readInt(audio, CarAudio.IFACE, "getCurStreamType") != 38
-                            || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) return;
+                            || !probeActive(generation) || !currentRadioRequest(request,station,tuneRequest.get(),stationRequest.get())) {
+                        log.log("[radio] FM seek withheld: final ownership or generation check request="+request); return;
+                    }
+                    long before=lastFmFrequency;
+                    long dispatchedAt=android.os.SystemClock.elapsedRealtime();
                     seek.invoke(tuner);
-                    log.log("[radio] native FM " + (up ? "seekUp" : "seekDown") + " dispatched; awaiting frequency feedback");
+                    seekLog(seekTrace.begin(generation,request,before,dispatchedAt));
+                    log.log("[radio] native FM " + (up ? "seekUp" : "seekDown") + " dispatched; awaiting frequency feedback request="+request+" previousKhz="+lastFmFrequency);
                 } catch (Throwable t) { log.log("[radio] FM seek failed: " + t.getClass().getSimpleName()); }
             }
         });
@@ -788,6 +829,8 @@ final class K5Radio {
      * ModeConstants.ModeType FM1=2. Foreground behavior requires parked validation. */
     // A tune with explicit FM source may activate FM first. Only the latest
     // pending request is retained; it expires and cannot cross sessions.
+    private final FmSeekTrace seekTrace=new FmSeekTrace();
+    private void seekLog(String event){if(event!=null)log.log("[radio-seek] "+event);}
     private final RadioActivationTrace activationTrace=new RadioActivationTrace();
     private void activationLog(String event){if(event!=null)log.log("[radio-source] "+event);}
     private final java.util.concurrent.atomic.AtomicLong tuneRequest = new java.util.concurrent.atomic.AtomicLong();
