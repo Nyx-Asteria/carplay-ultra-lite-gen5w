@@ -41,11 +41,11 @@ Only regenerate the recipe from the verified matching stock library, using `pyth
 
 ## Additional test fixtures
 
-The shared regression runner is the automated baseline. Additional tests in this directory are retained until reviewed: CarApiTest requires generated OEM stand-ins, RecipePlaceTest requires a stock library, VehicleStateTest needs the matching LIVI replay, and VsChannelTest needs the Python phone simulation. SessionPairTest, IapBridgeTest, IapChannelTest, DescriptionCheck and the native host fixture require independent compatibility review before promotion to CI.
+The shared regression runner is the automated baseline. Additional tests in this directory are retained until reviewed: CarApiTest requires generated OEM stand-ins, RecipePlaceTest requires a stock library, VehicleStateTest needs the matching LIVI replay, and VsChannelTest needs the Python phone simulation. IapBridgeTest, IapChannelTest, DescriptionCheck and the native host fixture require independent compatibility review before promotion to CI.
 
 ## Release
 
-Use the signed release workflow with pinned companion repositories. No publication without explicit approval. Preserve permanent author identity and verify all packages. See the root README and current release testing guide.
+Follow the mandatory [pre-RC consolidation policy](../docs/release-consolidation.md). Use the signed release workflow with pinned companion repositories. No publication without explicit approval. Preserve permanent author identity and verify all packages. See the root README and current release testing guide.
 
 ## Attribution
 

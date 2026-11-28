@@ -31,10 +31,10 @@ final class SessionLogging {
         boolean enabled=mod.settingBoolean("session_logging",true);
         boolean usb=mod.settingBoolean("session_usb_export",true);
         settings.append("; session_logging=").append(enabled).append("; session_usb_export=").append(usb);
-        for(String key:new String[]{"k5_integration","seat_fan_immediate_feedback","seat_heat_immediate_feedback","ultra_theme","ultra_sidebars",
-            "ultra_ui_sync","ultra_independent_sync","ultra_phone_managed_cluster","ultra_force_wallpaper","sxm_schema_test","parked_video","parked_video_picture_only"})
-            settings.append("; ").append(key).append('=').append(mod.settingBoolean(key,
-                key.equals("seat_heat_immediate_feedback")||key.equals("k5_integration")||key.equals("ultra_theme")||key.equals("ultra_sidebars")));
+        for(String key:SessionSettings.KEYS) {
+            if ("diagnostic_detail".equals(key)||"diagnostic_packets".equals(key)||"session_logging".equals(key)||"session_usb_export".equals(key)) continue;
+            settings.append("; ").append(key).append('=').append(SessionSettings.read(mod,key));
+        }
         metadata=settings.toString();
         policy=new SessionLogPolicy(categories);
         writer=enabled?new SessionLogWriter(new File(files,"cpul-session-logs"),
@@ -60,7 +60,12 @@ final class SessionLogging {
         if(generation>=0)closeNow(endingReason==null?"superseded by new session":endingReason);
         policy.reset(); generation=id; sessionStartedAt=System.currentTimeMillis();
         if(writer!=null)writer.start(id,metadata);
-        for(PreSessionEvents.Event e:preSession.drain(sessionStartedAt,previousEndedAt)) logAt(e.message,e.at);
+        for(PreSessionEvents.Event e:preSession.drain(sessionStartedAt,previousEndedAt)) {
+            Category category=category(e.message);
+            Level level=level(e.message,category);
+            String safe=policy.accept(level,category,e.message,System.nanoTime()/1000000L);
+            if(writer!=null && safe!=null)writer.recordAt(generation,level,category,safe,e.at);
+        }
     }
     synchronized void finish(String reason) {
         if(generation<0||endingAt>=0)return;
@@ -93,7 +98,9 @@ final class SessionLogging {
         return s.contains("closed")||s.contains("ended")||s.contains("failed")||s.contains("stopped")||s.contains("disconnect")||s.contains("finaliz");
     }
     synchronized void log(String message) {
-        logAt(message,System.currentTimeMillis());
+        long now=System.currentTimeMillis();
+        if(writer!=null && generation<0)preSession.add(message,now,now,previousEndedAt);
+        logAt(message,now);
     }
     private void logAt(String message,long at) {
         Category category=category(message);
