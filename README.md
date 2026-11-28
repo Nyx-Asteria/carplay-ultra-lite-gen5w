@@ -126,7 +126,7 @@ UI Synchronization requires Ultra Sidebars and CarPlay Ultra. Both layouts and w
 
 ## Development
 
-RC11 development begins with a content-identical rebase of RC10. See the [RC11 plan](docs/rc11-plan.md), [RC10 test plan](docs/rc10-testing.md), and [changelog](CHANGELOG.md). No RC11 release has been approved.
+RC11 development begins with a content-identical rebase of RC10. See the [RC11 plan](docs/rc11-plan.md), [RC10 test plan](docs/rc10-testing.md), and [changelog](CHANGELOG.md). RC11 is the coordinated release candidate; the owner has authorized automatic publication after successful combined verification.
 
 | Milestone | Status |
 | --- | --- |
@@ -136,7 +136,7 @@ RC11 development begins with a content-identical rebase of RC10. See the [RC11 p
 | RC8 | Testing: radio, climate feedback, theme diagnostics, companion TBT and incremental collector |
 | Future | HD multicast control, confirmed SXM/Bose support, theme selector, standalone AirPlay and YouTube discovery |
 
-[Development regression](.github/workflows/development-regression.yml) compiles the main module and video engine and runs climate, Park, volume policy and UI synchronization checks without publishing. [Release bundle](.github/workflows/release-bundle.yml) manually builds seven packages and verifies author signatures. Pushes cannot sign or publish; manual publication requires explicit approval. See the [release consolidation and synchronized version policy](docs/release-consolidation.md). The release is a testing build despite its publication status.
+[Development regression](.github/workflows/development-regression.yml) compiles the main module and video engine and runs climate, Park, volume policy and UI synchronization checks without publishing. [Release bundle](.github/workflows/release-bundle.yml) builds seven packages and verifies author signatures. An exact release commit on the final RC branch signs and publishes only after all bundle verification succeeds; ordinary pushes do not publish. See the [release consolidation and synchronized version policy](docs/release-consolidation.md). The release is a testing build despite its publication status.
 
 Read [development notes](docs/next-development.md), [radio diagnostics](docs/k5-radio.md) and [integration details](docs/integration.md) for technical background. Host tests do not establish vehicle functionality.
 

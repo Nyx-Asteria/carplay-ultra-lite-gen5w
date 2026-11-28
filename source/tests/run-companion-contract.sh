@@ -3,7 +3,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 wcp="$(cd "${1:?usage: bash source/tests/run-companion-contract.sh /path/to/pinned-wcp}" && pwd)"
-pin=3b951c745ce78fde4ca6085b28d682c7d629bb98
+pin=3c3d2489b5bd4b8f4b8d37a5a451341701f78bce
 test "$(git -C "$wcp" rev-parse HEAD)" = "$pin"
 test -z "$(git -C "$wcp" status --porcelain -- wireless-carplay-aa)"
 work="$(mktemp -d)"
@@ -16,7 +16,8 @@ java -cp "$work" ioniq6.cpclimate.CompanionContractTest
 python3 - "$root/source/mod/mod.json" "$wcp/wireless-carplay-aa/mod.json" "$wcp/wireless-carplay-aa/settings.json" <<'PY'
 import json,sys
 c,w,s=(json.load(open(p)) for p in sys.argv[1:])
-assert c['id']=='carplay-ultra-lite-k5'
+assert c['id']=='carplay-ultra-lite-k5' and c['version']=='1.0.0-rc.11'
+assert w['version']=='2.2.1-rc.7'
 assert w['id']=='wireless-carplay-aa' and w['id'] in c['requires']
 assert 'egmp-carplay-ev-routing' in c['conflicts']
 assert c['hmgapi']==w['hmgapi']=='>=1.1.0-rc.10'
@@ -44,10 +45,11 @@ python3 "$root/source/tests/companion_recipe_ranges.py" \
 if [ "$#" -gt 1 ]; then
   stbt="$(cd "${2:?STBT checkout required}" && pwd)"
   pps="$(cd "${3:?PPS checkout required}" && pwd)"
-  test "$(git -C "$stbt" rev-parse HEAD)" = e8770256ff6679546c483af43aed3f7a6b19b998
+  test "$(git -C "$stbt" rev-parse HEAD)" = fac2ec367028a97334d548c53d5930d768ec2694
   test "$(git -C "$pps" rev-parse HEAD)" = bd57be364d95d9542b5aaf81269fa2b8dc1d35e2
   test -z "$(git -C "$stbt" status --porcelain)"
   test -z "$(git -C "$pps" status --porcelain)"
+  python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["version"]=="1.0.0-rc.4"' "$stbt/mod.json"
   python3 "$root/source/tests/companion_recipe_ranges.py" \
     "$wcp/wireless-carplay-aa/recipes/carplay-identification-fc7.recipe" \
     "$stbt/recipes/lane-notify-guard.recipe"

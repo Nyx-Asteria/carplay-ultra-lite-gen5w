@@ -10,7 +10,7 @@
 - Existing-versus-fresh pairing comparison, explicit Classic/Ultra preferences, staged/current asset and acquisition/transfer distinctions from WCP research. No preference bypass or automatic re-pairing.
 - Add opt-in passive RemoteControl SETUP discovery: canonical unknown client-type UUID, fixed field metadata, bounded values, per-process deduplication and USB session logs; no FileTransfer advertisement or unknown stream admission.
 - Record intermittent heating arbitration inputs and the selected OEM command separately per front seat. Compare legacy compatibility off/on; no new vehicle-confirmed seat fix.
-- Correct release workflow structure and require manual signing dispatch with publication disabled by default. Retain meaningful consolidated history and the original development snapshot. Final companion pins and CI results remain outstanding.
+- Final companion pins: WCP 2.2.1-rc.7 (`3c3d248`), STBT 1.0.0-rc.4 (`fac2ec3`); both final companion CI runs passed, API v3 unchanged, independent native region and AA recipe comparison passed. Experimental FileTransfer remains inactive. Final combined CI regenerates the native recipe and verifies seven signed packages before automatic prerelease publication; no separate approval gate.
 - Regenerate native ARM recipe during CI and packaging from pinned stock metadata; exact-tree host tests and signed package verification required before owner-approved release. No vehicle validation claimed.
 
 
