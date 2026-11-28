@@ -41,6 +41,11 @@ public final class ProjectionLogCaptureTest {
             check(event.equals(ProjectionLogCapture.classify("I CPULCrossProcess: "+event)));
             check(ProjectionLogCapture.classify("I CPULCrossProcess: "+event+" secret=private")==null);
         }
+        String discovery="clientTypeUUID=00000000-0000-0000-0000-000000000000 clientTypeType=string clientUUID=string channelID=absent seed=number wantsDedicatedSocket=bool-true sendMessageAsIs=bool-false sendMessageWithoutReply=absent controlType=number-2 type=number streamID=absent dataPort=absent transportType=cf-123";
+        check(("[projection-discovery] "+discovery).equals(ProjectionLogCapture.classify("cp-climate: RCS discovery "+discovery)));
+        check(ProjectionLogCapture.classify("cp-climate: RCS discovery "+discovery+" clientUUID=PRIVATE")==null);
+        check(ProjectionLogCapture.classify("cp-climate: RCS discovery "+discovery.replace("seed=number","seed=123456"))==null);
+        check(ProjectionLogCapture.classify("cp-climate: RCS discovery "+discovery.replace("clientUUID=string","clientUUID=PRIVATE"))==null);
         System.out.println("ProjectionLogCaptureTest passed");
     }
 }

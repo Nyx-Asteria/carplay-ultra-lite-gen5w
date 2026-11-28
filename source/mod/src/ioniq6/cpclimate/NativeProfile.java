@@ -30,6 +30,22 @@ final class NativeProfile {
         clearValue(file);
     }
 
+    /** PID-bound opt-in and fresh bounded fingerprint budget; no stale flag across restarts. */
+    static boolean writeDiscovery(File dir, boolean enabled, int pid) {
+        File file=new File(dir,"cpc-rcs-discovery");
+        if(!clearValue(file))return false;
+        if(!enabled)return true;
+        try {
+            java.io.DataOutputStream out=new java.io.DataOutputStream(new java.io.FileOutputStream(file));
+            try { out.writeInt(pid); } finally { out.close(); }
+            CpClimate.runtimeLog("[native-profile] passive RCS discovery enabled");
+            return true;
+        } catch(Exception e) {
+            writeFailed(file,e);
+            return clearValue(file); // safe disabled fallback if removal succeeded
+        }
+    }
+
     /** the dock position setting, for the native /info hook (files/cpc-dock: 0 auto, 1 bottom, 2 side) */
     static void writeDock(ModContext mod, File dir, String dock) {
         File f = new File(dir, "cpc-dock");

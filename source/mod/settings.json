@@ -142,6 +142,14 @@
       "title": "Protocol Packet Diagnostics",
       "description": "Include additional vehicle services and projection packet metadata (types, sizes and stream events only; never raw payloads). Enable only for targeted protocol testing.",
       "apply": "restart"
+    },
+    {
+      "key": "rcs_discovery",
+      "type": "toggle",
+      "default": false,
+      "title": "RemoteControl SETUP Discovery (Diagnostic)",
+      "description": "Observe unclaimed type-130 client types and bounded field metadata only; never accept unknown streams or enable FileTransfer. Independent of packet diagnostics. Restart required.",
+      "apply": "restart"
     }
   ]
 }

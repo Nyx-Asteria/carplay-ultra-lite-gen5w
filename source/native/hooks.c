@@ -657,9 +657,13 @@ static CFIndex add_additions(CF info, CF into, int cluster) {
 #ifdef CPC_HOST_TEST
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/file.h>
 #include <stdio.h>
 static long sys_open(const char *p, int mode) { return open(p, O_WRONLY | O_CREAT | O_TRUNC, mode); }
 static long sys_open_read(const char *p) { return open(p, O_RDONLY); }
+static long discovery_open(const char *p) { return open(p, O_RDWR | O_NOFOLLOW); }
+static int discovery_lock(long fd) { return flock((int)fd, LOCK_EX | LOCK_NB); }
+static unsigned discovery_pid(void) { return (unsigned)getpid(); }
 static long sys_read(long fd, void *b, unsigned long n) { return read((int)fd, b, n); }
 static long sys_write(long fd, const void *b, unsigned long n) { return write((int)fd, b, n); }
 static void sys_close(long fd) { close((int)fd); }
@@ -672,7 +676,10 @@ static long sys_write(long fd, const void *b, unsigned long n) { return cpc_sys3
 static void sys_close(long fd) { cpc_sys3(6, fd, 0, 0); }
 static long sys_rename(const char *from, const char *to) { return cpc_sys3(38,(long)from,(long)to,0); }
 static void sys_unlink(const char *p) { cpc_sys3(10,(long)p,0,0); }
-static long sys_open_read(const char *p) { return cpc_sys3(5, (long)p, 0, 0); }   /* O_RDONLY */
+static long sys_open_read(const char *p) { return cpc_sys3(5, (long)p, 0, 0); }
+static long discovery_open(const char *p) { return cpc_sys3(5,(long)p,2 | 0100000,0); } /* O_RDWR|O_NOFOLLOW (ARM Linux UAPI, not asm-generic) */
+static int discovery_lock(long fd) { return (int)cpc_sys3(143,fd,6,0); } /* flock LOCK_EX|LOCK_NB */
+static unsigned discovery_pid(void) { return (unsigned)cpc_sys3(20,0,0,0); }   /* O_RDONLY */
 static long sys_read(long fd, void *b, unsigned long n) { return cpc_sys3(3, fd, (long)b, (long)n); }
 #endif
 
@@ -1089,6 +1096,13 @@ CFS(K_seed, "seed");
 CFS(K_clientTypeUUID, "clientTypeUUID");
 CFS(K_streamID, "streamID");
 CFS(K_dataPort, "dataPort");
+CFS(K_discoveryClient, "clientUUID");
+CFS(K_discoveryChannel, "channelID");
+CFS(K_discoveryDedicated, "wantsDedicatedSocket");
+CFS(K_discoveryAsIs, "sendMessageAsIs");
+CFS(K_discoveryNoReply, "sendMessageWithoutReply");
+CFS(K_discoveryControl, "controlType");
+CFS(K_discoveryTransport, "transportType");
 CFS(K_vsNormal, "3E2F3C61-AAD0-42CB-A8AA-BF22186DA62E");   /* vehicle state            */
 CFS(K_vsHigh, "FF4A6720-F2BE-4F56-A3E1-DB3B4E37D634");     /* vehicle state, high lane */
 CFS(K_iapStream, "E9459FD0-BCAD-4C45-820F-1E72447EF2F2");  /* iAP over CarPlay (LIVI stack.rs), "lane" 2 */
@@ -1141,6 +1155,119 @@ static int alt_stream(CF reply) {
     release(d);
     LOG("cp-climate: Ultra experiment: cluster screen stream set up on port %d (reply %d)\n", CPC_ALT_PORT, st);
     return st == 0;
+}
+
+
+/* Passive discovery only. No writable native globals or new relocation targets.
+ * DiPO-private file starts with the current PID (big endian), then at most 32
+ * native-endian fingerprints of already emitted, sanitized metadata records.
+ * Nonblocking flock serializes append; any I/O/format error drops diagnostics.
+ * Known clients, even when their feature is disabled, are not candidates. */
+static int discovery_uuid(CF o, char out[37]) {
+    const char *p=is(o,T_CFStringGetTypeID)?FN(T_CFStringGetCStringPtr,const char *(*)(CF,unsigned))(o,UTF8):0;
+    if(!p)return 0;
+    for(int i=0;i<36;i++){
+        unsigned char c=(unsigned char)p[i];
+        if(!c)return 0;
+        if(i==8||i==13||i==18||i==23){if(c!='-')return 0;}
+        else {
+            if(c>='a'&&c<='f')c-=32;
+            if(!((c>='0'&&c<='9')||(c>='A'&&c<='F')))return 0;
+        }
+        out[i]=(char)c;
+    }
+    if(p[36])return 0;
+    out[36]=0;
+    /* A C string alone could hide a CFString suffix after an embedded NUL. */
+    CF exact=FN(T_CFStringCreateWithCString, CF (*)(CF,const char *,unsigned))(0,p,UTF8);
+    int same=exact&&equal(o,exact);
+    if(exact)release(exact);
+    return same;
+}
+static int discovery_same(const char *a,const char *b) {
+    while(*a&&*a==*b){a++;b++;}
+    return *a==*b;
+}
+static int discovery_known(const char *u) {
+    return discovery_same(u,K_vsNormal.s)||discovery_same(u,K_vsHigh.s)||
+        discovery_same(u,K_iapStream.s)||discovery_same(u,K_syncStream.s)||
+        discovery_same(u,K_vpData.s)||discovery_same(u,K_vpSettings.s)||discovery_same(u,K_vpOverlay.s);
+}
+static void discovery_append(char *out,unsigned *n,const char *s) {
+    while(*s && *n<510)out[(*n)++]=*s++;
+    out[*n]=0;
+}
+static void discovery_uint(char *out,unsigned *n,unsigned v) {
+    char digits[10];unsigned used=0;
+    /* Base 16 avoids compiler runtime division helpers in the ARM payload. */
+    do{unsigned x=v&15;digits[used++]=(char)(x<10?'0'+x:'a'+x-10);v>>=4;}while(v);
+    while(used && *n<510)out[(*n)++]=digits[--used];
+    out[*n]=0;
+}
+static void discovery_field(char *out,unsigned *n,CF stream,CF key,const char *name,
+                            CF yes,CF no,unsigned long number_type,int scalar) {
+    CF v=get(stream,key);
+    discovery_append(out,n," ");discovery_append(out,n,name);discovery_append(out,n,"=");
+    if(!v){discovery_append(out,n,"absent");return;}
+    unsigned long t=type_of(v);
+    if(yes&&no&&t==type_of(yes)&&t==type_of(no)){
+        discovery_append(out,n,"bool");
+        if(scalar==1){
+            if(equal(v,yes))discovery_append(out,n,"-true");
+            else if(equal(v,no))discovery_append(out,n,"-false");
+        }
+    }else if(number_type&&t==number_type){
+        discovery_append(out,n,"number");
+        if(scalar){
+            int err=0;long long value=FN(T_CFDictionaryGetInt64,long long (*)(CF,CF,int *))(stream,key,&err);
+            if(!err&&value>=0&&value<=(scalar==1?1:255)){
+                discovery_append(out,n,"-");discovery_uint(out,n,(unsigned)value);
+            }
+        }
+    }else if(is(v,T_CFStringGetTypeID))discovery_append(out,n,"string");
+    else if(is(v,T_CFDictionaryGetTypeID))discovery_append(out,n,"dict");
+    else if(is(v,T_CFArrayGetTypeID))discovery_append(out,n,"array");
+    else {discovery_append(out,n,"cf-");discovery_uint(out,n,(unsigned)t);}
+}
+static void discover_unclaimed_rcs(CF stream,CF kind) {
+    long fd=discovery_open(DIR "cpc-rcs-discovery");
+    if(fd<0)return;
+    if(discovery_lock(fd)){sys_close(fd);return;}
+    unsigned records[33];long bytes=sys_read(fd,records,sizeof records);
+    if(bytes<4||bytes>=(long)sizeof records||(bytes&3)){sys_close(fd);return;}
+    const unsigned char *header=(const unsigned char *)records;
+    unsigned pid=((unsigned)header[0]<<24)|((unsigned)header[1]<<16)|((unsigned)header[2]<<8)|header[3];
+    if(pid!=discovery_pid()||!is(stream,T_CFDictionaryGetTypeID)){sys_close(fd);return;}
+    char uuid[37];int valid=discovery_uuid(kind,uuid);
+    if(valid&&discovery_known(uuid)){sys_close(fd);return;}
+    CF yes=boolean(bplist_true),no=boolean(bplist_false),sample=new_dict();
+    unsigned long number_type=0;
+    if(sample){set_int(sample,&K_type,0);CF n=get(sample,&K_type);if(n)number_type=type_of(n);}
+    char line[512];unsigned len=0;line[0]=0;
+    discovery_append(line,&len,"clientTypeUUID=");
+    discovery_append(line,&len,valid?uuid:kind?"invalid":"absent");
+    discovery_field(line,&len,stream,&K_clientTypeUUID,"clientTypeType",yes,no,number_type,0);
+    discovery_field(line,&len,stream,&K_discoveryClient,"clientUUID",yes,no,number_type,0);
+    discovery_field(line,&len,stream,&K_discoveryChannel,"channelID",yes,no,number_type,0);
+    discovery_field(line,&len,stream,&K_seed,"seed",yes,no,number_type,0);
+    discovery_field(line,&len,stream,&K_discoveryDedicated,"wantsDedicatedSocket",yes,no,number_type,1);
+    discovery_field(line,&len,stream,&K_discoveryAsIs,"sendMessageAsIs",yes,no,number_type,1);
+    discovery_field(line,&len,stream,&K_discoveryNoReply,"sendMessageWithoutReply",yes,no,number_type,1);
+    discovery_field(line,&len,stream,&K_discoveryControl,"controlType",yes,no,number_type,2);
+    discovery_field(line,&len,stream,&K_type,"type",yes,no,number_type,0);
+    discovery_field(line,&len,stream,&K_streamID,"streamID",yes,no,number_type,0);
+    discovery_field(line,&len,stream,&K_dataPort,"dataPort",yes,no,number_type,0);
+    discovery_field(line,&len,stream,&K_discoveryTransport,"transportType",yes,no,number_type,0);
+    if(sample)release(sample);
+    if(yes)release(yes);
+    if(no)release(no);
+    if(len>=510){sys_close(fd);return;}
+    unsigned hash=2166136261u;
+    for(unsigned i=0;i<len;i++)hash=(hash^(unsigned char)line[i])*16777619u;
+    for(unsigned i=1;i<(unsigned)bytes/4;i++)if(records[i]==hash){sys_close(fd);return;}
+    long written=sys_write(fd,&hash,sizeof hash);
+    sys_close(fd);
+    if(written==(long)sizeof hash)LOG("cp-climate: RCS discovery %s\n",line);
 }
 
 static void video_sender_start(void *session);   /* below, with the video stage 3 code */
@@ -1199,6 +1326,7 @@ __attribute__((visibility("hidden"))) int cpc_stream_hook(void *session, CF stre
     int lane = !kind ? -1 : equal(kind, &K_vsNormal) ? 0 : equal(kind, &K_vsHigh) ? 1
         : equal(kind, &K_iapStream) && iap_mode() ? 2 : equal(kind, &K_syncStream) && ui_sync_mode() ? 3 : -1;
     if (lane < 0) {
+        discover_unclaimed_rcs(stream,kind);
         if (ui_sync_mode()) LOG("cp-climate: theme stream audit: type 130 not claimed; native path\n");
         return 0;
     }

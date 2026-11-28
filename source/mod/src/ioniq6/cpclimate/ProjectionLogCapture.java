@@ -49,7 +49,13 @@ final class ProjectionLogCapture extends Thread {
         return null;
     }
     ProjectionLogCapture(SessionLogging sink){super("cpul-projection-log");this.sink=sink;setDaemon(true);}
+    private static final Pattern RCS=Pattern.compile("clientTypeUUID=(?:[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}|invalid|absent) clientTypeType=(?:absent|string|dict|array|bool|number|cf-[0-9a-f]{1,8}) clientUUID=(?:absent|string|dict|array|bool|number|cf-[0-9a-f]{1,8}) channelID=(?:absent|string|dict|array|bool|number|cf-[0-9a-f]{1,8}) seed=(?:absent|string|dict|array|bool|number|cf-[0-9a-f]{1,8}) wantsDedicatedSocket=(?:absent|string|dict|array|bool(?:-true|-false)?|number(?:-[01])?|cf-[0-9a-f]{1,8}) sendMessageAsIs=(?:absent|string|dict|array|bool(?:-true|-false)?|number(?:-[01])?|cf-[0-9a-f]{1,8}) sendMessageWithoutReply=(?:absent|string|dict|array|bool(?:-true|-false)?|number(?:-[01])?|cf-[0-9a-f]{1,8}) controlType=(?:absent|string|dict|array|bool|number(?:-[0-9a-f]{1,2})?|cf-[0-9a-f]{1,8}) type=(?:absent|string|dict|array|bool|number|cf-[0-9a-f]{1,8}) streamID=(?:absent|string|dict|array|bool|number|cf-[0-9a-f]{1,8}) dataPort=(?:absent|string|dict|array|bool|number|cf-[0-9a-f]{1,8}) transportType=(?:absent|string|dict|array|bool|number|cf-[0-9a-f]{1,8})");
     static String classify(String body) {
+        int discovery=body.indexOf("cp-climate: RCS discovery ");
+        if(discovery>=0) {
+            String fields=body.substring(discovery+"cp-climate: RCS discovery ".length()).trim();
+            return RCS.matcher(fields).matches()?"[projection-discovery] "+fields:null;
+        }
         int marker=body.indexOf("CPULCrossProcess");
         if(marker>=0) {
             int colon=body.indexOf(':',marker);

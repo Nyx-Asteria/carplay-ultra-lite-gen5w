@@ -112,6 +112,7 @@ final class SessionLogging {
         projection(message,System.currentTimeMillis());
     }
     synchronized void projection(String message,long at) {
+        if(message.startsWith("[projection-discovery]")&&!mod.settingBoolean("rcs_discovery",false))return;
         long now=System.currentTimeMillis();
         if(generation<0) {
             if(writer!=null && (!teardown(message)||level(message,category(message))==Level.ERROR||level(message,category(message))==Level.WARN))
