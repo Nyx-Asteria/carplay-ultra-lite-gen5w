@@ -3,6 +3,7 @@
  * end up holding. cc -I native tests/host_test.c native/hooks.c -DVSPI=\"data/vspi.bplist\" */
 #include <stdarg.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
 #include "cpc.h"
@@ -113,6 +114,7 @@ static long long m_get_int(const void *d, const void *k, int *err) {
     if (!v) { *err = -6727; return 0; }
     *err = 0; return *(const long long *)((const char *)v + 8);
 }
+static int add_stream_fail;
 static int m_add_stream(const void *reply, const void *stream);
 static char lastlog[512];
 static int vspi_file_logs, vspi_fallback_logs;
@@ -732,7 +734,7 @@ int main(void) {
         echo = g(rep, "enabledFeatures");
         CHECK("Ultra: enabledFeatures [vehicleStateProtocol, viewAreas, altScreen]", echo && echo->n == 3
               && !strcmp(s_of(echo->v[1]), "viewAreas") && !strcmp(s_of(echo->v[2]), "altScreen"));
-        CHECK("Ultra: the offer logged", strstr(lastlog, "viewAreas, altScreen") != 0);
+        CHECK("Ultra: the offer logged", strstr(lastlog, "altScreen=1 viewAreas=1") != 0);
         m_release(rep);
         /* Themed sidebars restore ViewAreas even when only VSP is offered. */
         Dict *limited=(Dict *)m_new_dict(0,0,&cb_dkey,&cb_dval);
@@ -806,7 +808,7 @@ int main(void) {
         echo = g(rep, "enabledFeatures");
         CHECK("uiSync experiment on, offered: enabledFeatures [vehicleStateProtocol, uiSync]", echo && echo->n == 2
               && !strcmp(s_of(echo->v[1]), "uiSync"));
-        CHECK("uiSync: the reply logged", strstr(lastlog, ", uiSync]") != 0);
+        CHECK("uiSync: the reply logged", strstr(lastlog, "uiSync=1") != 0);
         m_release(rep);
         remove(DIR "cpc-uisync");
         rep = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
@@ -815,6 +817,26 @@ int main(void) {
         CHECK("uiSync offered, experiment off: enabledFeatures [vehicleStateProtocol]", echo && echo->n == 1);
         m_release(rep);
         m_release(rq);
+    }
+    {
+        /* VSP negotiation must augment rather than replace OEM capabilities. */
+        rep=(Dict *)m_new_dict(0,0,&cb_dkey,&cb_dval);
+        Arr *prior=(Arr *)m_new_arr(0,0,&cb_arr);
+        Str *enabled=str("enabledFeatures"), *stock=str("uiContext"), *vsp=str("vehicleStateProtocol");
+        m_append(prior,stock);m_append(prior,vsp);
+        m_set(rep,enabled,prior);m_release(prior);
+        cpc_setup_hook(req,rep);
+        echo=g(rep,"enabledFeatures");
+        CHECK("VSP merge retains OEM feature order and avoids duplicate VSP",echo && echo->n==2
+              && !strcmp(s_of(echo->v[0]),"uiContext") && !strcmp(s_of(echo->v[1]),"vehicleStateProtocol"));
+        cpc_setup_hook(req,rep);
+        echo=g(rep,"enabledFeatures");
+        CHECK("VSP merge is idempotent",echo && echo->n==2);
+        CHECK("actual merged diagnostics include OEM count and VSP",strstr(lastlog,"vehicleStateProtocol=1") && strstr(lastlog,"other=1"));
+        m_set(rep,enabled,stock);
+        cpc_setup_hook(req,rep);
+        CHECK("VSP merge leaves malformed OEM reply untouched",g(rep,"enabledFeatures")==stock);
+        m_release(rep);m_release(enabled);m_release(stock);m_release(vsp);
     }
     Dict *req2 = (Dict *)m_new_dict(0, 0, &cb_dkey, &cb_dval);
     Arr *feat2 = (Arr *)m_new_arr(0, 0, &cb_arr);
@@ -848,6 +870,7 @@ int main(void) {
         cpc_setup_hook(rq, rep);
         echo = g(rep, "enabledFeatures");
         CHECK("independent UI Sync preserves stock", echo && echo->n == 2 && !strcmp(s_of(echo->v[0]), "hevc") && !strcmp(s_of(echo->v[1]), "uiSync"));
+        CHECK("independent actual diagnostics include OEM hevc",strstr(lastlog,"vehicleStateProtocol=0") && strstr(lastlog,"uiSync=1") && strstr(lastlog,"hevc=1 other=0"));
         cpc_setup_hook(rq, rep);
         echo = g(rep, "enabledFeatures");
         CHECK("independent UI Sync idempotent", echo && echo->n == 2 && !strcmp(s_of(echo->v[0]), "hevc") && !strcmp(s_of(echo->v[1]), "uiSync"));
@@ -918,6 +941,17 @@ int main(void) {
         f = fopen(DIR "cpc-vs-3.key", "rb"); kn = f ? fread(kf, 1, sizeof kf, f) : 0; if (f) fclose(f);
         CHECK("uiSync stream keys in cpc-vs-3.key (72 bytes)", kn == 72);
         CHECK("uiSync stream: logged as uiSync on port 7135", strstr(lastlog, "uiSync stream 3 set up on port 7135") != 0);
+        unsigned char published[72]; memcpy(published,kf,72);
+        CHECK("UI Sync staging file absent after publication",access(DIR "cpc-vs-3.key.tmp",F_OK)!=0);
+        CHECK("create deterministic staging obstruction",mkdir(DIR "cpc-vs-3.key.tmp",0700)==0);
+        CHECK("failed key staging leaves stream unclaimed",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==4);
+        f=fopen(DIR "cpc-vs-3.key","rb"); kn=f?fread(kf,1,sizeof kf,f):0; if(f)fclose(f);
+        CHECK("failed staging preserves previously published key record",kn==72 && memcmp(published,kf,72)==0);
+        rmdir(DIR "cpc-vs-3.key.tmp");
+        add_stream_fail=1;
+        CHECK("failed UI Sync stream reply stays unclaimed",cpc_stream_hook(&session,st,reply,130)==0 && streams->n==4);
+        CHECK("failed UI Sync reply invalidates newly published keys",access(DIR "cpc-vs-3.key",F_OK)!=0);
+        add_stream_fail=0;
         remove(DIR "cpc-uisync");
         ((Arr *)streams)->n--;   /* the later checks count the streams added before this one */
         m_release(streams->v[3]);
@@ -925,6 +959,18 @@ int main(void) {
         CHECK("cluster screen stream, Ultra off: left to DiPO", cpc_stream_hook(&session, st, reply, 111) == 0 && streams->n == 3);
         f = fopen(DIR "cpc-ultra", "w");
         if (f) { fputs("1\n", f); fclose(f); }
+        /* Explicit center identity must never reach the virtual discard sink. */
+        Str *screenKey = str("displayUUID"), *centerId = str("Center_Display"), *clusterId = str("Cluster_Display");
+        m_set(st,screenKey,centerId);
+        CHECK("center-addressed alternate screen remains native",cpc_stream_hook(&session,st,reply,111)==0 && streams->n==3);
+        Str *uuidKey = str("uuid");
+        m_set(st,screenKey,clusterId);m_set(st,uuidKey,centerId);
+        CHECK("conflicting explicit center and cluster identities remain native",cpc_stream_hook(&session,st,reply,111)==0 && streams->n==3);
+        m_set(st,uuidKey,clusterId);
+        m_set(st,uuidKey,centerId);
+        CHECK("explicit center main stream remains native",cpc_stream_hook(&session,st,reply,110)==0 && streams->n==3);
+        m_set(st,uuidKey,clusterId);
+        m_release(screenKey);m_release(uuidKey);m_release(centerId);m_release(clusterId);
         CHECK("cluster screen stream, Ultra on: {type 111, dataPort 7132}", cpc_stream_hook(&session, st, reply, 111) == 1
               && streams->n == 4 && n_of(g(streams->v[3], "type")) == 111 && n_of(g(streams->v[3], "dataPort")) == 7132);
         remove(DIR "cpc-ultra");
@@ -1082,6 +1128,7 @@ int main(void) {
 }
 
 static int m_add_stream(const void *reply, const void *stream) {
+    if (add_stream_fail) return -1;
     Str *k = str("streams");
     const void *a = m_get(reply, k);
     if (!a) { a = m_new_arr(0, 0, &cb_arr); m_set(reply, k, a); m_release(a); }

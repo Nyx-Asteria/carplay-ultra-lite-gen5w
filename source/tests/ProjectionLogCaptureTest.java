@@ -19,6 +19,23 @@ public final class ProjectionLogCaptureTest {
         check(ProjectionLogCapture.classify("cp-climate: theme screen SETUP type 111 uuid=other displayUUID=Cluster_Display").contains("displayUUID=Cluster_Display"));
         check(ProjectionLogCapture.classify("cp-climate: theme screen SETUP type 110 uuid=secret displayUUID=private").equals("[projection-theme] screen SETUP type=110"));
         check(ProjectionLogCapture.classify("cp-climate: Ultra display registration: main=Center_Display, alternate=Cluster_Display, original count=1").contains("originalCount=1"));
+        String identity="[theme] negotiation generation=7 readiness=ADVERTISED vehicleBuilt=true themeBuilt=true startRequested=true startArmed=true startSendCapability=true startReceiveCapability=false";
+        check(identity.equals(ProjectionLogCapture.classify("I CPULCrossProcess: "+identity)));
+        check(ProjectionLogCapture.classify("I CPULCrossProcess: "+identity+" password=private")==null);
+        check(ProjectionLogCapture.classify("I CPULCrossProcess: "+identity.replace("ADVERTISED","private"))==null);
+        check("[theme] negotiation generation_changed".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation generation_changed")));
+        String snapshot=identity.replace("negotiation ","negotiation snapshot ");
+        check(snapshot.equals(ProjectionLogCapture.classify("I CPULCrossProcess: "+snapshot)));
+        check(ProjectionLogCapture.classify("I CPULCrossProcess: "+snapshot+" secret=private")==null);
+        check("[theme] negotiation snapshot unavailable".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation snapshot unavailable")));
+        String actual=ProjectionLogCapture.classify("cp-climate: SETUP actual enabledFeatures vehicleStateProtocol=1 altScreen=0 viewAreas=1 uiSync=1 iAPChannel=0 videoPlayback=0 hevc=1 other=2");
+        check(actual.equals("[projection-theme] enabled vehicleStateProtocol=1 altScreen=0 viewAreas=1 uiSync=1 iAPChannel=0 videoPlayback=0 hevc=1 other=2"));
+        check(ProjectionLogCapture.classify("cp-climate: SETUP actual enabledFeatures vehicleStateProtocol=1 altScreen=0 viewAreas=1 uiSync=1 iAPChannel=0 videoPlayback=0 hevc=1 other=private")==null);
+        check("[theme] negotiation contribution_unconfirmed".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation contribution_unconfirmed")));
+        check(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation contribution_unconfirmed secret=private")==null);
+        check("[theme] negotiation contribution_withdrawn".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation contribution_withdrawn")));
+        check("[theme] negotiation withdrawal_pending".equals(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation withdrawal_pending")));
+        check(ProjectionLogCapture.classify("I CPULCrossProcess: [theme] negotiation withdrawal_pending reason=private")==null);
         System.out.println("ProjectionLogCaptureTest passed");
     }
 }
