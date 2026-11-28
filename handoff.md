@@ -1,3 +1,17 @@
+# CPUK5 3.0 — Living development handoff
+
+Updated 2026-11-27. Repository Nyx-Asteria/carplay-ultra-k5; branch 3.0.0; exact RC11 starting commit `162054a27c492fc421a0cc5e88087b92aede538b`.
+
+**Mandatory:** update this file in every development commit. Historical RC11 handoff follows below and is not current status.
+
+## 3.0 checkpoint — branding and regression freeze
+- Owner renamed repository and requested CarPlay Ultra K5 / CPUK5 without Lite or testing in visible branding. Manifest display name/description, README and outer release bundle name/title updated. Preserve original upstream credit, legacy installed mod ID `carplay-ultra-lite-k5`, Java entry point, native recipe, stable API contribution owner, preference keys, permanent author UUID `d515981b-afc8-8230-ae0f-62d32de366bc`, internal spool and USB `CPUL-LOGS` for historical compatibility. Inner signed package filename remains ID-derived. Do not migrate IDs or signing keys.
+- Development regression now includes 3.0.0 and checks branding/compatibility invariants. Release version remains 1.0.0-rc.11 in manifest until coordinated 3.0 version/pin/gate alignment; existing RC-only release gate unchanged. No release, no signing, no runtime changes. CI pending; actual upgrade untested.
+- P0: owner reports wireless App Transport and CarPlay projection failure in RC11. Bluetooth disconnect is not the primary failure. Preserve shared identity API v3; investigate WCP handoff and CPUK5 native pre-session negotiation using actual logs. RC11 USB logging reported functional. Do not infer a root cause from absent events. Nemesis shortcut has never worked per owner; K5Vehicle uses guessed package com.nemesis.manager, investigate real launcher entry point separately. Preserve Park interlock and working features. No unrelated runtime changes before projection recovery.
+- Next: inspect regression CI, correlate logs and exact source, coordinate with WCP/STBT. Complete release-version policy only after transport recovery. Historical RC11 source and branch remain untouched.
+
+---
+
 # CPUL RC11 — Living development handoff
 Updated 2026-11-27. Repository Nyx-Asteria/carplay-ultra-lite-gen5w, branch rc11-final (verification candidate; original rc11 and rc11-consolidated-v2 preserved).
 **Mandatory:** update this file in the same commit as every development change, including fixes, documentation, regression and release consolidation. Record actual changes, previous verified SHA/CI, remaining risks, next concrete task and progress estimates. The current commit is the commit containing this file; use git rev-parse HEAD, not a self-referential SHA. Read this file and docs/rc11-plan.md before resuming in another chat. Verify HEAD and CI, inspect source, then implement; do not just repeat status reports. Do not edit WCP/STBT from this workstream.

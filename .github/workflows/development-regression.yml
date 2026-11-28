@@ -1,7 +1,7 @@
 name: Development regression
 on:
   push:
-    branches: [k5-compatibility, rc11, rc11-consolidated-v2, rc11-final]
+    branches: [k5-compatibility, rc11, rc11-consolidated-v2, rc11-final, '3.0.0']
     paths:
       - 'source/mod/src/**'
       - 'source/mod/recipes/**'

@@ -267,7 +267,7 @@ jobs:
             cd out/release
             sha256sum *.zip *.md BUILD-PROVENANCE.txt > SHA256SUMS.txt
             sha256sum --strict -c SHA256SUMS.txt
-            bundle="CarPlay-Ultra-Lite-K5-$VERSION-testing-bundle.zip"
+            bundle="CarPlay-Ultra-K5-$VERSION-bundle.zip"
             zip -q "$bundle" *.zip *.md BUILD-PROVENANCE.txt SHA256SUMS.txt
             unzip -t "$bundle"
             verify_dir=$(mktemp -d)
@@ -297,7 +297,7 @@ jobs:
           TARGET: ${{ github.sha }}
         run: |
           set -euo pipefail
-          bundle=$(basename "$(find release -name 'CarPlay-Ultra-Lite-K5-*-testing-bundle.zip' -print -quit)")
-          VERSION=${bundle#CarPlay-Ultra-Lite-K5-}
-          VERSION=${VERSION%-testing-bundle.zip}
-          gh release create "v$VERSION" release/*.zip release/SHA256SUMS.txt release/BUILD-PROVENANCE.txt release/*.md --prerelease --target "$TARGET" --title "CarPlay Ultra-Lite K5 $VERSION" --notes-file release/CHANGELOG.md
+          bundle=$(basename "$(find release -name 'CarPlay-Ultra-K5-*-bundle.zip' -print -quit)")
+          VERSION=${bundle#CarPlay-Ultra-K5-}
+          VERSION=${VERSION%-bundle.zip}
+          gh release create "v$VERSION" release/*.zip release/SHA256SUMS.txt release/BUILD-PROVENANCE.txt release/*.md --prerelease --target "$TARGET" --title "CarPlay Ultra K5 $VERSION" --notes-file release/CHANGELOG.md

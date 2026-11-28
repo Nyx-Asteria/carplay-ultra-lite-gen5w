@@ -2,6 +2,7 @@
 """Guard release gates, unique jobs and shell syntax."""
 from pathlib import Path
 import re
+import json
 import subprocess
 import textwrap
 
@@ -18,6 +19,17 @@ assert "if: (github.event_name == 'workflow_dispatch' && inputs.publish == true)
 assert "    needs: package" in jobs
 assert '--prerelease' in jobs and '--draft' not in jobs
 assert 'test "$VERSION" = "1.0.0-rc.11"' in jobs
+manifest = json.loads((root / "source/mod/mod.json").read_text())
+assert manifest["id"] == "carplay-ultra-lite-k5"
+assert manifest["name"] == "CarPlay Ultra K5"
+assert 'AUTHOR_UUID: d515981b-afc8-8230-ae0f-62d32de366bc' in jobs
+assert 'CPUL_ZIP="out/packages/carplay-ultra-lite-k5-$VERSION.zip"' in jobs
+assert 'bundle="CarPlay-Ultra-K5-$VERSION-bundle.zip"' in jobs
+assert "CarPlay-Ultra-K5-*-bundle.zip" in jobs
+assert 'VERSION=${bundle#CarPlay-Ultra-K5-}' in jobs
+assert 'VERSION=${VERSION%-bundle.zip}' in jobs
+assert 'CarPlay Ultra K5 $VERSION' in jobs
+assert 'CarPlay-Ultra-Lite-K5' not in jobs and '-testing-bundle.zip' not in jobs
 lines = workflow.splitlines()
 blocks = 0
 for i, line in enumerate(lines):
