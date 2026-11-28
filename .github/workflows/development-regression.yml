@@ -1,9 +1,13 @@
 name: Development regression
 on:
   push:
-    branches: [k5-compatibility]
+    branches: [k5-compatibility, rc11]
     paths:
       - 'source/mod/src/**'
+      - 'source/mod/recipes/**'
+      - 'source/data/**'
+      - 'source/tools/**'
+      - 'source/check/**'
       - 'source/mod/tools/video/**'
       - 'source/mod/build.sh'
       - 'source/mod/settings.json'
@@ -20,11 +24,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/checkout@v4
         with:
           repository: Open-HMG/HMG-API
           ref: daa083717f07565ba16dc8a4d26291b7d68d3bf4
           path: .hmgapi
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
