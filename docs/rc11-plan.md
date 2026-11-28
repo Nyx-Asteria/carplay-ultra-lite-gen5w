@@ -38,3 +38,6 @@ These are tracking subdivisions, not additional promises of fixes or a change to
 ## RC11 phone-managed layout policy
 
 Production UI Sync now always passes null cluster layout and false forced center wallpaper. Retired settings ultra_phone_managed_cluster and ultra_force_wallpaper are removed from the manifest and session header; previously persisted values are ignored rather than migrated into forced requests. The existing protocol fixtures for legacy requests remain as historical regression coverage. UI Sync master and sidebar gates are unchanged. This is not a verified theme selector or wallpaper fix.
+
+## Approved WCP API v3 source integration
+Verified provider source `3b951c745ce78fde4ca6085b28d682c7d629bb98`; [pinned contract](https://github.com/Nyx-Asteria/hmgapi-wireless-cp-aa/blob/75f1ecadc704e39be9095799f62bea64aa79bf4d/docs/cpul-api-v3-integration.md). FileTransfer is no longer a gate. Exact API v3 via provider class loader, stable theme-only owner and three-argument registration; WCP owns gasoline identity and StartSession. Compare identity/negotiation generations with identity reread in iAP2 process; no display activation gate on builder evidence. Preserve native apps, sidebars, virtual cluster and standard fallback. Combined source bundle verification and user-approved release remain outstanding.

@@ -4,7 +4,7 @@ import hmgapi.hook.ModContext;
 import java.lang.reflect.Method;
 
 /**
- * Theme-only consumer of Open-HMG wireless CarPlay's shared identity API v2.
+ * Theme-only consumer of Open-HMG wireless CarPlay's shared identity API v3.
  * No EV identity, native recipe, or copy of the provider API is shipped here.
  * Registry acceptance is not proof that native identification was armed.
  */
@@ -20,7 +20,7 @@ final class ThemeContribution {
             Object service = mod.use(PROVIDER, SERVICE);
             if (service == null) { mod.log("[theme] provider not published"); return false; }
             Class<?> api = Class.forName(API, false, service.getClass().getClassLoader());
-            return api.isInstance(service) && api.getField("API_VERSION").getInt(null) == 2;
+            return api.isInstance(service) && api.getField("API_VERSION").getInt(null) == 3;
         } catch (Throwable t) { mod.error("[theme] capability probe failed", t); return false; }
     }
 
@@ -31,27 +31,20 @@ final class ThemeContribution {
             if (ownership.confirmed(service)) return true;
             if (ownership.owner() != null && !unregister(mod)) return false;
             Class<?> api = Class.forName(API, false, service.getClass().getClassLoader());
-            if (!api.isInstance(service) || api.getField("API_VERSION").getInt(null) != 2) { mod.log("[theme] incompatible shared identity API"); return false; }
+            if (!api.isInstance(service) || api.getField("API_VERSION").getInt(null) != 3) { mod.log("[theme] incompatible shared identity API"); return false; }
             Class<?> theme = Class.forName(API + "$ThemeIdentity", false, api.getClassLoader());
             Object value = theme.getConstructor(String.class, long.class, String.class)
                     .newInstance("44C9FA31EC", 985L, "19.0");
             Method unregister = api.getMethod("removeTheme", String.class);
             boolean start = true; // contributed only when Ultra and Sidebars are enabled
-            Method registration = null;
-            try { registration = api.getMethod("registerTheme", String.class, theme, boolean.class); }
-            catch (NoSuchMethodException stock) { /* original v2 provider */ }
+            Method registration = api.getMethod("registerTheme", String.class, theme, boolean.class);
             // The provider stores the contribution before invoking its change callback.
             // Retain withdrawal ownership even if that callback throws after insertion.
             ownership.begin(service);
             remove = unregister;
             try {
-            if (registration != null) {
                 registration.invoke(service, mod.id, value, start);
                 mod.log("[theme] CarPlayStartSession requested=" + start + " (provider native result unverified)");
-            } else {
-                api.getMethod("registerTheme", String.class, theme).invoke(service, mod.id, value);
-                if (start) mod.log("[theme] CarPlayStartSession unavailable: provider extension not installed; identification only");
-            }
             } catch (Exception e) {
                 unregister(mod);
                 throw e;

@@ -56,6 +56,13 @@ jobs:
           AJ=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
           sh "$SDK/bin/build-mod.sh" source/mod out/core out/work
           bash source/tests/run-regressions.sh
+      - name: Native hook regression (host CFLite mock)
+        run: bash source/tests/run-native-regressions.sh
+      - name: Compile video engine without publishing
+        run: |
+          set -euo pipefail
+          export HMGAPI_SDK="$PWD/out/sdk"
+          SDK="$HMGAPI_SDK"
           sh source/mod/tools/video/fetch-libs.sh
           HMGAPI_MOD_CLASSES="$PWD/out/work/classes" HMGAPI_R8_CLASSPATH_ARGS="--classpath $SDK/lib/hmgapi-runtime.jar --classpath $SDK/lib/hmgapi-runtime-stubs.jar" sh source/mod/build.sh "$PWD/out/core"
           unzip -t out/core/hooks.jar

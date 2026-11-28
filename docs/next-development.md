@@ -1,5 +1,7 @@
 # Next testing release — development notes
 
+**Historical checkpoints:** RC11's current phone-managed center/cluster policy in `rc11-plan.md` and `../handoff.md` supersedes earlier forced layout, Midnight default and consolidated-toggle experiments below. Catalog identifiers are evidence, not authorization to force a wallpaper or palette. WCP owns shared identity and StartSession; CPUL consumes its verified readiness. FileTransfer remains a separate lower-priority WCP experiment.
+
 ## Theme appearance (center display only)
 - Goal: populate native Theme Selector with all compatible assets, Midnight initial default, user choice retained.
 - First experiment: request the existing, source-backed Modular/blue layout during the virtual cluster handshake, only for Cluster_Display. This is a bootstrap hypothesis, not proof of center-screen palette support. Midnight identifier and center-display layout metadata are not verified; do not invent them or claim the selector is fixed.

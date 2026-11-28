@@ -462,8 +462,6 @@ static int add_view_area(CF info, int pct, int edge, int extras, int wide) {
         release(copy);
     }
     put(info, &K_displays, out);
-    LOG("cp-climate: Ultra display registration: main=%s, alternate=%s, original count=%d\n",
-        themed ? "Center_Display" : "stock UUID", themed ? "Cluster_Display" : "virtual UUID", (int)n);
     return 1;
 }
 
@@ -512,17 +510,19 @@ static void add_livi_hid(CF info) {
     LOG("cp-climate: /info hidDevices: %d stock + %d LIVI input devices (knob, media, telephony, cluster knob) (experiment)\n", (int)n, (int)m);
 }
 
-static void move_hid(CF info, CF old, CF now) {
+static int move_hid(CF info, CF old, CF now) {
     CF hid = get(info, &K_hidDevices);
-    if (!old || !is(hid, T_CFArrayGetTypeID)) return;
+    if (!hid || equal(old, now)) return 1;
+    if (!is(hid, T_CFArrayGetTypeID)) return 0;
     CF out = new_array();
-    if (!out) return;
+    if (!out) return 0;
     CFIndex n = count(hid), moved = 0;
     for (CFIndex i = 0; i < n; i++) {
         CF h = at(hid, i);
         CF on = is(h, T_CFDictionaryGetTypeID) ? get(h, &K_displayUUID) : 0;
-        CF copy = on && equal(on, old) ? new_dict() : 0;
-        if (copy) {
+        if (on && equal(on, old)) {
+            CF copy = new_dict();
+            if (!copy) { release(out); return 0; }
             FN(T_CFDictionaryApplyFunction, void (*)(CF, void (*)(CF, CF, void *), void *))(h, copy_entry, (void *)copy);
             set(copy, &K_displayUUID, now);
             append(out, copy);
@@ -534,29 +534,49 @@ static void move_hid(CF info, CF old, CF now) {
     }
     put(info, &K_hidDevices, out);
     LOG("cp-climate: Ultra theme: %d hidDevices moved to Center_Display\n", (int)moved);
+    return 1;
 }
 
 static int add_alt_display(CF info, int themed) {
     CF displays = get(info, &K_displays);
     if (!is(displays, T_CFArrayGetTypeID) || count(displays) < 1) return 0;
-    CF out = new_array();
-    if (!out) return 0;
     CFIndex n = count(displays);
+    /* Validate the complete list before changing any HID association. */
     for (CFIndex i = 0; i < n; i++) {
         CF d = at(displays, i);
         if (is(d, T_CFDictionaryGetTypeID) && dict_int(d, &K_dispType) == STREAM_ALT_SCREEN) {
             LOG("cp-climate: Ultra display registration skipped: existing type 111 display (themed=%d)\n", themed);
-            release(out);
             return 0;
         }
+    }
+    /* Do not create duplicate theme identities when another display already
+     * owns either reserved ID. The first display may already be Center_Display. */
+    if (themed) for (CFIndex i = 0; i < n; i++) {
+        CF d = at(displays, i);
+        CF u = is(d, T_CFDictionaryGetTypeID) ? get(d, &K_uuid) : 0;
+        if (is(u, T_CFStringGetTypeID) &&
+            (equal(u, &K_clusterId) || (i != 0 && equal(u, &K_centerId)))) {
+            LOG("cp-climate: Ultra theme registration skipped: reserved display identity collision\n");
+            return 0;
+        }
+    }
+    CF first = at(displays, 0);
+    if (themed && (!is(first, T_CFDictionaryGetTypeID) || !is(get(first, &K_uuid), T_CFStringGetTypeID))) {
+        LOG("cp-climate: Ultra theme registration skipped: missing valid center identity\n");
+        return 0;
+    }
+    CF out = new_array();
+    if (!out) return 0;
+    for (CFIndex i = 0; i < n; i++) {
+        CF d = at(displays, i);
         /* the main display gets LIVI's type 110 (TCC's has none), so the two can be told apart;
          * themed, also the theme's id for it, and the touch screen and buttons follow it */
         CF main = i == 0 && is(d, T_CFDictionaryGetTypeID) && (themed || !get(d, &K_dispType)) ? new_dict() : 0;
+        if (themed && i == 0 && !main) { release(out); return 0; }
         if (main) {
             FN(T_CFDictionaryApplyFunction, void (*)(CF, void (*)(CF, CF, void *), void *))(d, copy_entry, (void *)main);
             set_int(main, &K_dispType, STREAM_MAIN_SCREEN);
             if (themed) {
-                move_hid(info, get(d, &K_uuid), &K_centerId);
                 set(main, &K_uuid, &K_centerId);
                 if (livi_hid_mode()) set_int(main, &K_primaryInput, PRIMARY_INPUT_KNOBS);
             }
@@ -590,7 +610,14 @@ static int add_alt_display(CF info, int themed) {
     set_int(alt, &K_mapAppSetting, APPEARANCE_AUTOMATIC);
     append(out, alt);
     release(alt);
+    if (themed && !move_hid(info, get(first, &K_uuid), &K_centerId)) {
+        release(out);
+        LOG("cp-climate: Ultra theme registration skipped: HID reassignment failed\n");
+        return 0;
+    }
     put(info, &K_displays, out);
+    LOG("cp-climate: Ultra display registration: main=%s, alternate=%s, original count=%d\n",
+        themed ? "Center_Display" : "stock UUID", themed ? "Cluster_Display" : "virtual UUID", (int)n);
     return 1;
 }
 
@@ -598,7 +625,7 @@ static int add_alt_display(CF info, int themed) {
  * (-1: none), or -2 if vehicleStateProtocolInfo didn't parse */
 static CF vspi_from_file(void);   /* below, with the file helpers */
 
-static CFIndex add_additions(CF info, CF into, int cluster) {
+static CF load_vspi(void) {
     int err = 0;
     /* the Java side's description (cp-climate's accessories, as the vehicle state channel has them), or LIVI's */
     CF vspi = vspi_from_file();
@@ -606,8 +633,14 @@ static CFIndex add_additions(CF info, CF into, int cluster) {
         cpc_vspi, VSPI_LEN, &err);
     if (!vspi) {
         LOG("### cp-climate: vehicleStateProtocolInfo didn't parse: %d\n", err);
-        return -2;
+        return 0;
     }
+    return vspi;
+}
+
+static CFIndex add_additions(CF info, CF into, int cluster) {
+    CF vspi = load_vspi();
+    if (!vspi) return -2;
     put(into, &K_vspi, vspi);
     if (!CPC_PANELS) return -1;
     return add_display_panels(info, into, cluster);
@@ -918,6 +951,9 @@ __attribute__((visibility("hidden"))) void cpc_info_hook(CF info) {
         return;
     }
     if (get(info, &K_vspi)) return;
+    /* Validate the VSP payload before changing display or input identities. */
+    CF vspi = load_vspi();
+    if (!vspi) return;
     int pct = size_percent(), edge = dock_edge(), newer = newer_version(), extras = display_extras();
     int cluster = cluster_mode(), wide = widescreen_areas();
     if (newer) set(info, &K_sourceVersion, &K_liviVersion);
@@ -926,8 +962,8 @@ __attribute__((visibility("hidden"))) void cpc_info_hook(CF info) {
     int mode = ultra_mode();
     int ultra = mode && add_alt_display(info, mode == 2) ? mode : 0;
     if (ultra == 2 && livi_hid_mode()) add_livi_hid(info);
-    CFIndex panels = add_additions(info, info, cluster);
-    if (panels == -2) return;
+    put(info, &K_vspi, vspi);
+    CFIndex panels = CPC_PANELS ? add_display_panels(info, info, cluster) : -1;
     add_features(info);
     add_video_playback(info);
     save_airplay(info);
